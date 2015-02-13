@@ -65,6 +65,9 @@
 #include "folly/dynamic.h"
 #include "folly/Range.h"
 #include "folly/String.h"
+#include "folly/Memory.h"
+
+#include <boost/variant.hpp>
 
 #include <mysql.h>
 
@@ -77,6 +80,8 @@ namespace mysql_client {
 using folly::dynamic;
 using folly::fbstring;
 using folly::StringPiece;
+
+class QueryArgument;
 
 class Query {
  public:
@@ -92,26 +97,16 @@ class Query {
   Query(const Query&) = default;
   Query(Query&&) = default;
 
+  Query& operator=(const Query&) = default;
+  Query& operator=(Query&&) = default;
+
   // Parameters will be coerced into folly::dynamic.
   template <typename... Args>
   Query(const StringPiece query_text, Args&&... args);
-  Query(const StringPiece query_text, dynamic params);
+  Query(const StringPiece query_text, std::vector<QueryArgument> params);
 
-  void append(const Query& query2) {
-    query_text_ += " ";
-    query_text_ += query2.query_text_;
-    for (const auto& param2 : query2.params_) {
-      params_.push_back(param2);
-    }
-  }
-
-  void append(Query&& query2) {
-    query_text_ += " ";
-    query_text_ += query2.query_text_;
-    for (const auto& param2 : query2.params_) {
-      params_.push_back(std::move(param2));
-    }
-  }
+  void append(const Query& query2);
+  void append(Query&& query2);
 
   Query& operator+=(const Query& query2) {
     append(query2);
@@ -161,13 +156,15 @@ class Query {
   // render either with the parameters to the constructor or specified
   // ones.
   folly::fbstring render(MYSQL* conn) const;
-  folly::fbstring render(MYSQL* conn, const dynamic params) const;
+  folly::fbstring render(MYSQL* conn,
+                         const std::vector<QueryArgument>& params) const;
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
   // the MySQL strings.
   folly::fbstring renderInsecure() const;
-  folly::fbstring renderInsecure(const dynamic params) const;
+  folly::fbstring renderInsecure(
+      const std::vector<QueryArgument>& params) const;
 
   folly::fbstring getQueryFormat() const { return query_text_; }
 
@@ -181,7 +178,7 @@ class Query {
   void appendValue(folly::fbstring* s,
                    size_t offset,
                    char type,
-                   const dynamic& d,
+                   const QueryArgument& d,
                    MYSQL* conn) const;
 
   // append a dynamic::object param as key=value joined with sep;
@@ -189,19 +186,102 @@ class Query {
   void appendValueClauses(folly::fbstring* ret,
                           size_t* idx,
                           const char* sep,
-                          const dynamic& param,
+                          const QueryArgument& param,
                           MYSQL* connection) const;
+
+  template <typename Arg, typename... Args>
+  void unpack(Arg&& arg, Args&&... args);
+  void unpack() {}
 
   folly::fbstring query_text_;
   bool unsafe_query_;
-  dynamic params_;
+  std::vector<QueryArgument> params_;
+};
+
+class QueryArgument {
+ private:
+  boost::variant<int64_t,
+                 double,
+                 bool,
+                 folly::fbstring,
+                 std::nullptr_t,
+                 Query,
+                 std::vector<QueryArgument>,
+                 std::vector<std::pair<folly::fbstring, QueryArgument>>> value_;
+
+ public:
+  /* implicit */ QueryArgument(StringPiece val);
+  /* implicit */ QueryArgument(char const* val);
+  /* implicit */ QueryArgument(const std::string& string_value);
+  /* implicit */ QueryArgument(const fbstring& val);
+  /* implicit */ QueryArgument(fbstring&& val);
+
+  template <typename T,
+            typename std::enable_if<std::is_integral<T>::value, T>::type = 0>
+  /* implicit */ QueryArgument(T int_val)
+      : value_(static_cast<int64_t>(int_val)) {}
+  /* implicit */ QueryArgument(double double_val);
+
+  /* implicit */ QueryArgument(std::initializer_list<QueryArgument> list);
+  /* implicit */ QueryArgument(std::vector<QueryArgument> arg_list);
+  /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
+
+  // Pair constructors
+  QueryArgument();
+  QueryArgument(folly::fbstring param1, QueryArgument param2);
+
+  // Since we already have callsites that use dynamic, we are keeping the
+  // support, but internally we unpack them.
+  // This constructor will throw exception if the dynamic isn't acceptable
+  /* implicit */ QueryArgument(const folly::dynamic& param) {
+    initFromDynamic(param);
+  }
+  /* implicit */ QueryArgument(folly::dynamic&& param) {
+    initFromDynamic(param);
+  }
+
+  QueryArgument&& operator()(const folly::fbstring& q1,
+                             const QueryArgument& q2);
+  QueryArgument&& operator()(folly::fbstring&& q1, QueryArgument&& q2);
+  folly::fbstring asString() const;
+
+  double getDouble() const;
+  int64_t getInt() const;
+  bool getBool() const;
+  const folly::fbstring& getString() const;
+  const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
+      const;
+  const std::vector<QueryArgument>& getList() const;
+
+  bool isString() const;
+  bool isQuery() const;
+  bool isPairList() const;
+  bool isBool() const;
+  bool isNull() const;
+  bool isList() const;
+  bool isDouble() const;
+  bool isInt() const;
+
+  std::string typeName() const { return value_.type().name(); }
+
+ private:
+  void initFromDynamic(const folly::dynamic& dyn);
+  std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs();
 };
 
 template <typename... Args>
 Query::Query(const StringPiece query_text, Args&&... args)
     : query_text_(query_text.begin(), query_text.end()),
       unsafe_query_(false),
-      params_{std::forward<Args>(args)...} {}
+      params_() {
+  params_.reserve(sizeof...(args));
+  unpack(std::forward<Args>(args)...);
+}
+template <typename Arg, typename... Args>
+void Query::unpack(Arg&& arg, Args&&... args) {
+  params_.emplace_back(std::forward<Arg>(arg));
+  unpack(std::forward<Args>(args)...);
+}
 }
 }
 } // facebook::common::mysql_client
