@@ -322,6 +322,14 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
 }
 
 template <>
+folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
+        std::unique_ptr<Connection> conn, vector<Query>&& args) {
+  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  return toFuture(op);
+}
+
+
+template <>
 DbQueryResult Connection::query(Query&& query) {
   auto op = beginAnyQuery<QueryOperation>(
       folly::make_unique<Operation::ReferencedConnection>(this),
