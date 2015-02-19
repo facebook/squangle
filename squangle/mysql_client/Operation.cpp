@@ -535,7 +535,7 @@ void FetchOperation::socketActionable() {
     // fetch or not. The initialize from children classes is called either way
     // to signal that any other calls from now are regarding a new query.
     // Next Actions:
-    //  - CompleteOperation: in case an error occured
+    //  - CompleteOperation: in case an error occurred
     //  - Fetch: there are rows to fetch in this query
     //  - CompleteQuery: no rows to fetch (complete query will read rowsAffected
     //                   and lastInsertId to add to result
@@ -925,7 +925,7 @@ folly::StringPiece Operation::toString(OperationState state) {
     return "Completed";
   }
   DCHECK(false)
-      << "unable to convert statre to string: " << static_cast<int>(state);
+      << "unable to convert state to string: " << static_cast<int>(state);
   return "Unknown state";
 }
 

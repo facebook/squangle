@@ -57,7 +57,7 @@ class OperationBatch {
   // it was marked manually with markFailure()
   bool ok();
 
-  // Offers the posibility to mark from a callback that the batch was not
+  // Offers the possibility to mark from a callback that the batch was not
   // successful
   // If any operation failed, it  will be marked automatically as failed.
   void markFailure();

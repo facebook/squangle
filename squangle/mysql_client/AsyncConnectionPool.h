@@ -288,7 +288,7 @@ class AsyncConnectionPool {
   ///////////// Counter control functions
 
   // Note that unlike the AsyncMysqlClient this similar counter is for open
-  // connections only, the intent of opening a connect is controled separetely.
+  // connections only, the intent of opening a connect is controlled separately.
   void addOpenConnection(const ConnectionKey* conn_key);
   void addOpeningConn(const ConnectionKey* conn_key);
 

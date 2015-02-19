@@ -30,7 +30,7 @@ Features
 
  - Object-oriented API
  - Query builder with automatic escaping
- - Asynchonous query execution
+ - Asynchronous query execution
 
 License
 -------
