@@ -31,8 +31,8 @@ class AsyncConnectionPool;
 
 // This class encapsulates the data that differentiates 2 connections:
 // host, port, db name and user. We also store the password to avoid
-// allowing a coonection with wrong password be accepted.
-// We also store the key as string (wihtout the password and special tag)
+// allowing a connection with wrong password be accepted.
+// We also store the key as string (without the password and special tag)
 // for debugging purposes and to use as keys in other maps
 class ConnectionKey {
  public:
@@ -122,8 +122,8 @@ class MysqlConnectionHolder {
   }
 
  protected:
-  // This contructor takes ownership of the origin holder and copies the data
-  // from it, then steals the owenship of the MYSQL* connection. After that the
+  // This constructor takes ownership of the origin holder and copies the data
+  // from it, then steals the ownership of the MYSQL* connection. After that the
   // origin is deleted.
   explicit MysqlConnectionHolder(
       std::unique_ptr<MysqlConnectionHolder> from_holder);

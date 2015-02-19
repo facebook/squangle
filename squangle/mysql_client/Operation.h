@@ -254,10 +254,10 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual void specializedTimeoutTriggered() = 0;
   virtual void specializedCompleteOperation() = 0;
 
-  // Base class for a wrapper arround the 2 types of connection
+  // Base class for a wrapper around the 2 types of connection
   // pointers we accept in the Operation:
   // - OwnedConnection: will hold an unique_ptr to the Connection
-  //   for the async calls of the API, so the onwership is clear;
+  //   for the async calls of the API, so the ownership is clear;
   // - ReferencedConnection: allows synchronous calls without moving unique_ptrs
   //   to the Operation;
   class ConnectionProxy {
@@ -502,7 +502,7 @@ class FetchOperation : public Operation {
     return rendered_multi_query_;
   }
 
-  // Number of queries that succeded to execute
+  // Number of queries that succeed to execute
   int numQueriesExecuted() {
     CHECK_THROW(state_ != OperationState::Pending, OperationStateException);
     return num_queries_executed_;

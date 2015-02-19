@@ -57,7 +57,7 @@ class MysqlException : public Exception,
   int mysql_errno() const { return mysql_errno_; }
   const std::string& mysql_error() const { return mysql_error_; }
 
-  // Returns the type of error occured:
+  // Returns the type of error occurred:
   // Cancelled: query it was cancelled by the client or user
   // Failed: generally a mysql error happened during the query,
   // more details will be in `mysql_errno`
@@ -150,7 +150,7 @@ class FetchResult : public DbResult {
 // collection.
 //
 // Iterator access is provided to loop between Row's. We give the rows
-// sequencially in the same order they where added in RowBlocks.
+// sequentially in the same order they where added in RowBlocks.
 //
 // for (const auto& row : query_result) {
 //  ...

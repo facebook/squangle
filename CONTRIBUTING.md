@@ -15,7 +15,7 @@ to do this once to work on any of Facebook's open source projects.
 
 Complete your CLA here: <https://code.facebook.com/cla>
 
-Pull requests will not be directly merged into this repostiory - they will be
+Pull requests will not be directly merged into this repository - they will be
 mirrored into Facebook's internal repository, then pushed to github, along
 with any other changes.
 
