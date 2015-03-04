@@ -13,6 +13,7 @@
 #include <errmsg.h> // mysql
 
 #include "folly/Memory.h"
+#include "folly/experimental/StringKeyedUnorderedMap.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
 #ifndef NO_LIB_GFLAGS
@@ -682,7 +683,7 @@ bool FetchOperation::slurpRows() {
 
 bool FetchOperation::readMysqlFields() {
   std::vector<string> field_names;
-  std::unordered_map<string, int> field_name_map;
+  folly::StringKeyedUnorderedMap<int> field_name_map;
   std::vector<uint64_t> mysql_field_flags;
   std::vector<enum_field_types> mysql_field_types;
 

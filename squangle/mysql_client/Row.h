@@ -31,6 +31,7 @@
 #include "folly/Format.h"
 #include "folly/Hash.h"
 #include "folly/Range.h"
+#include "folly/experimental/StringKeyedUnorderedMap.h"
 
 namespace facebook {
 namespace common {
@@ -109,7 +110,7 @@ class Row {
 // RowFields encapsulates the data about the fields (name, flags, types).
 class RowFields {
  public:
-  RowFields(std::unordered_map<string, int>&& field_name_map,
+  RowFields(folly::StringKeyedUnorderedMap<int>&& field_name_map,
             std::vector<string>&& field_names,
             std::vector<uint64_t>&& mysql_field_flags,
             std::vector<enum_field_types>&& mysql_field_types)
@@ -146,14 +147,14 @@ class RowFields {
 
  private:
   size_t num_fields_;
-  const std::unordered_map<string, int> field_name_map_;
+  const folly::StringKeyedUnorderedMap<int> field_name_map_;
   const vector<string> field_names_;
   const std::vector<uint64_t> mysql_field_flags_;
   const std::vector<enum_field_types> mysql_field_types_;
 
   // Given a field_name, return the numeric column number, or die trying.
   size_t fieldIndex(StringPiece field_name) const {
-    auto it = field_name_map_.find(field_name.toString());
+    auto it = field_name_map_.find(field_name);
     if (it == field_name_map_.end()) {
       throw std::out_of_range(
           folly::format("Invalid field: {}", field_name).str());
