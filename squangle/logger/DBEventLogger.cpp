@@ -59,5 +59,16 @@ void DBSimpleLogger::logConnectionFailure(FailureReason reason,
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << db_hostname << " failed";
 }
+
+void DBSimpleLogger::logTestDatabaseUsage(const std::string& tier_name,
+                                          const std::string& prefix,
+                                          const std::string& db_hostname,
+                                          const std::string& user,
+                                          const std::string& db_name,
+                                          const int db_port) {
+  VLOG(2) << "[" << api_name_ << "]"
+          << " test " << prefix << " connection with " << db_hostname
+          << " succeeded";
+}
 }
 }

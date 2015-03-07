@@ -79,6 +79,13 @@ class DBLoggerBase {
                                     const int db_port,
                                     MYSQL* mysqlConn) = 0;
 
+  virtual void logTestDatabaseUsage(const std::string& tier_name,
+                                    const std::string& prefix,
+                                    const std::string& db_hostname,
+                                    const std::string& user,
+                                    const std::string& db_name,
+                                    const int db_port) = 0;
+
   const char* QueryTypeString(QueryType type) {
     switch (type) {
     case QueryType::SingleQuery:
@@ -150,6 +157,13 @@ class DBSimpleLogger : public DBLoggerBase {
                                     const std::string& db_name,
                                     const int db_port,
                                     MYSQL* mysqlConn);
+
+  virtual void logTestDatabaseUsage(const std::string& tier_name,
+                                    const std::string& prefix,
+                                    const std::string& db_hostname,
+                                    const std::string& user,
+                                    const std::string& db_name,
+                                    const int db_port);
 };
 }
 }
