@@ -92,13 +92,15 @@ void AsyncMysqlClient::drain(bool also_shutdown) {
   }
 
   // Now wait for any started operations to complete.
-  while (numStartedAndOpenConnections() > 0) {
-    if (also_shutdown) {
-      VLOG(11) << "Waiting for " << numStartedAndOpenConnections()
-               << " connections to be released before shutting client down";
+  currently_idle_.wait(lock,
+      [&also_shutdown, this] {
+      if (also_shutdown) {
+        VLOG(11) << "Waiting for " << this->numStartedAndOpenConnections()
+                 << " connections to be released before shutting client down";
+      }
+      return this->numStartedAndOpenConnections() == 0;
     }
-    currently_idle_.wait(lock);
-  }
+  );
 }
 
 AsyncMysqlClient::~AsyncMysqlClient() {
