@@ -285,7 +285,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
    public:
     explicit OwnedConnection(std::unique_ptr<Connection>&& conn);
 
-    Connection* get() { return conn_.get(); }
+    Connection* get() override { return conn_.get(); }
     const Connection* get() const override { return conn_.get(); }
 
     std::unique_ptr<Connection>&& releaseConnection() override;

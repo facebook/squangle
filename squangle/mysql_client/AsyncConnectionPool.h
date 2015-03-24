@@ -438,9 +438,9 @@ class ConnectPoolOperation : public ConnectOperation {
  protected:
   virtual void attemptFailed(OperationResult result) override;
 
-  virtual ConnectPoolOperation* specializedRun();
-  virtual void specializedTimeoutTriggered();
-  virtual void socketActionable();
+  virtual ConnectPoolOperation* specializedRun() override;
+  virtual void specializedTimeoutTriggered() override;
+  virtual void socketActionable() override;
 
  private:
   // Called when the connection is matched by the pool client
