@@ -15,7 +15,7 @@
 
 #include <vector>
 
-#include <folly/experimental/Singleton.h>
+#include <folly/Singleton.h>
 #include <folly/Memory.h>
 
 #include <mysql.h>
