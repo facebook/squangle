@@ -11,6 +11,7 @@
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/FutureAdapter.h"
+#include "squangle/mysql_client/ThreadNameHelper.h"
 #include "thrift/lib/cpp/async/TEventBaseManager.h"
 
 #include <vector>
@@ -65,7 +66,7 @@ AsyncMysqlClient::AsyncMysqlClient()
 void AsyncMysqlClient::init() {
   static InitMysqlLibrary unused;
   thread_ = std::thread([this]() {
-    pthread_setname_np(pthread_self(), "async-mysql");
+    squangle_pthread_setname("async-mysql");
     ata::TEventBaseManager::get()->setEventBase(this->getEventBase(), false);
     tevent_base_.loopForever();
     mysql_thread_end();
