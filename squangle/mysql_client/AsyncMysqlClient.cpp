@@ -65,7 +65,9 @@ AsyncMysqlClient::AsyncMysqlClient()
 void AsyncMysqlClient::init() {
   static InitMysqlLibrary unused;
   thread_ = std::thread([this]() {
+#ifdef __GLIBC__
     pthread_setname_np(pthread_self(), "async-mysql");
+#endif
     ata::TEventBaseManager::get()->setEventBase(this->getEventBase(), false);
     tevent_base_.loopForever();
     mysql_thread_end();
