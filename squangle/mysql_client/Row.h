@@ -62,6 +62,9 @@ class Row {
   template <typename T, typename L>
   T get(const L& l) const;
 
+  template <typename T, typename L>
+  T getWithDefault(const L& l, const T d) const;
+
   // Vector-like and map-like access.  Note the above about ambiguity
   // for map access when column names conflict.
   size_t size() const;
@@ -368,6 +371,14 @@ T RowBlock::getField(size_t row, StringPiece field_name) const {
 template <typename T, typename L>
 T Row::get(const L& l) const {
   return row_block_->getField<T>(row_number_, l);
+}
+
+template <typename T, typename L>
+T Row::getWithDefault(const L& l, const T d) const {
+  if (isNull(l)) {
+    return d;
+  }
+  return get<T>(l);
 }
 }
 }
