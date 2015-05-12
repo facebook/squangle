@@ -397,12 +397,12 @@ class AsyncConnectionPool {
   // Protects the read and writes of connection counters
   std::mutex counter_mutex_;
 
-  uint32_t num_open_connections_;
+  uint32_t num_open_connections_ = 0;
   // Counts the number of open connections for a given connectionKey
   unordered_map<ConnectionKey, uint64_t> open_connections_;
   // Same as above but for connections that we are still opening
   // This one doesn't need locking, only accessed by client thread
-  uint32_t num_pending_connections_;
+  uint32_t num_pending_connections_ = 0;
   unordered_map<ConnectionKey, uint64_t> pending_connections_;
 
   // Used in the destructor to wait cleanup_timer_ be called. It's required by
