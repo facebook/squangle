@@ -226,7 +226,6 @@ Connection::Connection(AsyncMysqlClient* async_client,
       mysql_operation_thread_id_(0),
       async_client_(async_client),
       socket_handler_(async_client_->getEventBase()),
-      actionable_(false),
       initialized_(false) {
   if (existing_connection) {
     mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
@@ -390,6 +389,16 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
                             conn_key,
                             op->elapsed());
   return result;
+}
+
+template <>
+DbMultiQueryResult Connection::multiQuery(Query&& query) {
+  return multiQuery(std::vector<Query>{std::move(query)});
+}
+
+template <typename... Args>
+DbMultiQueryResult Connection::multiQuery(Args&&... args) {
+  return multiQuery(std::vector<Query>{std::forward<Args>(args)...});
 }
 
 std::shared_ptr<QueryOperation> Connection::beginTransaction(

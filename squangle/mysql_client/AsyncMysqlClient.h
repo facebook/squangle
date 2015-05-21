@@ -67,6 +67,7 @@
 #include <unordered_map>
 
 #include <folly/Exception.h>
+#include <folly/experimental/fibers/Baton.h>
 #include <folly/futures/Future.h>
 
 namespace facebook {
@@ -668,26 +669,19 @@ class Connection {
   // Operations call these methods as the operation becomes unblocked, as
   // callers want to wait for completion, etc.
   void notify() {
-    std::unique_lock<std::mutex> lock(actionable_mutex_);
-    if (actionable_) {
+    if (actionableBaton_.try_wait()) {
       LOG(DFATAL) << "asked to notify already-actionable operation";
     }
-    actionable_ = true;
-    actionable_condvar_.notify_one();
+    actionableBaton_.post();
   }
 
   void wait() {
-    std::unique_lock<std::mutex> lock(actionable_mutex_);
-    while (!actionable_) {
-      actionable_condvar_.wait(lock);
-    }
-    actionable_ = false;
+    actionableBaton_.wait();
   }
 
   // Called when a new operation is being started.
   void resetActionable() {
-    std::unique_lock<std::mutex> lock(actionable_mutex_);
-    actionable_ = false;
+    actionableBaton_.reset();
   }
 
   // Helper function that will begin multiqueries or single queries depending
@@ -715,9 +709,8 @@ class Connection {
 
   ConnectionSocketHandler socket_handler_;
 
-  std::mutex actionable_mutex_;
-  bool actionable_;
-  std::condition_variable actionable_condvar_;
+  folly::fibers::Baton actionableBaton_;
+
   ConnectionDyingCallback conn_dying_callback_;
 
   bool initialized_;
