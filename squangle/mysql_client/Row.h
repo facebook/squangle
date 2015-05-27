@@ -19,6 +19,7 @@
 #ifndef COMMON_ASYNC_MYSQL_ROW_H
 #define COMMON_ASYNC_MYSQL_ROW_H
 
+#include <chronos>
 #include <vector>
 #include <unordered_map>
 
