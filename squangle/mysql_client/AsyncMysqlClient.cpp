@@ -223,7 +223,6 @@ Connection::Connection(AsyncMysqlClient* async_client,
                        ConnectionKey conn_key,
                        MYSQL* existing_connection)
     : conn_key_(conn_key),
-      mysql_operation_thread_id_(0),
       async_client_(async_client),
       socket_handler_(async_client_->getEventBase()),
       initialized_(false) {
