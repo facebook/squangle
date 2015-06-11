@@ -247,6 +247,13 @@ class QueryResult {
 
   size_t numBlocks() const { return row_blocks_.size(); }
 
+  // Function for easier lookup of single row result, in case the result has
+  // more rows, it will throw exception
+  Row getOnlyRow() const {
+    assertOnlyRow();
+    return row_blocks_.at(0).getRow(0);
+  }
+
   class Iterator
       : public boost::iterator_facade<Iterator,
                                       const Row,
@@ -306,6 +313,9 @@ class QueryResult {
   void setPartial(bool partial) { partial_ = partial; }
 
  private:
+  void assertOnlyRow() const {
+    CHECK_THROW(numRows() == 1, std::out_of_range);
+  }
   std::shared_ptr<RowFields> row_fields_info_;
   int query_num_;
   bool partial_;
