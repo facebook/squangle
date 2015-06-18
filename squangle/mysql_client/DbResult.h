@@ -132,7 +132,7 @@ class FetchResult : public DbResult {
 
   int numQueriesExecuted() const { return num_queries_executed_; }
 
-  const SingleMultiResult& queryResult() { return fetch_result_; }
+  const SingleMultiResult& queryResult() const { return fetch_result_; }
 
   SingleMultiResult&& stealQueryResult() { return std::move(fetch_result_); }
 
