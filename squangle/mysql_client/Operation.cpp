@@ -17,7 +17,7 @@
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
 #ifndef NO_LIB_GFLAGS
-#include "common/config/Flags.h"
+#include "common/config/Flags.h" // nolint
 DEFINE_int64(async_mysql_timeout_micros,
              60 * 1000 * 1000,
              "default timeout, in micros, for mysql operations");
@@ -267,7 +267,7 @@ void ConnectOperation::attemptFailed(OperationResult result) {
     return;
   }
 
-  logConnectFailed(result);
+  logConnectCompleted(result);
 
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
@@ -396,34 +396,40 @@ void ConnectOperation::specializedTimeoutTriggered() {
   attemptFailed(OperationResult::TimedOut);
 }
 
-void ConnectOperation::logConnectFailed(OperationResult result) {
+void ConnectOperation::logConnectCompleted(OperationResult result) {
   // If the connection wasn't initialized, it's because the operation
   // was cancelled before anything started, so we don't do the logs
+  if (!conn()->hasInitialized()) {
+    return;
+  }
   auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
       end_time_ - start_time_);
-  if (conn()->hasInitialized()) {
-    if (result == OperationResult::Succeeded) {
-      async_client()->logConnectionSuccess(elapsed, conn()->getKey());
-    } else {
-      db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
-      if (result == OperationResult::TimedOut) {
-        reason = db::FailureReason::TIMEOUT;
-      } else {
-        reason = db::FailureReason::CANCELLED;
-      }
-      async_client()->logConnectionFailure(
-          reason, elapsed, conn()->getKey(), conn()->mysql());
+  if (result == OperationResult::Succeeded) {
+    async_client()->logConnectionSuccess(
+        elapsed, *conn()->getKey(), connection_context_.get());
+  } else {
+    db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
+    if (result == OperationResult::TimedOut) {
+      reason = db::FailureReason::TIMEOUT;
+    } else if (result == OperationResult::Cancelled) {
+      reason = db::FailureReason::CANCELLED;
     }
+    async_client()->logConnectionFailure(reason,
+                                         elapsed,
+                                         *conn()->getKey(),
+                                         conn()->mysql(),
+                                         connection_context_.get());
   }
 }
 
 void ConnectOperation::specializedCompleteOperation() {
-  logConnectFailed(result_);
+  logConnectCompleted(result_);
   // If connection_initialized_ is false the only way to complete the
   // operation is by cancellation
   DCHECK(conn()->hasInitialized() || result_ == OperationResult::Cancelled);
 
   conn()->setDefaultQueryTimeout(default_query_timeout_);
+  conn()->setConnectionContext(std::move(connection_context_));
 
   conn()->notify();
 
@@ -742,7 +748,7 @@ void FetchOperation::specializedCompleteOperation() {
                                     query_type_,
                                     num_queries_executed_,
                                     rendered_multi_query_,
-                                    conn()->getKey());
+                                    *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result_ == OperationResult::Cancelled) {
@@ -755,8 +761,7 @@ void FetchOperation::specializedCompleteOperation() {
                                     query_type_,
                                     num_queries_executed_,
                                     rendered_multi_query_,
-                                    conn()->getKey(),
-                                    conn()->mysql());
+                                    *conn().get());
   }
 
   // Probably cancelled and wasn't initialized

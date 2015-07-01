@@ -16,6 +16,8 @@
 #include <chrono>
 #include <string>
 
+#include "squangle/base/ConnectionKey.h"
+
 namespace facebook {
 namespace db {
 
@@ -32,15 +34,32 @@ enum class QueryType {
   MultiQuery,
 };
 
+typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
+    AddNormalValueFunction;
+/*
+ * Base class to allow dynamic logging data efficiently saved in Squangle core
+ * classes.
+ */
+class ConnectionContextBase {
+ public:
+  virtual ~ConnectionContextBase() {}
+  virtual void collectNormalValues(AddNormalValueFunction add) const = 0;
+};
+
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
+
+typedef std::pair<const common::mysql_client::ConnectionKey*,
+                  const ConnectionContextBase*> SquangleLoggingData;
 
 // Base class for logging events of db client apis. This should be used as an
 // abstract and the children have specific ways to log.
+template <typename TConnectionInfo>
 class DBLoggerBase {
  public:
   // The api name should be given to differentiate the kind of client being used
   // to contact DB.
-  explicit DBLoggerBase(const std::string api_name) : api_name_(api_name) {}
+  explicit DBLoggerBase(std::string api_name)
+      : api_name_(std::move(api_name)) {}
 
   virtual ~DBLoggerBase() {}
 
@@ -49,42 +68,23 @@ class DBLoggerBase {
                                QueryType query_type,
                                int queries_executed,
                                const std::string& query,
-                               const std::string& db_hostname,
-                               const std::string& user,
-                               const std::string& db_name,
-                               const int db_port) = 0;
+                               const TConnectionInfo& connInfo) = 0;
 
   virtual void logQueryFailure(FailureReason reason,
                                Duration query_time,
                                QueryType query_type,
                                int queries_executed,
                                const std::string& query,
-                               const std::string& db_hostname,
-                               const std::string& user,
-                               const std::string& db_name,
-                               const int db_port,
-                               MYSQL* mysqlConn) = 0;
+                               MYSQL* mysqlConn,
+                               const TConnectionInfo& connInfo) = 0;
 
   virtual void logConnectionSuccess(Duration connect_time,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port) = 0;
+                                    const TConnectionInfo& connInfo) = 0;
 
   virtual void logConnectionFailure(FailureReason reason,
                                     Duration connect_time,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port,
-                                    MYSQL* mysqlConn) = 0;
-
-  virtual void logTestDatabaseUsage(const std::string& tier_name,
-                                    const std::string& prefix,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port) = 0;
+                                    MYSQL* mysqlConn,
+                                    const TConnectionInfo& connInfo) = 0;
 
   const char* QueryTypeString(QueryType type) {
     switch (type) {
@@ -113,57 +113,38 @@ class DBLoggerBase {
   }
 
  protected:
-  std::string api_name_;
+  const std::string api_name_;
 };
-
+typedef DBLoggerBase<SquangleLoggingData> SquangleLoggerBase;
 // This is a simple version of the base logger as an example for other versions.
-class DBSimpleLogger : public DBLoggerBase {
+class DBSimpleLogger : public SquangleLoggerBase {
  public:
-  explicit DBSimpleLogger(const std::string api_name)
-      : DBLoggerBase(api_name) {}
+  explicit DBSimpleLogger(std::string api_name)
+      : DBLoggerBase(std::move(api_name)) {}
 
   virtual ~DBSimpleLogger() {}
 
-  virtual void logQuerySuccess(Duration query_time,
-                               QueryType query_type,
-                               int queries_executed,
-                               const std::string& query,
-                               const std::string& db_hostname,
-                               const std::string& user,
-                               const std::string& db_name,
-                               const int db_port);
+  void logQuerySuccess(Duration query_time,
+                       QueryType query_type,
+                       int queries_executed,
+                       const std::string& query,
+                       const SquangleLoggingData& connInfo) override;
 
-  virtual void logQueryFailure(FailureReason reason,
-                               Duration query_time,
-                               QueryType query_type,
-                               int queries_executed,
-                               const std::string& query,
-                               const std::string& db_hostname,
-                               const std::string& user,
-                               const std::string& db_name,
-                               const int db_port,
-                               MYSQL* mysqlConn);
+  void logQueryFailure(FailureReason reason,
+                       Duration query_time,
+                       QueryType query_type,
+                       int queries_executed,
+                       const std::string& query,
+                       MYSQL* mysqlConn,
+                       const SquangleLoggingData& connInfo) override;
 
-  virtual void logConnectionSuccess(Duration connect_time,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port);
+  void logConnectionSuccess(Duration connect_time,
+                            const SquangleLoggingData& connInfo) override;
 
-  virtual void logConnectionFailure(FailureReason reason,
-                                    Duration connect_time,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port,
-                                    MYSQL* mysqlConn);
-
-  virtual void logTestDatabaseUsage(const std::string& tier_name,
-                                    const std::string& prefix,
-                                    const std::string& db_hostname,
-                                    const std::string& user,
-                                    const std::string& db_name,
-                                    const int db_port);
+  void logConnectionFailure(FailureReason reason,
+                            Duration connect_time,
+                            MYSQL* mysqlConn,
+                            const SquangleLoggingData& connInfo) override;
 };
 }
 }

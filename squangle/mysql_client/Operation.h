@@ -181,7 +181,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // useful in the callback.  Typically this would be a string or
   // integer.  Note, also, such information can be stored inside the
   // callback itself (via a lambda).
-  virtual Operation* setUserData(folly::dynamic val) {
+  Operation* setUserData(folly::dynamic val) {
     user_data_ = std::move(val);
     return this;
   }
@@ -337,6 +337,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
  private:
   folly::dynamic user_data_;
   ObserverCallback observer_callback_;
+  std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   AsyncMysqlClient* async_client_;
 
@@ -401,6 +402,18 @@ class ConnectOperation : public Operation {
     CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
     flags_ |= new_flags;
     return this;
+  }
+
+  ConnectOperation* setConnectionContext(
+      std::unique_ptr<db::ConnectionContextBase>&& e) {
+    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    connection_context_ = std::move(e);
+    return this;
+  }
+
+  db::ConnectionContextBase* getConnectionContext() {
+    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    return connection_context_.get();
   }
 
   // Don't call this; it's public strictly for AsyncMysqlClient to be
@@ -471,11 +484,14 @@ class ConnectOperation : public Operation {
   Duration attempt_timeout_;
 
  private:
-  void logConnectFailed(OperationResult result);
+  void logConnectCompleted(OperationResult result);
 
   const ConnectionKey conn_key_;
   int flags_;
   Duration default_query_timeout_;
+
+  // Context information for logging purposes.
+  std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   // MySQL 5.6 connection attributes.  Sent at time of connect.
   std::unordered_map<string, string> connection_attributes_;

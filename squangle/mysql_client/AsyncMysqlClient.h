@@ -219,77 +219,32 @@ class AsyncMysqlClient {
                        db::QueryType type,
                        int queries_executed,
                        const folly::fbstring& query,
-                       const ConnectionKey* conn_key) {
-    CHECK_EQ(threadId(), std::this_thread::get_id());
-    stats()->incrSucceededQueries();
-    if (db_logger_) {
-      db_logger_->logQuerySuccess(dur,
-                                  type,
-                                  queries_executed,
-                                  query.toStdString(),
-                                  conn_key->host,
-                                  conn_key->user,
-                                  conn_key->db_name,
-                                  conn_key->port);
-    }
-  }
+                       const Connection& conn);
 
   void logQueryFailure(db::FailureReason reason,
-                       Duration dur,
+                       Duration duration,
                        db::QueryType type,
                        int queries_executed,
                        const folly::fbstring& query,
-                       const ConnectionKey* conn_key,
-                       MYSQL* mysql) {
-    CHECK_EQ(threadId(), std::this_thread::get_id());
-    stats()->incrFailedQueries();
-    if (db_logger_) {
-      db_logger_->logQueryFailure(reason,
-                                  dur,
-                                  type,
-                                  queries_executed,
-                                  query.toStdString(),
-                                  conn_key->host,
-                                  conn_key->user,
-                                  conn_key->db_name,
-                                  conn_key->port,
-                                  mysql);
-    }
-  }
+                       const Connection& conn);
 
-  void logConnectionSuccess(Duration dur, const ConnectionKey* conn_key) {
-    CHECK_EQ(threadId(), std::this_thread::get_id());
-    if (db_logger_) {
-      db_logger_->logConnectionSuccess(dur,
-                                       conn_key->host,
-                                       conn_key->user,
-                                       conn_key->db_name,
-                                       conn_key->port);
-    }
-  }
+  void logConnectionSuccess(
+      Duration dur,
+      const ConnectionKey& conn_key,
+      const db::ConnectionContextBase* extra_logging_data);
 
-  void logConnectionFailure(db::FailureReason reason,
-                            Duration dur,
-                            const ConnectionKey* conn_key,
-                            MYSQL* mysql) {
-    CHECK_EQ(threadId(), std::this_thread::get_id());
-    stats()->incrFailedConnections();
-    if (db_logger_) {
-      db_logger_->logConnectionFailure(reason,
-                                       dur,
-                                       conn_key->host,
-                                       conn_key->user,
-                                       conn_key->db_name,
-                                       conn_key->port,
-                                       mysql);
-    }
-  }
+  void logConnectionFailure(
+      db::FailureReason reason,
+      Duration dur,
+      const ConnectionKey& conn_key,
+      MYSQL* mysql,
+      const db::ConnectionContextBase* extra_logging_data);
 
-  db::DBLoggerBase* dbLogger() { return db_logger_.get(); }
+  db::SquangleLoggerBase* dbLogger() { return db_logger_.get(); }
   db::DBCounterBase* stats() { return client_stats_.get(); }
 
   // For internal use only
-  void setDBLoggerForTesting(std::unique_ptr<db::DBLoggerBase> dbLogger);
+  void setDBLoggerForTesting(std::unique_ptr<db::SquangleLoggerBase> dbLogger);
   void setDBCounterForTesting(std::unique_ptr<db::DBCounterBase> dbCounter);
 
   void setPoolsConnectionLimit(uint64_t limit) {
@@ -301,7 +256,7 @@ class AsyncMysqlClient {
   }
 
  protected:
-  AsyncMysqlClient(std::unique_ptr<db::DBLoggerBase> db_logger,
+  AsyncMysqlClient(std::unique_ptr<db::SquangleLoggerBase> db_logger,
                    std::unique_ptr<db::DBCounterBase> db_stats);
 
  private:
@@ -428,7 +383,7 @@ class AsyncMysqlClient {
   bool delicate_connection_failure_ = false;
 
   // Using unique pointer due inheritance virtual calls
-  std::unique_ptr<db::DBLoggerBase> db_logger_;
+  std::unique_ptr<db::SquangleLoggerBase> db_logger_;
   std::unique_ptr<db::DBCounterBase> client_stats_;
 
   // This only works if you are using AsyncConnectionPool
@@ -698,11 +653,22 @@ class Connection {
     }
   }
 
+  void setConnectionContext(std::unique_ptr<db::ConnectionContextBase>&& e) {
+    connection_context_ = std::move(e);
+  }
+
+  const db::ConnectionContextBase* getConnectionContext() const {
+    return connection_context_.get();
+  }
+
   std::unique_ptr<MysqlConnectionHolder> mysql_connection_;
 
   ConnectionKey conn_key_;
   Duration default_query_timeout_;
   std::thread::id mysql_operation_thread_id_;
+
+  // Context information for logging purposes.
+  std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   // Unowned pointer to the client we're from.
   AsyncMysqlClient* async_client_;

@@ -18,10 +18,7 @@ void DBSimpleLogger::logQuerySuccess(Duration query_time,
                                      QueryType query_type,
                                      int queries_executed,
                                      const std::string& query,
-                                     const std::string& db_hostname,
-                                     const std::string& user,
-                                     const std::string& db_name,
-                                     const int db_port) {
+                                     const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << query << "\") succeeded.";
 }
@@ -31,44 +28,24 @@ void DBSimpleLogger::logQueryFailure(FailureReason reason,
                                      QueryType query_type,
                                      int queries_executed,
                                      const std::string& query,
-                                     const std::string& db_hostname,
-                                     const std::string& user,
-                                     const std::string& db_name,
-                                     const int db_port,
-                                     MYSQL* mysqlConn) {
+                                     MYSQL* mysqlConn,
+                                     const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << query << "\") failed.";
 }
 
 void DBSimpleLogger::logConnectionSuccess(Duration connect_time,
-                                          const std::string& db_hostname,
-                                          const std::string& user,
-                                          const std::string& db_name,
-                                          const int db_port) {
+                                          const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " connection with " << db_hostname << " succeeded";
+          << " connection with " << connInfo.first->host << " succeeded";
 }
 
 void DBSimpleLogger::logConnectionFailure(FailureReason reason,
                                           Duration connect_time,
-                                          const std::string& db_hostname,
-                                          const std::string& user,
-                                          const std::string& db_name,
-                                          const int db_port,
-                                          MYSQL* mysqlConn) {
+                                          MYSQL* mysqlConn,
+                                          const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " connection with " << db_hostname << " failed";
-}
-
-void DBSimpleLogger::logTestDatabaseUsage(const std::string& tier_name,
-                                          const std::string& prefix,
-                                          const std::string& db_hostname,
-                                          const std::string& user,
-                                          const std::string& db_name,
-                                          const int db_port) {
-  VLOG(2) << "[" << api_name_ << "]"
-          << " test " << prefix << " connection with " << db_hostname
-          << " succeeded";
+          << " connection with " << connInfo.first->host << " failed";
 }
 }
 }

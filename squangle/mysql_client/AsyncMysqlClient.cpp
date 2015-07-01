@@ -25,7 +25,7 @@
 #include <fcntl.h>
 
 #ifndef NO_LIB_GFLAGS
-#include "common/config/Flags.h"
+#include "common/config/Flags.h" // nolint
 DECLARE_int64(async_mysql_timeout_micros);
 #endif
 
@@ -124,8 +124,9 @@ AsyncMysqlClient::~AsyncMysqlClient() {
   VLOG(2) << "AsyncMysqlClient finished destructor";
 }
 
-AsyncMysqlClient::AsyncMysqlClient(std::unique_ptr<db::DBLoggerBase> db_logger,
-                                   std::unique_ptr<db::DBCounterBase> db_stats)
+AsyncMysqlClient::AsyncMysqlClient(
+    std::unique_ptr<db::SquangleLoggerBase> db_logger,
+    std::unique_ptr<db::DBCounterBase> db_stats)
     : db_logger_(std::move(db_logger)),
       client_stats_(std::move(db_stats)),
       pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
@@ -133,13 +134,78 @@ AsyncMysqlClient::AsyncMysqlClient(std::unique_ptr<db::DBLoggerBase> db_logger,
 }
 
 void AsyncMysqlClient::setDBLoggerForTesting(
-    std::unique_ptr<db::DBLoggerBase> dbLogger) {
+    std::unique_ptr<db::SquangleLoggerBase> dbLogger) {
   db_logger_ = std::move(dbLogger);
 }
 
 void AsyncMysqlClient::setDBCounterForTesting(
     std::unique_ptr<db::DBCounterBase> dbCounter) {
   client_stats_ = std::move(dbCounter);
+}
+
+void AsyncMysqlClient::logQuerySuccess(Duration dur,
+                                       db::QueryType type,
+                                       int queries_executed,
+                                       const folly::fbstring& query,
+                                       const Connection& conn) {
+  CHECK_EQ(threadId(), std::this_thread::get_id());
+  stats()->incrSucceededQueries();
+  if (db_logger_) {
+    db_logger_->logQuerySuccess(
+        dur,
+        type,
+        queries_executed,
+        query.toStdString(),
+        db::SquangleLoggingData{conn.getKey(), conn.getConnectionContext()});
+  }
+}
+
+void AsyncMysqlClient::logQueryFailure(db::FailureReason reason,
+                                       Duration duration,
+                                       db::QueryType type,
+                                       int queries_executed,
+                                       const folly::fbstring& query,
+                                       const Connection& conn) {
+  CHECK_EQ(threadId(), std::this_thread::get_id());
+  stats()->incrFailedQueries();
+  if (db_logger_) {
+    db_logger_->logQueryFailure(
+        reason,
+        duration,
+        type,
+        queries_executed,
+        query.toStdString(),
+        conn.mysql(),
+        db::SquangleLoggingData{conn.getKey(), conn.getConnectionContext()});
+  }
+}
+
+void AsyncMysqlClient::logConnectionSuccess(
+    Duration duration,
+    const ConnectionKey& conn_key,
+    const db::ConnectionContextBase* connection_context) {
+  CHECK_EQ(threadId(), std::this_thread::get_id());
+  if (db_logger_) {
+    db_logger_->logConnectionSuccess(
+        duration, db::SquangleLoggingData{&conn_key, connection_context});
+  }
+}
+
+void AsyncMysqlClient::logConnectionFailure(
+    db::FailureReason reason,
+    Duration duration,
+    const ConnectionKey& conn_key,
+    MYSQL* mysql,
+    const db::ConnectionContextBase* connection_context) {
+  CHECK_EQ(threadId(), std::this_thread::get_id());
+  stats()->incrFailedConnections();
+  if (db_logger_) {
+    db_logger_->logConnectionFailure(
+        reason,
+        duration,
+        mysql,
+        db::SquangleLoggingData{&conn_key, connection_context});
+  }
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {

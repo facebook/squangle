@@ -12,15 +12,13 @@
 
 #include <chrono>
 #include <folly/String.h>
-#include <folly/Format.h>
 #include <mysql.h>
+
+#include "squangle/base/ConnectionKey.h"
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
-
-typedef std::chrono::duration<uint64_t, std::micro> Duration;
-typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
 
 using folly::StringPiece;
 using std::string;
@@ -29,54 +27,8 @@ using std::unordered_map;
 class AsyncMysqlClient;
 class AsyncConnectionPool;
 
-// This class encapsulates the data that differentiates 2 connections:
-// host, port, db name and user. We also store the password to avoid
-// allowing a connection with wrong password be accepted.
-// We also store the key as string (without the password and special tag)
-// for debugging purposes and to use as keys in other maps
-class ConnectionKey {
- public:
-  const string host;
-  const int port;
-  const string db_name;
-  const string user;
-  // keeping password to avoid password error
-  const string password;
-  const string special_tag;
-  const size_t hash;
-
-  ConnectionKey(StringPiece sp_host,
-                int sp_port,
-                StringPiece sp_db_name,
-                StringPiece sp_user,
-                StringPiece sp_password,
-                StringPiece sp_special_tag = "")
-      : host(sp_host.toString()),
-        port(sp_port),
-        db_name(sp_db_name.toString()),
-        user(sp_user.toString()),
-        password(sp_password.toString()),
-        special_tag(sp_special_tag.toString()),
-        hash(folly::hash::hash_combine(sp_host.hash(),
-                                       sp_port,
-                                       sp_db_name.hash(),
-                                       sp_user.hash(),
-                                       sp_password.hash(),
-                                       sp_special_tag.hash())) {}
-
-  bool operator==(const ConnectionKey& rhs) const {
-    return hash == rhs.hash && host == rhs.host && port == rhs.port &&
-           db_name == rhs.db_name && user == rhs.user &&
-           password == rhs.password && special_tag == rhs.special_tag;
-  }
-
-  bool operator!=(const ConnectionKey& rhs) const { return !(*this == rhs); }
-
-  string getDisplayString() const {
-    return folly::sformat("{} [{}] ({}@{}:{})",
-                         db_name, special_tag, user, host, port);
-  }
-};
+typedef std::chrono::duration<uint64_t, std::micro> Duration;
+typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
 
 // Holds the mysql connection for easier re use
 class MysqlConnectionHolder {
@@ -148,14 +100,5 @@ class MysqlConnectionHolder {
 }
 }
 } // facebook::common::mysql_client
-
-// make default template of unordered_map/unordered_set works for ConnectionKey
-namespace std {
-using facebook::common::mysql_client::ConnectionKey;
-template <>
-struct hash<ConnectionKey> {
-  size_t operator()(const ConnectionKey& k) const { return k.hash; }
-};
-} // std
 
 #endif // COMMON_ASYNC_CONNECTION_H
