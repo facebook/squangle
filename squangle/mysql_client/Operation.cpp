@@ -241,6 +241,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
+  setSSLContext(conn_opts.getSSLContext());
   return this;
 }
 
@@ -308,6 +309,12 @@ ConnectOperation* ConnectOperation::specializedRun() {
                          MYSQL_OPT_CONNECT_ATTR_ADD,
                          kv.first.c_str(),
                          kv.second.c_str());
+        }
+
+        if (ssl_context_) {
+          mysql_options(conn()->mysql(),
+                        MYSQL_OPT_SSL_CONTEXT,
+                        ssl_context_->getSSLCtx());
         }
 
         bool res =
