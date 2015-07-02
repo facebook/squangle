@@ -751,6 +751,8 @@ void FetchOperation::specializedTimeoutTriggered() {
 void FetchOperation::specializedCompleteOperation() {
   // Stats for query
   if (result_ == OperationResult::Succeeded) {
+    //set last successful query time to MysqlConnectionHolder
+    conn()->setLastSuccessfulQueryTime(chrono::high_resolution_clock::now());
     async_client()->logQuerySuccess(elapsed(),
                                     query_type_,
                                     num_queries_executed_,

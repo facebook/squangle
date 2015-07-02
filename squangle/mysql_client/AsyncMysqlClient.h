@@ -527,6 +527,12 @@ class Connection {
   void setDefaultQueryTimeout(Duration t) { default_query_timeout_ = t; }
   void setQueryTimeout(Duration t) { default_query_timeout_ = t; }
 
+  //set last successful query time to MysqlConnectionHolder
+  void setLastSuccessfulQueryTime(Timepoint last_successful_query_time) {
+    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    mysql_connection_->setLastSuccessfulQueryTime(last_successful_query_time);
+  }
+
   // Returns the MySQL server version. If the connection has been closed
   // an error is generated.
   const string serverInfo() const {
