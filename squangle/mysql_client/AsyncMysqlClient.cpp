@@ -77,31 +77,34 @@ void AsyncMysqlClient::init() {
 }
 
 void AsyncMysqlClient::drain(bool also_shutdown) {
-  std::unique_lock<std::mutex> lock(mutex_);
-  shutting_down_ = also_shutdown;
+  {
+    std::unique_lock<std::mutex> lock(pending_operations_mutex_);
+    shutting_down_ = also_shutdown;
 
-  auto it = pending_operations_.begin();
-  // Clean out any unstarted operations.
-  while (it != pending_operations_.end()) {
-    // So here the Operation `run` was not called
-    // We don't need to lock the state change in the operation here since the
-    // cancelling process is going to fire not matter in which part it is.
-    if ((*it)->state() == OperationState::Unstarted) {
-      (*it)->cancel();
-      it = pending_operations_.erase(it);
-    } else {
+    auto it = pending_operations_.begin();
+    // Clean out any unstarted operations.
+    while (it != pending_operations_.end()) {
+      // So here the Operation `run` was not called
+      // We don't need to lock the state change in the operation here since the
+      // cancelling process is going to fire not matter in which part it is.
+      if ((*it)->state() == OperationState::Unstarted) {
+        (*it)->cancel();
+        it = pending_operations_.erase(it);
+      } else {
       ++it;
+      }
     }
   }
 
   // Now wait for any started operations to complete.
-  currently_idle_.wait(lock,
+  std::unique_lock<std::mutex> counter_lock(this->counters_mutex_);
+  active_connections_closed_cv_.wait(counter_lock,
       [&also_shutdown, this] {
       if (also_shutdown) {
-        VLOG(11) << "Waiting for " << this->numStartedAndOpenConnections()
+        VLOG(11) << "Waiting for " << this->active_connection_counter_
                  << " connections to be released before shutting client down";
       }
-      return this->numStartedAndOpenConnections() == 0;
+      return this->active_connection_counter_ == 0;
     }
   );
 }
@@ -209,7 +212,7 @@ void AsyncMysqlClient::logConnectionFailure(
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {
-  std::unique_lock<std::mutex> lock(mutex_);
+  std::unique_lock<std::mutex> lock(pending_operations_mutex_);
   size_t num_erased = 0, before = pending_operations_.size();
 
   VLOG(11) << "removing pending operations";

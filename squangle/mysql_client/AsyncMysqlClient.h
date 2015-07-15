@@ -207,7 +207,7 @@ class AsyncMysqlClient {
 
   // Stop accepting new queries and connections.
   void shutdown() {
-    std::unique_lock<std::mutex> l(mutex_);
+    std::unique_lock<std::mutex> l(pending_operations_mutex_);
     shutting_down_ = true;
   }
 
@@ -320,7 +320,7 @@ class AsyncMysqlClient {
     DCHECK(active_connection_counter_ != 0);
     --active_connection_counter_;
     if (active_connection_counter_ == 0) {
-      currently_idle_.notify_one();
+      active_connections_closed_cv_.notify_one();
     }
 
     auto ref_iter = connection_references_.find(*key);
@@ -333,7 +333,7 @@ class AsyncMysqlClient {
 
   // Add a pending operation to the client.
   void addOperation(std::shared_ptr<Operation> op) {
-    std::unique_lock<std::mutex> l(mutex_);
+    std::unique_lock<std::mutex> l(pending_operations_mutex_);
     if (shutting_down_) {
       LOG(ERROR) << "Attempt to start operation when client is shutting down";
       op->cancel();
@@ -346,7 +346,7 @@ class AsyncMysqlClient {
   // executing one of its methods (ie handling an event or cancel
   // call).
   void deferRemoveOperation(Operation* op) {
-    std::unique_lock<std::mutex> l(mutex_);
+    std::unique_lock<std::mutex> l(pending_operations_mutex_);
     // If the queue to remove is empty, schedule a cleanup to occur after
     // this pass through the event loop.
     if (operations_to_remove_.empty()) {
@@ -362,10 +362,10 @@ class AsyncMysqlClient {
   // thread_ is where loop() runs and most of the class does its work.
   std::thread thread_;
 
-  // mutex_ protects pending_operations_ and is used by currently_idle_.
-  // All other member variables are accessed only in thread_.
-  std::mutex mutex_;
-  std::condition_variable currently_idle_;
+  // pending_operations_mutex_ protects pending_operations_ and shutdown,
+  // this mutex is meant for external operations on the client. For example,
+  // when the user wants to begin an operation.
+  std::mutex pending_operations_mutex_;
 
   // The client must keep a reference (via a shared_ptr) to any active
   // Operation as the op's creator may have released their reference.
@@ -389,6 +389,7 @@ class AsyncMysqlClient {
   unordered_map<ConnectionKey, uint32_t> connection_references_;
   // Protects the look ups and writes to both counters
   std::mutex counters_mutex_;
+  std::condition_variable active_connections_closed_cv_;
 
   // For testing purposes
   bool delicate_connection_failure_ = false;
