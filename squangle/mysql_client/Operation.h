@@ -57,7 +57,6 @@
 #include "folly/String.h"
 #include "folly/dynamic.h"
 #include "folly/Memory.h"
-#include <folly/io/async/SSLContext.h>
 
 namespace facebook {
 namespace common {
@@ -384,12 +383,6 @@ class ConnectOperation : public Operation {
     return this;
   }
 
-  ConnectOperation* setSSLContext(
-      std::shared_ptr<folly::SSLContext> ssl_context) {
-    ssl_context_ = ssl_context;
-    return this;
-  }
-
   // Default timeout for queries created by the connection this
   // operation will create.
   ConnectOperation* setDefaultQueryTimeout(Duration t) {
@@ -502,8 +495,6 @@ class ConnectOperation : public Operation {
 
   // MySQL 5.6 connection attributes.  Sent at time of connect.
   std::unordered_map<string, string> connection_attributes_;
-
-  std::shared_ptr<folly::SSLContext> ssl_context_;
 
   ConnectCallback connect_callback_;
   bool active_in_client_;

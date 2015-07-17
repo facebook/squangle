@@ -140,23 +140,12 @@ class ConnectionOptions {
 
   Duration getTotalTimeout() const { return total_timeout_; }
 
-  ConnectionOptions& setSSLContext(
-      std::shared_ptr<folly::SSLContext> ssl_context) {
-    ssl_context_ = ssl_context;
-    return *this;
-  }
-
-  std::shared_ptr<folly::SSLContext> getSSLContext() const {
-    return ssl_context_;
-  }
-
  private:
   Duration connection_timeout_;
   Duration total_timeout_;
   Duration query_timeout_;
   std::unordered_map<string, string> connection_attributes_;
   uint32_t max_attempts_ = 1;
-  std::shared_ptr<folly::SSLContext> ssl_context_;
 };
 
 // The client itself.  As mentioned above, in general, it isn't
