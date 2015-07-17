@@ -17,6 +17,7 @@
 #include <string>
 
 #include "squangle/base/ConnectionKey.h"
+#include "squangle/logger/DBEventCounter.h"
 
 namespace facebook {
 namespace db {
@@ -38,7 +39,7 @@ typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
     AddNormalValueFunction;
 /*
  * Base class to allow dynamic logging data efficiently saved in Squangle core
- * classes.
+ * classes. Should be used for data about the connection.
  */
 class ConnectionContextBase {
  public:
@@ -48,8 +49,14 @@ class ConnectionContextBase {
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
 
-typedef std::pair<const common::mysql_client::ConnectionKey*,
-                  const ConnectionContextBase*> SquangleLoggingData;
+struct SquangleLoggingData {
+  SquangleLoggingData(const common::mysql_client::ConnectionKey* conn_key,
+                      const ConnectionContextBase* conn_context)
+      : connKey(conn_key), connContext(conn_context) {}
+  const common::mysql_client::ConnectionKey* connKey;
+  const ConnectionContextBase* connContext;
+  db::ClientPerfStats clientPerfStats;
+};
 
 // Base class for logging events of db client apis. This should be used as an
 // abstract and the children have specific ways to log.
@@ -115,6 +122,7 @@ class DBLoggerBase {
  protected:
   const std::string api_name_;
 };
+
 typedef DBLoggerBase<SquangleLoggingData> SquangleLoggerBase;
 // This is a simple version of the base logger as an example for other versions.
 class DBSimpleLogger : public SquangleLoggerBase {

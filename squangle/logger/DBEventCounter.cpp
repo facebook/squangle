@@ -13,6 +13,19 @@
 namespace facebook {
 namespace db {
 
+ExponentialMovingAverage::ExponentialMovingAverage(double smoothingFactor)
+    : smoothingFactor_(smoothingFactor) {}
+
+void ExponentialMovingAverage::addSample(double sample) {
+  if (hasRegisteredFirstSample_) {
+    currentValue_ =
+        smoothingFactor_ * sample + (1 - smoothingFactor_) * currentValue_;
+  } else {
+    currentValue_ = sample;
+    hasRegisteredFirstSample_ = true;
+  }
+}
+
 void SimpleDbCounter::printStats() {
   LOG(INFO) << "Client Stats\n"
             << "Opened Connections " << numOpenedConnections() << "\n"

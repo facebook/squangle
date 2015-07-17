@@ -63,6 +63,7 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
 
 void MysqlConnectionHolder::connectionOpened() {
   connection_opened_ = true;
+  last_activity_time_ = std::chrono::high_resolution_clock::now();
   async_client_->stats()->incrOpenedConnections();
 }
 }

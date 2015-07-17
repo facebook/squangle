@@ -65,10 +65,10 @@ class MysqlConnectionHolder {
 
   void connectionOpened();
 
-  Timepoint getLastSuccessfulQueryTime() { return last_successful_query_time_; }
+  Timepoint getLastActivityTime() { return last_activity_time_; }
 
-  void setLastSuccessfulQueryTime(Timepoint last_successful_query_time) {
-    last_successful_query_time_ = last_successful_query_time;
+  void setLastActivityTime(Timepoint last_activity_time) {
+    last_activity_time_ = last_activity_time;
   }
 
   // Useful for removing the raw mysql connection and leaving this class to be
@@ -94,7 +94,7 @@ class MysqlConnectionHolder {
   MYSQL* mysql_;
   const ConnectionKey conn_key_;
   Timepoint creation_time_;
-  Timepoint last_successful_query_time_;
+  Timepoint last_activity_time_;
   bool connection_opened_;
 
   // Amount of time that this connection can live

@@ -751,8 +751,8 @@ void FetchOperation::specializedTimeoutTriggered() {
 void FetchOperation::specializedCompleteOperation() {
   // Stats for query
   if (result_ == OperationResult::Succeeded) {
-    //set last successful query time to MysqlConnectionHolder
-    conn()->setLastSuccessfulQueryTime(chrono::high_resolution_clock::now());
+    // set last successful query time to MysqlConnectionHolder
+    conn()->setLastActivityTime(chrono::high_resolution_clock::now());
     async_client()->logQuerySuccess(elapsed(),
                                     query_type_,
                                     num_queries_executed_,
@@ -762,7 +762,7 @@ void FetchOperation::specializedCompleteOperation() {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result_ == OperationResult::Cancelled) {
       reason = db::FailureReason::CANCELLED;
-    } else {
+    } else if (result_ == OperationResult::TimedOut) {
       reason = db::FailureReason::TIMEOUT;
     }
     async_client()->logQueryFailure(reason,

@@ -15,6 +15,26 @@
 namespace facebook {
 namespace db {
 
+class ExponentialMovingAverage {
+ public:
+  explicit ExponentialMovingAverage(double smootingFactor);
+  void addSample(double sample);
+
+  double value() const { return currentValue_; }
+
+ private:
+  double smoothingFactor_ = 0;
+  double currentValue_ = 0;
+  bool hasRegisteredFirstSample_ = false;
+};
+
+// An wrapper around the metrics we care about the performance of the Client.
+// Mainly a struct to easily pass to HHVM and other loggers.
+struct ClientPerfStats {
+  double callbackDelayMicrosAvg = 0;
+  double ioEventLoopMicrosAvg = 0;
+};
+
 class DBCounterBase {
  public:
   DBCounterBase() {}

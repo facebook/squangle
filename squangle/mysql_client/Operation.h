@@ -213,11 +213,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Retrieve the shared pointer that holds this instance.
   std::shared_ptr<Operation> getSharedPointer();
 
+  AsyncMysqlClient* async_client();
  protected:
   class ConnectionProxy;
   explicit Operation(std::unique_ptr<ConnectionProxy>&& conn);
 
-  AsyncMysqlClient* async_client();
 
   ConnectionProxy& conn() { return *conn_ptr_.get(); }
   const ConnectionProxy& conn() const { return *conn_ptr_.get(); }

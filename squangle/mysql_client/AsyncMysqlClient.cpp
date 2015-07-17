@@ -63,6 +63,15 @@ AsyncMysqlClient::AsyncMysqlClient()
   init();
 }
 
+AsyncMysqlClient::AsyncMysqlClient(
+    std::unique_ptr<db::SquangleLoggerBase> db_logger,
+    std::unique_ptr<db::DBCounterBase> db_stats)
+    : db_logger_(std::move(db_logger)),
+      client_stats_(std::move(db_stats)),
+      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
+  init();
+}
+
 void AsyncMysqlClient::init() {
   static InitMysqlLibrary unused;
   thread_ = std::thread([this]() {
@@ -74,6 +83,23 @@ void AsyncMysqlClient::init() {
     mysql_thread_end();
   });
   tevent_base_.waitUntilRunning();
+}
+
+
+bool AsyncMysqlClient::runInThread(const ata::Cob& fn) {
+  auto scheduleTime = std::chrono::high_resolution_clock::now();
+  if (!tevent_base_.runInEventBaseThread(
+          [ fn, scheduleTime, this ]() {
+            auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::high_resolution_clock::now() -
+                             scheduleTime).count();
+            callbackDelayAvg_.addSample(delay);
+            fn();
+          })) {
+    LOG(DFATAL) << "TEventBase::runInEventBase failed";
+    return false;
+  }
+  return true;
 }
 
 void AsyncMysqlClient::drain(bool also_shutdown) {
@@ -121,20 +147,14 @@ AsyncMysqlClient::~AsyncMysqlClient() {
 
   DCHECK(connection_references_.size() == 0);
 
+  // TODO: Maybe add here a runInThread to cancel the AsyncTimeout
+
   // All operations are done.  Shut the thread down.
   tevent_base_.terminateLoopSoon();
   thread_.join();
   VLOG(2) << "AsyncMysqlClient finished destructor";
 }
 
-AsyncMysqlClient::AsyncMysqlClient(
-    std::unique_ptr<db::SquangleLoggerBase> db_logger,
-    std::unique_ptr<db::DBCounterBase> db_stats)
-    : db_logger_(std::move(db_logger)),
-      client_stats_(std::move(db_stats)),
-      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
-  init();
-}
 
 void AsyncMysqlClient::setDBLoggerForTesting(
     std::unique_ptr<db::SquangleLoggerBase> dbLogger) {
@@ -159,7 +179,7 @@ void AsyncMysqlClient::logQuerySuccess(Duration dur,
         type,
         queries_executed,
         query.toStdString(),
-        db::SquangleLoggingData{conn.getKey(), conn.getConnectionContext()});
+        makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
 
@@ -179,7 +199,7 @@ void AsyncMysqlClient::logQueryFailure(db::FailureReason reason,
         queries_executed,
         query.toStdString(),
         conn.mysql(),
-        db::SquangleLoggingData{conn.getKey(), conn.getConnectionContext()});
+        makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
 
@@ -190,7 +210,7 @@ void AsyncMysqlClient::logConnectionSuccess(
   CHECK_EQ(threadId(), std::this_thread::get_id());
   if (db_logger_) {
     db_logger_->logConnectionSuccess(
-        duration, db::SquangleLoggingData{&conn_key, connection_context});
+        duration, makeSquangleLoggingData(&conn_key, connection_context));
   }
 }
 
@@ -207,8 +227,16 @@ void AsyncMysqlClient::logConnectionFailure(
         reason,
         duration,
         mysql,
-        db::SquangleLoggingData{&conn_key, connection_context});
+        makeSquangleLoggingData(&conn_key, connection_context));
   }
+}
+
+db::SquangleLoggingData AsyncMysqlClient::makeSquangleLoggingData(
+    const ConnectionKey* connKey,
+    const db::ConnectionContextBase* connContext) {
+  db::SquangleLoggingData ret(connKey, connContext);
+  ret.clientPerfStats = collectPerfStats();
+  return ret;
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {

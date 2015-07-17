@@ -37,7 +37,7 @@ void DBSimpleLogger::logQueryFailure(FailureReason reason,
 void DBSimpleLogger::logConnectionSuccess(Duration connect_time,
                                           const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " connection with " << connInfo.first->host << " succeeded";
+          << " connection with " << connInfo.connKey->host << " succeeded";
 }
 
 void DBSimpleLogger::logConnectionFailure(FailureReason reason,
@@ -45,7 +45,7 @@ void DBSimpleLogger::logConnectionFailure(FailureReason reason,
                                           MYSQL* mysqlConn,
                                           const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " connection with " << connInfo.first->host << " failed";
+          << " connection with " << connInfo.connKey->host << " failed";
 }
 }
 }

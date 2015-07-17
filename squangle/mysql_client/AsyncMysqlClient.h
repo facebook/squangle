@@ -254,6 +254,10 @@ class AsyncMysqlClient {
   db::SquangleLoggerBase* dbLogger() { return db_logger_.get(); }
   db::DBCounterBase* stats() { return client_stats_.get(); }
 
+  db::SquangleLoggingData makeSquangleLoggingData(
+      const ConnectionKey* connKey,
+      const db::ConnectionContextBase* connContext);
+
   // For internal use only
   void setDBLoggerForTesting(std::unique_ptr<db::SquangleLoggerBase> dbLogger);
   void setDBCounterForTesting(std::unique_ptr<db::DBCounterBase> dbCounter);
@@ -264,6 +268,13 @@ class AsyncMysqlClient {
 
   uint64_t getPoolsConnectionLimit() {
     return pools_conn_limit_.load(std::memory_order_relaxed);
+  }
+
+  db::ClientPerfStats collectPerfStats() {
+    db::ClientPerfStats ret;
+    ret.callbackDelayMicrosAvg = callbackDelayAvg_.value();
+    ret.ioEventLoopMicrosAvg = tevent_base_.getAvgLoopTime();
+    return ret;
   }
 
  protected:
@@ -282,13 +293,7 @@ class AsyncMysqlClient {
 
   void init();
 
-  bool runInThread(const ata::Cob& fn) {
-    if (!tevent_base_.runInEventBaseThread(fn)) {
-      LOG(DFATAL) << "TEventBase::runInEventBase failed";
-      return false;
-    }
-    return true;
-  }
+  bool runInThread(const ata::Cob& fn);
 
   // Gives the number of connections being created (started) and the ones that
   // are already open for a ConnectionKey
@@ -400,6 +405,10 @@ class AsyncMysqlClient {
 
   // This only works if you are using AsyncConnectionPool
   std::atomic<uint64_t> pools_conn_limit_;
+
+  // Average time between a callback being scheduled in the IO Thread and the
+  // time it runs
+  db::ExponentialMovingAverage callbackDelayAvg_{1.0 / 16.0};
 
   AsyncMysqlClient(const AsyncMysqlClient&) = delete;
   AsyncMysqlClient& operator=(const AsyncMysqlClient&) = delete;
@@ -528,10 +537,10 @@ class Connection {
   void setDefaultQueryTimeout(Duration t) { default_query_timeout_ = t; }
   void setQueryTimeout(Duration t) { default_query_timeout_ = t; }
 
-  //set last successful query time to MysqlConnectionHolder
-  void setLastSuccessfulQueryTime(Timepoint last_successful_query_time) {
+  // set last successful query time to MysqlConnectionHolder
+  void setLastActivityTime(Timepoint last_activity_time) {
     CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
-    mysql_connection_->setLastSuccessfulQueryTime(last_successful_query_time);
+    mysql_connection_->setLastActivityTime(last_activity_time);
   }
 
   // Returns the MySQL server version. If the connection has been closed
