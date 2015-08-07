@@ -732,7 +732,8 @@ template <typename... Args>
 folly::Future<DbQueryResult> Connection::queryFuture(
     std::unique_ptr<Connection> conn, Args&&... args) {
   Query query{std::forward<Args>(args)...};
-  return queryFuture(std::move(conn), std::move(query));
+  // This std::move fixes a bug in Clang opt builds: #6120972
+  return std::move(queryFuture(std::move(conn), std::move(query)));
 }
 
 }
