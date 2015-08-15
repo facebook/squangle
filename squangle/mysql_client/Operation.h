@@ -46,8 +46,6 @@
 #include <vector>
 #include <mysql.h>
 
-#include "thrift/lib/cpp/async/TEventHandler.h"
-#include "thrift/lib/cpp/async/TAsyncTimeout.h"
 #include "squangle/mysql_client/Row.h"
 #include "squangle/mysql_client/Query.h"
 #include "squangle/mysql_client/DbResult.h"
@@ -57,6 +55,8 @@
 #include "folly/String.h"
 #include "folly/dynamic.h"
 #include "folly/Memory.h"
+#include <folly/io/async/EventHandler.h>
+#include <folly/io/async/AsyncTimeout.h>
 
 namespace facebook {
 namespace common {
@@ -64,7 +64,6 @@ namespace mysql_client {
 
 using facebook::db::OperationStateException;
 
-namespace ata = apache::thrift::async;
 class AsyncMysqlClient;
 class QueryResult;
 class ConnectOperation;
