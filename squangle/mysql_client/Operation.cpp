@@ -9,7 +9,7 @@
  */
 
 #include "squangle/mysql_client/Operation.h"
-
+#include <openssl/ssl.h>
 #include <errmsg.h> // mysql
 
 #include "folly/Memory.h"
@@ -21,6 +21,8 @@
 DEFINE_int64(async_mysql_timeout_micros,
              60 * 1000 * 1000,
              "default timeout, in micros, for mysql operations");
+DEFINE_bool(ssl_session_cache_enabled, true, "if to use an ssl session cache.");
+DEFINE_int32(ssl_session_cache_size, 1000 * 1000, "maximum size of the cache.");
 #endif
 
 namespace facebook {
@@ -28,7 +30,9 @@ namespace common {
 namespace mysql_client {
 
 #ifdef NO_LIB_GFLAGS
-  int64_t FLAGS_async_mysql_timeout_micros = 60 * 1000 * 1000;
+int64_t FLAGS_async_mysql_timeout_micros = 60 * 1000 * 1000;
+bool FLAGS_ssl_session_cache_enabled = true;
+int32_t FLAGS_ssl_session_cache_size = 1000 * 1000;
 #endif
 
 namespace chrono = std::chrono;
@@ -326,6 +330,15 @@ ConnectOperation* ConnectOperation::specializedRun() {
           mysql_options(conn()->mysql(),
                         MYSQL_OPT_SSL_CONTEXT,
                         ssl_context_->getSSLCtx());
+
+          if (FLAGS_ssl_session_cache_enabled) {
+            auto ssl_session = async_client()->sslSessionCache()->getSSLSession(
+                host(), port());
+            if (ssl_session) {
+              mysql_options4(
+                  conn()->mysql(), MYSQL_OPT_SSL_SESSION, ssl_session, 0);
+            }
+          }
         }
 
         bool res =
@@ -440,7 +453,33 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
   }
 }
 
+void ConnectOperation::storeSSLSession() {
+  // If connection was successful and SSL options were set, update the ssl
+  // session stored in cache.
+  if (!(result_ == OperationResult::Succeeded && conn()->hasInitialized() &&
+        ssl_context_)) {
+    return;
+  }
+
+  // MySQL expires SSL sessions after 5 minutes by default, update the cache
+  // only when the session was renewed.
+  if (!mysql_get_ssl_session_reused(conn()->mysql())) {
+    auto ssl_session =
+        SSLSessionPtr((SSL_SESSION*)mysql_get_ssl_session(conn()->mysql()));
+    if (ssl_session) {
+      async_client()->sslSessionCache()->setSSLSession(
+          host(), port(), std::move(ssl_session));
+    } else {
+      LOG(ERROR) << "Failed to get SSL Session for " << host() << ":" << port();
+    }
+  }
+}
+
 void ConnectOperation::specializedCompleteOperation() {
+  if (FLAGS_ssl_session_cache_enabled) {
+    storeSSLSession();
+  }
+
   logConnectCompleted(result_);
   // If connection_initialized_ is false the only way to complete the
   // operation is by cancellation
