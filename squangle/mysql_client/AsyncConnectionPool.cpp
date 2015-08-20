@@ -75,6 +75,20 @@ std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
   return pool;
 }
 
+std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
+    std::weak_ptr<AsyncMysqlClient> mysql_client,
+    const PoolOptions& pool_options) {
+
+  auto lock_client = mysql_client.lock();
+  if(!lock_client) {
+    LOG(DFATAL) <<
+      "AsyncConnectionPool::makePool was provided with mysql client that "
+      "was already destroyed";
+  }
+
+  return AsyncConnectionPool::makePool(lock_client.get(), pool_options);
+}
+
 AsyncConnectionPool::AsyncConnectionPool(AsyncMysqlClient* mysql_client,
                                          const PoolOptions& pool_options)
     : conn_storage_(mysql_client->threadId(),
@@ -449,9 +463,9 @@ void AsyncConnectionPool::addConnection(
   }
 }
 
-AsyncConnectionPool::CleanUpTimer::CleanUpTimer(ata::TEventBase* base,
+AsyncConnectionPool::CleanUpTimer::CleanUpTimer(folly::EventBase* base,
                                                 ConnStorage* pool)
-    : ata::TAsyncTimeout(base), pool_(pool) {}
+    : folly::AsyncTimeout(base), pool_(pool) {}
 
 void AsyncConnectionPool::CleanUpTimer::timeoutExpired() noexcept {
   pool_->cleanupConnections();

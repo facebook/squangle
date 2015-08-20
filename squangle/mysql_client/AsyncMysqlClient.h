@@ -47,7 +47,6 @@
 #ifndef COMMON_ASYNC_MYSQL_CLIENT_H
 #define COMMON_ASYNC_MYSQL_CLIENT_H
 
-#include "thrift/lib/cpp/async/TEventBase.h"
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/Row.h"
 #include "squangle/mysql_client/Query.h"
@@ -69,12 +68,12 @@
 #include <folly/Exception.h>
 #include <folly/experimental/fibers/Baton.h>
 #include <folly/futures/Future.h>
+#include <folly/io/async/EventBase.h>
+#include <folly/Singleton.h>
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
-
-namespace ata = apache::thrift::async;
 
 using std::string;
 using std::unordered_map;
@@ -156,7 +155,7 @@ class AsyncMysqlClient {
   AsyncMysqlClient();
   ~AsyncMysqlClient();
 
-  static AsyncMysqlClient* defaultClient();
+  static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
   // Initiate a connection to a database.  This is the main entrypoint.
   std::shared_ptr<ConnectOperation> beginConnection(const string& host,
@@ -205,7 +204,7 @@ class AsyncMysqlClient {
   // fail harshly.
   void drain(bool also_shutdown);
 
-  ata::TEventBase* getEventBase() { return &tevent_base_; }
+  folly::EventBase* getEventBase() { return &tevent_base_; }
 
   const std::thread::id threadId() const { return thread_.get_id(); }
 
@@ -282,7 +281,7 @@ class AsyncMysqlClient {
 
   void init();
 
-  bool runInThread(const ata::Cob& fn);
+  bool runInThread(const folly::Cob& fn);
 
   // Gives the number of connections being created (started) and the ones that
   // are already open for a ConnectionKey
@@ -371,7 +370,7 @@ class AsyncMysqlClient {
   std::vector<std::shared_ptr<Operation>> operations_to_remove_;
 
   // Our event loop.
-  ata::TEventBase tevent_base_;
+  folly::EventBase tevent_base_;
 
   // Are we shutting down?
   bool shutting_down_ = false;
@@ -407,10 +406,10 @@ class AsyncMysqlClient {
 // has an instance of this class and this class is what is invoked
 // when sockets become readable/writable or when a timeout occurs.
 // This is a separate class to avoid polluting the class hierarchy.
-class ConnectionSocketHandler : public ata::TEventHandler,
-                                public ata::TAsyncTimeout {
+class ConnectionSocketHandler : public folly::EventHandler,
+                                public folly::AsyncTimeout {
  public:
-  explicit ConnectionSocketHandler(ata::TEventBase* base);
+  explicit ConnectionSocketHandler(folly::EventBase* base);
   virtual void timeoutExpired() noexcept;
   void handlerReady(uint16_t events) noexcept;
   void setOperation(Operation* op) { op_ = op; }

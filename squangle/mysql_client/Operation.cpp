@@ -54,11 +54,11 @@ void Operation::waitForSocketActionable() {
   uint16_t event_mask = 0;
   switch (mysql->net.async_blocking_state) {
   case NET_NONBLOCKING_READ:
-    event_mask |= ata::TEventHandler::READ;
+    event_mask |= folly::EventHandler::READ;
     break;
   case NET_NONBLOCKING_WRITE:
   case NET_NONBLOCKING_CONNECT:
-    event_mask |= ata::TEventHandler::WRITE;
+    event_mask |= folly::EventHandler::WRITE;
     break;
   default:
     LOG(FATAL) << "Unknown nonblocking status "

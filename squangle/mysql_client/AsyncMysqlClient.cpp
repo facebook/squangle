@@ -11,13 +11,13 @@
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/FutureAdapter.h"
-#include "thrift/lib/cpp/async/TEventBaseManager.h"
 
 #include <vector>
 
 #include <folly/Singleton.h>
 #include <folly/ThreadName.h>
 #include <folly/Memory.h>
+#include <folly/io/async/EventBaseManager.h>
 
 #include <mysql.h>
 
@@ -53,8 +53,8 @@ namespace {
 folly::Singleton<AsyncMysqlClient> client;
 }
 
-AsyncMysqlClient* AsyncMysqlClient::defaultClient() {
-  return folly::Singleton<AsyncMysqlClient>::get();
+std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
+  return folly::Singleton<AsyncMysqlClient>::try_get();
 }
 
 AsyncMysqlClient::AsyncMysqlClient()
@@ -78,7 +78,7 @@ void AsyncMysqlClient::init() {
 #ifdef __GLIBC__
     folly::setThreadName(pthread_self(), "async-mysql");
 #endif
-    ata::TEventBaseManager::get()->setEventBase(this->getEventBase(), false);
+    folly::EventBaseManager::get()->setEventBase(this->getEventBase(), false);
     tevent_base_.loopForever();
     mysql_thread_end();
   });
@@ -86,7 +86,7 @@ void AsyncMysqlClient::init() {
 }
 
 
-bool AsyncMysqlClient::runInThread(const ata::Cob& fn) {
+bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
   auto scheduleTime = std::chrono::high_resolution_clock::now();
   if (!tevent_base_.runInEventBaseThread(
           [ fn, scheduleTime, this ]() {
@@ -528,7 +528,7 @@ std::shared_ptr<QueryOperation> Connection::rollbackTransaction(
   return beginQuery(op, "ROLLBACK");
 }
 
-ConnectionSocketHandler::ConnectionSocketHandler(ata::TEventBase* base)
+ConnectionSocketHandler::ConnectionSocketHandler(folly::EventBase* base)
     : EventHandler(base), AsyncTimeout(base), op_(nullptr) {}
 
 void ConnectionSocketHandler::timeoutExpired() noexcept {

@@ -165,6 +165,10 @@ class AsyncConnectionPool {
       AsyncMysqlClient* mysql_client,
       const PoolOptions& pool_options = PoolOptions());
 
+  static std::shared_ptr<AsyncConnectionPool> makePool(
+          std::weak_ptr<AsyncMysqlClient> mysql_client,
+          const PoolOptions& pool_options = PoolOptions());
+
   // The destructor will start the shutdown phase
   ~AsyncConnectionPool();
 
@@ -376,9 +380,9 @@ class AsyncConnectionPool {
     std::unordered_map<MysqlPooledHolder*, Timepoint> idle_expiration_time_;
   } conn_storage_;
 
-  class CleanUpTimer : public ata::TAsyncTimeout {
+  class CleanUpTimer : public folly::AsyncTimeout {
    public:
-    explicit CleanUpTimer(ata::TEventBase* base, ConnStorage* pool);
+    explicit CleanUpTimer(folly::EventBase* base, ConnStorage* pool);
     virtual void timeoutExpired() noexcept;
 
    private:
