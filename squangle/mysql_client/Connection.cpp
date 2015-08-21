@@ -34,6 +34,7 @@ MysqlConnectionHolder::MysqlConnectionHolder(
     : async_client_(from_holder->async_client_),
       conn_key_(from_holder->conn_key_),
       creation_time_(from_holder->creation_time_),
+      last_activity_time_(from_holder->last_activity_time_),
       connection_opened_(from_holder->connection_opened_),
       can_reuse_(from_holder->can_reuse_) {
   mysql_ = from_holder->stealMysql();

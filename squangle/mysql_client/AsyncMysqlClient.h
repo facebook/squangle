@@ -531,6 +531,11 @@ class Connection {
     mysql_connection_->setLastActivityTime(last_activity_time);
   }
 
+  Timepoint getLastActivityTime() const {
+    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    return mysql_connection_->getLastActivityTime();
+  }
+
   // Returns the MySQL server version. If the connection has been closed
   // an error is generated.
   const string serverInfo() const {

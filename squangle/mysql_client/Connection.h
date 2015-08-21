@@ -65,6 +65,8 @@ class MysqlConnectionHolder {
 
   void connectionOpened();
 
+  bool isConnectionOpened() { return connection_opened_; }
+
   Timepoint getLastActivityTime() { return last_activity_time_; }
 
   void setLastActivityTime(Timepoint last_activity_time) {
@@ -95,9 +97,8 @@ class MysqlConnectionHolder {
   const ConnectionKey conn_key_;
   Timepoint creation_time_;
   Timepoint last_activity_time_;
-  bool connection_opened_;
+  bool connection_opened_ = false;
 
-  // Amount of time that this connection can live
   bool can_reuse_;
 
   // copy not allowed
