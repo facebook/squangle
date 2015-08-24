@@ -716,7 +716,8 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
           num_open,
           num_opening,
           delta_micros / 1000.0);
-      setAsyncClientError(ER_OUT_OF_RESOURCES, msg);
+      setAsyncClientError(
+          ER_OUT_OF_RESOURCES, msg, "connect to host timed out");
       attemptFailed(OperationResult::TimedOut);
       return;
     }

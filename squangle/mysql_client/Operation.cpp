@@ -179,16 +179,27 @@ std::unique_ptr<Connection>&& Operation::releaseConnection() {
 void Operation::snapshotMysqlErrors() {
   mysql_errno_ = ::mysql_errno(conn()->mysql());
   mysql_error_ = ::mysql_error(conn()->mysql());
+  mysql_normalize_error_ = mysql_error_;
 }
 
-void Operation::setAsyncClientError(StringPiece msg) {
+void Operation::setAsyncClientError(StringPiece msg, StringPiece normalizeMsg) {
+  if (normalizeMsg.empty()) {
+    normalizeMsg = msg;
+  }
   mysql_errno_ = CR_UNKNOWN_ERROR;
   mysql_error_ = msg.toString();
+  mysql_normalize_error_ = normalizeMsg.toString();
 }
 
-void Operation::setAsyncClientError(int mysql_errno, StringPiece msg) {
+void Operation::setAsyncClientError(int mysql_errno,
+                                    StringPiece msg,
+                                    StringPiece normalizeMsg) {
+  if (normalizeMsg.empty()) {
+    normalizeMsg = msg;
+  }
   mysql_errno_ = mysql_errno;
   mysql_error_ = msg.toString();
+  mysql_normalize_error_ = normalizeMsg.toString();
 }
 
 void Operation::wait() {
@@ -392,7 +403,7 @@ void ConnectOperation::specializedTimeoutTriggered() {
                           host().c_str(),
                           port(),
                           delta_micros / 1000.0);
-  setAsyncClientError(CR_SERVER_LOST, msg);
+  setAsyncClientError(CR_SERVER_LOST, msg, "async connect to host timed out");
   attemptFailed(OperationResult::TimedOut);
 }
 
@@ -480,7 +491,8 @@ FetchOperation* FetchOperation::specializedRun() {
           socketActionable();
         }
         catch (std::invalid_argument& e) {
-          setAsyncClientError(string("Unable to parse Query: ") + e.what());
+          setAsyncClientError(string("Unable to parse Query: ") + e.what(),
+                              "Unable to parse Query");
           completeOperation(OperationResult::Failed);
         }
       })) {
@@ -737,7 +749,7 @@ void FetchOperation::specializedTimeoutTriggered() {
         folly::stringPrintf("async query timed out (no rows seen, took %.2fms)",
                             delta_micros / 1000.0);
   }
-  setAsyncClientError(CR_NET_READ_INTERRUPTED, msg);
+  setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "async query timed out");
   completeOperation(OperationResult::TimedOut);
 }
 

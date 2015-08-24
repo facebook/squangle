@@ -162,6 +162,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Information about why this operation failed.
   int mysql_errno() const { return mysql_errno_; }
   const string& mysql_error() const { return mysql_error_; }
+  const string& mysql_normalize_error() const { return mysql_normalize_error_; }
 
   // Get the state and result, as well as readable string versions.
   OperationResult result() const { return result_; }
@@ -226,10 +227,12 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Flag internal async client errors; this always becomes a MySQL
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
-  void setAsyncClientError(StringPiece msg);
+  void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
 
   // Same as above, but specify the error code.
-  void setAsyncClientError(int mysql_errno, StringPiece msg);
+  void setAsyncClientError(int mysql_errno,
+                           StringPiece msg,
+                           StringPiece normalizeMsg = "");
 
   // Called when an Operation needs to wait for the socket to become
   // readable or writable (aka actionable).
@@ -327,6 +330,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Errors that may have occurred.
   int mysql_errno_;
   string mysql_error_;
+  string mysql_normalize_error_;
 
   // This mutex protects the operation cancel process when the state
   // is being checked in `run` and the operation is being cancelled in other
