@@ -68,11 +68,10 @@ void MysqlPooledHolder::removeFromPool() {
 std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
     AsyncMysqlClient* mysql_client, const PoolOptions& pool_options) {
 
-  auto pool = std::make_shared<AsyncConnectionPool>(mysql_client, pool_options);
-  // No need for explicit conversion, but this is converting to weak pointer
-  pool->setSelfWeakPointer(pool);
+  std::shared_ptr<AsyncConnectionPool> connectionPool(
+    new AsyncConnectionPool(mysql_client, pool_options));
 
-  return pool;
+  return connectionPool;
 }
 
 std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
@@ -193,7 +192,7 @@ std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(
     std::unique_lock<std::mutex> lock(shutdown_mutex_);
     // Assigning here to read from pool safely
     ret = std::make_shared<ConnectPoolOperation>(
-        self_pointer_,
+        getSelfWeakPointer(),
         mysql_client_,
         ConnectionKey(host, port, database_name, user, password, special_tag));
     if (shutting_down_) {
@@ -205,6 +204,13 @@ std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(
 
   mysql_client_->addOperation(ret);
   return ret;
+}
+
+std::weak_ptr<AsyncConnectionPool> AsyncConnectionPool::getSelfWeakPointer() {
+  if (self_pointer_.expired()) {
+    self_pointer_ = shared_from_this();
+  }
+  return self_pointer_;
 }
 
 void AsyncConnectionPool::recycleMysqlConnection(
@@ -230,7 +236,7 @@ void AsyncConnectionPool::recycleMysqlConnection(
     return;
   }
 
-  auto pool = self_pointer_;
+  auto pool = getSelfWeakPointer();
   auto pmysql_conn = mysql_conn.release();
   bool scheduled = mysql_client_->runInThread([pool, pmysql_conn]() {
     std::unique_ptr<MysqlPooledHolder> mysql_conn(
@@ -365,7 +371,7 @@ void AsyncConnectionPool::removeOpeningConn(const ConnectionKey* conn_key) {
 void AsyncConnectionPool::connectionSpotFreed(const ConnectionKey* conn_key) {
   // Now we check if we should create more connections in case there are queued
   // operations in need
-  auto weak_pool = self_pointer_;
+  auto weak_pool = getSelfWeakPointer();
   auto key = *conn_key;
   mysql_client_->runInThread([weak_pool, key]() {
     auto pool = weak_pool.lock();
@@ -394,7 +400,7 @@ void AsyncConnectionPool::tryRequestNewConnection(const ConnectionKey* conn_key,
 
     auto connOp = mysql_client_->beginConnection(*conn_key);
     connOp->setTimeout(timeout);
-    auto pool_ptr = self_pointer_;
+    auto pool_ptr = getSelfWeakPointer();
     // The attribute part we can do later
     connOp->setCallback([pool_ptr](ConnectOperation& connOp) {
       auto locked_pool = pool_ptr.lock();

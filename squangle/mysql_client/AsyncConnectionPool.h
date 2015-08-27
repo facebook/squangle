@@ -158,7 +158,8 @@ typedef std::list<std::weak_ptr<ConnectPoolOperation>> PoolOpList;
 // `socketActionable` call triggering the complete operation procedures.
 //   For the user the usage is the same as acquiring a connection using
 // `AsyncMysqlClient`, but now using the pool.
-class AsyncConnectionPool {
+class AsyncConnectionPool
+    : public std::enable_shared_from_this<AsyncConnectionPool> {
  public:
   // Don't use std::chrono::duration::MAX to avoid overflows
   static std::shared_ptr<AsyncConnectionPool> makePool(
@@ -230,17 +231,14 @@ class AsyncConnectionPool {
   AsyncConnectionPool(AsyncMysqlClient* mysql_client,
                       const PoolOptions& pool_options);
 
- protected:
-  void setSelfWeakPointer(std::weak_ptr<AsyncConnectionPool> self_pointer) {
-    self_pointer_ = self_pointer;
-  }
-
  private:
   friend class Connection;
   friend class MysqlPooledHolder;
   friend class Operation;
   friend class ConnectPoolOperation;
   friend class FetchOperation;
+
+  std::weak_ptr<AsyncConnectionPool> getSelfWeakPointer();
 
   // Caches the connection in case it's marked as reusable (default). If the
   // connection is in a transaction or the user marked as not reusable, then
