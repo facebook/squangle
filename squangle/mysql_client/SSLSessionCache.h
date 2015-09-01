@@ -1,20 +1,14 @@
 #ifndef COMMON_ASYNC_MYSQL_SSL_SESSION_CACHE_H
 #define COMMON_ASYNC_MYSQL_SSL_SESSION_CACHE_H
 
-#include <folly/EvictingCacheMap.h>
-
 #include <string>
 
-class SessionDestructor {
- public:
-  void operator()(SSL_SESSION* session) {
-    if (session) {
-      SSL_SESSION_free(session);
-    }
-  }
-};
+#include <folly/EvictingCacheMap.h>
+#include "wangle/client/ssl/SSLSession.h"
 
-typedef std::unique_ptr<SSL_SESSION, SessionDestructor> SSLSessionPtr;
+namespace facebook {
+namespace common {
+namespace mysql_client {
 
 /*
  * A simple LRU cache for SSL sessions.
@@ -26,7 +20,7 @@ class SSLSessionCache {
 
   void setSSLSession(const std::string& host,
                      int port,
-                     SSLSessionPtr ssl_session) {
+                     wangle::SSLSessionPtr ssl_session) {
     sessionMap_.set(std::make_pair(host, port), std::move(ssl_session));
   }
 
@@ -37,9 +31,21 @@ class SSLSessionCache {
                : nullptr;
   }
 
+  size_t size() const {
+    return sessionMap_.size();
+  }
+
+  bool removeSSLSession(const std::string& host, int port) {
+    return sessionMap_.erase(make_pair(host, port)) > 0;
+  }
+
  private:
-  folly::EvictingCacheMap<std::pair<std::string, int>, SSLSessionPtr>
+  folly::EvictingCacheMap<std::pair<std::string, int>, wangle::SSLSessionPtr>
       sessionMap_;
 };
+
+}
+}
+} // facebook::common::mysql_client
 
 #endif

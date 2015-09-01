@@ -15,6 +15,7 @@
 #include "folly/Memory.h"
 #include "folly/experimental/StringKeyedUnorderedMap.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "wangle/client/ssl/SSLSession.h"
 
 #ifndef NO_LIB_GFLAGS
 #include "common/config/Flags.h" // nolint
@@ -464,8 +465,8 @@ void ConnectOperation::storeSSLSession() {
   // MySQL expires SSL sessions after 5 minutes by default, update the cache
   // only when the session was renewed.
   if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    auto ssl_session =
-        SSLSessionPtr((SSL_SESSION*)mysql_get_ssl_session(conn()->mysql()));
+    auto ssl_session = wangle::SSLSessionPtr(
+                        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql()));
     if (ssl_session) {
       async_client()->sslSessionCache()->setSSLSession(
           host(), port(), std::move(ssl_session));
