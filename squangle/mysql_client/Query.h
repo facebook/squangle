@@ -62,10 +62,10 @@
 #ifndef COMMON_ASYNC_MYSQL_QUERY_H
 #define COMMON_ASYNC_MYSQL_QUERY_H
 
-#include "folly/dynamic.h"
-#include "folly/Range.h"
-#include "folly/String.h"
-#include "folly/Memory.h"
+#include <folly/dynamic.h>
+#include <folly/Range.h>
+#include <folly/String.h>
+#include <folly/Memory.h>
 
 #include <boost/variant.hpp>
 

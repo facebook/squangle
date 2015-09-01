@@ -12,8 +12,8 @@
 #include <openssl/ssl.h>
 #include <errmsg.h> // mysql
 
-#include "folly/Memory.h"
-#include "folly/experimental/StringKeyedUnorderedMap.h"
+#include <folly/Memory.h>
+#include <folly/experimental/StringKeyedUnorderedMap.h>
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "wangle/client/ssl/SSLSession.h"
 

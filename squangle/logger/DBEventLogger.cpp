@@ -9,7 +9,7 @@
  */
 #include "squangle/logger/DBEventLogger.h"
 
-#include "folly/Random.h"
+#include <folly/Random.h>
 
 namespace facebook {
 namespace db {

@@ -9,8 +9,8 @@
  */
 
 #include "squangle/mysql_client/Query.h"
-#include "folly/String.h"
-#include "folly/Format.h"
+#include <folly/String.h>
+#include <folly/Format.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/variant/get.hpp>
