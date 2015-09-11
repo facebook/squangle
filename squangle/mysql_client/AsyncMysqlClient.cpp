@@ -354,6 +354,7 @@ void Connection::initMysqlOnly() {
   CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
   mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
       async_client_, mysql_init(nullptr), conn_key_);
+  mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
 }
 
 void Connection::initialize() {
