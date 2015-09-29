@@ -356,7 +356,7 @@ class AsyncMysqlClient {
     // this pass through the event loop.
     if (operations_to_remove_.empty()) {
       if (!runInThread([this]() { cleanupCompletedOperations(); })) {
-        LOG(DFATAL) << "Operation could not be cleaned: error in TEventBase";
+        LOG(DFATAL) << "Operation could not be cleaned: error in folly::EventBase";
       }
     }
     operations_to_remove_.push_back(op->getSharedPointer());
@@ -419,7 +419,7 @@ class AsyncMysqlClient {
   AsyncMysqlClient& operator=(const AsyncMysqlClient&) = delete;
 };
 
-// A helper class to interface with the TEventBase.  Each connection
+// A helper class to interface with the EventBase.  Each connection
 // has an instance of this class and this class is what is invoked
 // when sockets become readable/writable or when a timeout occurs.
 // This is a separate class to avoid polluting the class hierarchy.

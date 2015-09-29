@@ -53,7 +53,7 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
     if (!async_client_->runInThread([mysql, client]() {
           mysql_close(mysql);
         })) {
-      LOG(DFATAL) << "Mysql connection couldn't be closed: error in TEventBase";
+      LOG(DFATAL) << "Mysql connection couldn't be closed: error in folly::EventBase";
     }
     if (connection_opened_) {
       async_client_->stats()->incrClosedConnections();

@@ -108,7 +108,7 @@ bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
             callbackDelayAvg_.addSample(delay);
             fn();
           })) {
-    LOG(DFATAL) << "TEventBase::runInEventBase failed";
+    LOG(DFATAL) << "folly::EventBase::runInEventBase failed";
     return false;
   }
   return true;

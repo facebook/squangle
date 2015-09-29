@@ -108,7 +108,7 @@ void Operation::cancel() {
   if (!async_client()->runInThread([this]() {
         completeOperation(OperationResult::Cancelled);
       })) {
-    // if a strange error happen in TEventBase , mark it cancelled now
+    // if a strange error happen in EventBase , mark it cancelled now
     completeOperationInner(OperationResult::Cancelled);
   }
 }
