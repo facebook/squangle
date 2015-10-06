@@ -66,30 +66,18 @@ void MysqlPooledHolder::removeFromPool() {
 }
 
 std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
-    AsyncMysqlClient* mysql_client, const PoolOptions& pool_options) {
+    std::shared_ptr<AsyncMysqlClient> mysql_client,
+    const PoolOptions& pool_options) {
 
-  std::shared_ptr<AsyncConnectionPool> connectionPool(
-    new AsyncConnectionPool(mysql_client, pool_options));
-
+  auto connectionPool = std::make_shared<AsyncConnectionPool>(
+    mysql_client,
+    pool_options);
   return connectionPool;
 }
 
-std::shared_ptr<AsyncConnectionPool> AsyncConnectionPool::makePool(
-    std::weak_ptr<AsyncMysqlClient> mysql_client,
-    const PoolOptions& pool_options) {
-
-  auto lock_client = mysql_client.lock();
-  if(!lock_client) {
-    LOG(DFATAL) <<
-      "AsyncConnectionPool::makePool was provided with mysql client that "
-      "was already destroyed";
-  }
-
-  return AsyncConnectionPool::makePool(lock_client.get(), pool_options);
-}
-
-AsyncConnectionPool::AsyncConnectionPool(AsyncMysqlClient* mysql_client,
-                                         const PoolOptions& pool_options)
+AsyncConnectionPool::AsyncConnectionPool(
+    std::shared_ptr<AsyncMysqlClient> mysql_client,
+    const PoolOptions& pool_options)
     : conn_storage_(mysql_client->threadId(),
                     pool_options.getPoolLimit() * 2,
                     pool_options.getIdleTimeout()),

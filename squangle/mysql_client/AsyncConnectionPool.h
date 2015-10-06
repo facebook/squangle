@@ -163,11 +163,7 @@ class AsyncConnectionPool
  public:
   // Don't use std::chrono::duration::MAX to avoid overflows
   static std::shared_ptr<AsyncConnectionPool> makePool(
-      AsyncMysqlClient* mysql_client,
-      const PoolOptions& pool_options = PoolOptions());
-
-  static std::shared_ptr<AsyncConnectionPool> makePool(
-          std::weak_ptr<AsyncMysqlClient> mysql_client,
+          std::shared_ptr<AsyncMysqlClient> mysql_client,
           const PoolOptions& pool_options = PoolOptions());
 
   // The destructor will start the shutdown phase
@@ -211,7 +207,7 @@ class AsyncConnectionPool
       const string& special_tag = "");
 
   // Returns the client that this pool is using
-  AsyncMysqlClient* getMysqlClient() { return mysql_client_; }
+  std::shared_ptr<AsyncMysqlClient> getMysqlClient() { return mysql_client_; }
 
   // It will clean the pool and block any new connections or operations
   // Shutting down phase:
@@ -228,7 +224,7 @@ class AsyncConnectionPool
   PoolStats* stats() { return &pool_stats_; }
 
   // Don't use the constructor directly, only public to use make_shared
-  AsyncConnectionPool(AsyncMysqlClient* mysql_client,
+  AsyncConnectionPool(std::shared_ptr<AsyncMysqlClient> mysql_client,
                       const PoolOptions& pool_options);
 
  private:
@@ -387,7 +383,7 @@ class AsyncConnectionPool
     ConnStorage* pool_;
   } cleanup_timer_;
 
-  AsyncMysqlClient* mysql_client_;
+  std::shared_ptr<AsyncMysqlClient> mysql_client_;
 
   // per ConnectionKey
   const size_t conn_per_key_limit_;
@@ -433,9 +429,9 @@ class ConnectPoolOperation : public ConnectOperation {
   // Don't call this; it's public strictly for AsyncConnectionPool to be
   // able to call make_shared.
   ConnectPoolOperation(std::weak_ptr<AsyncConnectionPool> pool,
-                       AsyncMysqlClient* client,
+                       std::shared_ptr<AsyncMysqlClient> client,
                        ConnectionKey conn_key)
-      : ConnectOperation(client, conn_key), pool_(pool) {}
+      : ConnectOperation(client.get(), conn_key), pool_(pool) {}
 
  protected:
   virtual void attemptFailed(OperationResult result) override;
