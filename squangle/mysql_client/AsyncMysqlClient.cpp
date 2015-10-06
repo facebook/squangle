@@ -27,8 +27,6 @@
 #ifndef NO_LIB_GFLAGS
 #include "common/config/Flags.h" // nolint
 DECLARE_int64(async_mysql_timeout_micros);
-DECLARE_bool(ssl_session_cache_enabled);
-DECLARE_int32(ssl_session_cache_size);
 #endif
 
 namespace {
@@ -44,8 +42,6 @@ namespace mysql_client {
 
 #ifdef NO_LIB_GFLAGS
 extern int64_t FLAGS_async_mysql_timeout_micros;
-extern int64_t FLAGS_ssl_session_cache_enabled;
-extern int64_t FLAGS_ssl_session_cache_size;
 #endif
 
 ConnectionOptions::ConnectionOptions()
@@ -63,11 +59,7 @@ std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
 
 AsyncMysqlClient::AsyncMysqlClient()
     : client_stats_(new db::SimpleDbCounter()),
-      pools_conn_limit_(std::numeric_limits<uint64_t>::max()),
-      ssl_session_cache_(FLAGS_ssl_session_cache_enabled
-                             ? folly::make_unique<SSLSessionCache>(
-                                   FLAGS_ssl_session_cache_size)
-                             : nullptr) {
+      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
   init();
 }
 
@@ -76,11 +68,7 @@ AsyncMysqlClient::AsyncMysqlClient(
     std::unique_ptr<db::DBCounterBase> db_stats)
     : db_logger_(std::move(db_logger)),
       client_stats_(std::move(db_stats)),
-      pools_conn_limit_(std::numeric_limits<uint64_t>::max()),
-      ssl_session_cache_(FLAGS_ssl_session_cache_enabled
-                             ? folly::make_unique<SSLSessionCache>(
-                                   FLAGS_ssl_session_cache_size)
-                             : nullptr) {
+      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
   init();
 }
 

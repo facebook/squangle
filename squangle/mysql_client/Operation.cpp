@@ -15,15 +15,14 @@
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 #include "squangle/mysql_client/AsyncMysqlClient.h"
-#include "wangle/client/ssl/SSLSession.h"
+#include "squangle/mysql_client/SSLOptionsProviderBase.h"
+#include <wangle/client/ssl/SSLSession.h>
 
 #ifndef NO_LIB_GFLAGS
 #include "common/config/Flags.h" // nolint
 DEFINE_int64(async_mysql_timeout_micros,
              60 * 1000 * 1000,
              "default timeout, in micros, for mysql operations");
-DEFINE_bool(ssl_session_cache_enabled, true, "if to use an ssl session cache.");
-DEFINE_int32(ssl_session_cache_size, 1000 * 1000, "maximum size of the cache.");
 #endif
 
 namespace facebook {
@@ -32,8 +31,6 @@ namespace mysql_client {
 
 #ifdef NO_LIB_GFLAGS
 int64_t FLAGS_async_mysql_timeout_micros = 60 * 1000 * 1000;
-bool FLAGS_ssl_session_cache_enabled = true;
-int32_t FLAGS_ssl_session_cache_size = 1000 * 1000;
 #endif
 
 namespace chrono = std::chrono;
@@ -257,7 +254,6 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
-  setSSLContext(conn_opts.getSSLContext());
   return this;
 }
 
@@ -326,18 +322,19 @@ ConnectOperation* ConnectOperation::specializedRun() {
                          kv.first.c_str(),
                          kv.second.c_str());
         }
+        if (ssl_options_provider_) {
+          auto ssl_context_ = ssl_options_provider_->getSSLContext(getKey());
+          if (ssl_context_) {
+            mysql_options(conn()->mysql(),
+                          MYSQL_OPT_SSL_CONTEXT,
+                          ssl_context_->getSSLCtx());
 
-        if (ssl_context_) {
-          mysql_options(conn()->mysql(),
-                        MYSQL_OPT_SSL_CONTEXT,
-                        ssl_context_->getSSLCtx());
-
-          if (FLAGS_ssl_session_cache_enabled) {
-            auto ssl_session = async_client()->sslSessionCache()->getSSLSession(
-                host(), port());
-            if (ssl_session) {
-              mysql_options4(
-                  conn()->mysql(), MYSQL_OPT_SSL_SESSION, ssl_session, 0);
+            auto ssl_session_ = ssl_options_provider_->getSSLSession(getKey());
+            if (ssl_session_) {
+              mysql_options4(conn()->mysql(),
+                             MYSQL_OPT_SSL_SESSION,
+                             ssl_session_,
+                             nullptr);
             }
           }
         }
@@ -454,34 +451,30 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
   }
 }
 
-void ConnectOperation::storeSSLSession() {
-  // If connection was successful and SSL options were set, update the ssl
-  // session stored in cache.
-  if (!(result_ == OperationResult::Succeeded && conn()->hasInitialized() &&
-        ssl_context_)) {
+void ConnectOperation::maybeStoreSSLSession() {
+  // if there is an ssl provider set
+  if (!ssl_options_provider_) {
     return;
   }
 
-  // MySQL expires SSL sessions after 5 minutes by default, update the cache
-  // only when the session was renewed.
+  // If connection was successful
+  if (result_ != OperationResult::Succeeded || !conn()->hasInitialized()) {
+    return;
+  }
+
   if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    auto ssl_session = wangle::SSLSessionPtr(
-                        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql()));
-    if (ssl_session) {
-      async_client()->sslSessionCache()->setSSLSession(
-          host(), port(), std::move(ssl_session));
-    } else {
-      LOG(ERROR) << "Failed to get SSL Session for " << host() << ":" << port();
-    }
+    ssl_options_provider_->storeSSLSession(
+        wangle::SSLSessionPtr(
+            (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())),
+        getKey());
   }
 }
 
 void ConnectOperation::specializedCompleteOperation() {
-  if (FLAGS_ssl_session_cache_enabled) {
-    storeSSLSession();
-  }
-
   logConnectCompleted(result_);
+
+  maybeStoreSSLSession();
+
   // If connection_initialized_ is false the only way to complete the
   // operation is by cancellation
   DCHECK(conn()->hasInitialized() || result_ == OperationResult::Cancelled);

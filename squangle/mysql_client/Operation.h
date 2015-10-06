@@ -58,6 +58,7 @@
 #include <folly/io/async/SSLContext.h>
 #include <folly/io/async/EventHandler.h>
 #include <folly/io/async/AsyncTimeout.h>
+#include <wangle/client/ssl/SSLSession.h>
 
 namespace facebook {
 namespace common {
@@ -76,6 +77,7 @@ class Connection;
 class ConnectionKey;
 class ConnectionSocketHandler;
 class ConnectionOptions;
+class SSLOptionsProviderBase;
 
 enum class QueryCallbackReason;
 
@@ -387,9 +389,9 @@ class ConnectOperation : public Operation {
     return this;
   }
 
-  ConnectOperation* setSSLContext(
-      std::shared_ptr<folly::SSLContext> ssl_context) {
-    ssl_context_ = ssl_context;
+  ConnectOperation* setSSLOptionsProviderBase(
+      SSLOptionsProviderBase* ssl_options_provider) {
+    ssl_options_provider_ = ssl_options_provider;
     return this;
   }
 
@@ -487,7 +489,7 @@ class ConnectOperation : public Operation {
 
   bool shouldCompleteOperation(OperationResult result);
 
-  void storeSSLSession();
+  wangle::SSLSessionPtr getSSLSession();
 
   uint32_t max_attempts_ = 1;
   uint32_t attempts_made_ = 0;
@@ -497,6 +499,8 @@ class ConnectOperation : public Operation {
 
  private:
   void logConnectCompleted(OperationResult result);
+
+  void maybeStoreSSLSession();
 
   const ConnectionKey conn_key_;
   int flags_;
@@ -508,7 +512,7 @@ class ConnectOperation : public Operation {
   // MySQL 5.6 connection attributes.  Sent at time of connect.
   std::unordered_map<string, string> connection_attributes_;
 
-  std::shared_ptr<folly::SSLContext> ssl_context_;
+  SSLOptionsProviderBase* ssl_options_provider_{nullptr};
 
   ConnectCallback connect_callback_;
   bool active_in_client_;
