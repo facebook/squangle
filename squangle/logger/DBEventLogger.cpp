@@ -14,6 +14,11 @@
 namespace facebook {
 namespace db {
 
+void ConnectionContextBase::collectNormalValues
+    (AddNormalValueFunction add) const {
+  add("is_ssl_connection", folly::to<std::string, bool>(isSslConnection));
+}
+
 void DBSimpleLogger::logQuerySuccess(Duration query_time,
                                      QueryType query_type,
                                      int queries_executed,

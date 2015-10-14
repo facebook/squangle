@@ -325,6 +325,9 @@ ConnectOperation* ConnectOperation::specializedRun() {
         if (ssl_options_provider_) {
           auto ssl_context_ = ssl_options_provider_->getSSLContext(getKey());
           if (ssl_context_) {
+            if (connection_context_) {
+              connection_context_->isSslConnection = true;
+            }
             mysql_options(conn()->mysql(),
                           MYSQL_OPT_SSL_CONTEXT,
                           ssl_context_->getSSLCtx());
