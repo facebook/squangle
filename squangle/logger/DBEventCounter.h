@@ -55,6 +55,12 @@ class DBCounterBase {
 
   // query successes
   virtual void incrSucceededQueries() = 0;
+
+  // ssl connections
+  virtual void incrSSLConnections() = 0;
+
+  // reused ssl connections
+  virtual void incrReusedSSLSessions() = 0;
 };
 
 // Holds the stats for a client, thread safe and allows some good stats in
@@ -67,7 +73,9 @@ class SimpleDbCounter : public DBCounterBase {
         closed_connections_(0),
         failed_connections_(0),
         failed_queries_(0),
-        succeeded_queries_(0) {}
+        succeeded_queries_(0),
+        ssl_connections_(0),
+        reused_ssl_sessions_(0) {}
 
   // opened connections
   uint64_t numOpenedConnections() {
@@ -114,6 +122,22 @@ class SimpleDbCounter : public DBCounterBase {
     succeeded_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 
+  uint64_t numSSLConnections() {
+    return ssl_connections_.load(std::memory_order_relaxed);
+  }
+
+  void incrSSLConnections() {
+    ssl_connections_.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  uint64_t numReusedSSLSessions() {
+    return reused_ssl_sessions_.load(std::memory_order_relaxed);
+  }
+
+  void incrReusedSSLSessions() {
+    reused_ssl_sessions_.fetch_add(1, std::memory_order_relaxed);
+  }
+
   // For logging porpuses
   void printStats();
 
@@ -123,6 +147,8 @@ class SimpleDbCounter : public DBCounterBase {
   std::atomic<uint64_t> failed_connections_;
   std::atomic<uint64_t> failed_queries_;
   std::atomic<uint64_t> succeeded_queries_;
+  std::atomic<uint64_t> ssl_connections_;
+  std::atomic<uint64_t> reused_ssl_sessions_;
 };
 
 class PoolStats {

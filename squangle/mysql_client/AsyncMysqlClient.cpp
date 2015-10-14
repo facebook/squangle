@@ -210,6 +210,9 @@ void AsyncMysqlClient::logConnectionSuccess(
     const ConnectionKey& conn_key,
     const db::ConnectionContextBase* connection_context) {
   CHECK_EQ(threadId(), std::this_thread::get_id());
+  if (connection_context && connection_context->isSslConnection) {
+    stats()->incrSSLConnections();
+  }
   if (db_logger_) {
     db_logger_->logConnectionSuccess(
         duration, makeSquangleLoggingData(&conn_key, connection_context));

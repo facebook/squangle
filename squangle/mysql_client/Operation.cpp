@@ -470,6 +470,8 @@ void ConnectOperation::maybeStoreSSLSession() {
         wangle::SSLSessionPtr(
             (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())),
         getKey());
+  } else {
+    async_client()->stats()->incrReusedSSLSessions();
   }
 }
 

@@ -31,7 +31,9 @@ void SimpleDbCounter::printStats() {
             << "Opened Connections " << numOpenedConnections() << "\n"
             << "Closed Connections " << numClosedConnections() << "\n"
             << "Failed Queries " << numFailedQueries() << "\n"
-            << "Succeeded Queries " << numSucceededQueries() << "\n";
+            << "Succeeded Queries " << numSucceededQueries() << "\n"
+            << "SSL Connections " << numSSLConnections() << "\n"
+            << "Reused SSL Sessions " << numReusedSSLSessions() << "\n";
 }
 }
 } // facebook::db
