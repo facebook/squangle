@@ -21,7 +21,7 @@ QueryCallback resultAppender(const QueryAppenderCallback& callback) {
   return [callback, rowBlocks](
       QueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
     if (reason == QueryCallbackReason::RowsFetched) {
-      rowBlocks->push_back(std::move(res->stealCurrentRowBlock()));
+      rowBlocks->push_back(res->stealCurrentRowBlock());
     } else {
       // Failure or success, set rowblocks in the result and send it to callback
       // It's important to use this final result because of the other values as
@@ -40,7 +40,7 @@ MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback) {
   return [callback, rowBlocks, allResults](
       MultiQueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
     if (reason == QueryCallbackReason::RowsFetched) {
-      rowBlocks->push_back(std::move(res->stealCurrentRowBlock()));
+      rowBlocks->push_back(res->stealCurrentRowBlock());
     } else if (reason == QueryCallbackReason::QueryBoundary) {
       // wrap up one query
       res->setRowBlocks(std::move(*rowBlocks));

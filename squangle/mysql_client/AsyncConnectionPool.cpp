@@ -165,7 +165,7 @@ std::unique_ptr<Connection> AsyncConnectionPool::connect(
   auto op = beginConnection(host, port, database_name, user, password);
   op->setConnectionOptions(conn_opts);
   // This will throw (intended behaviour) in case the operation didn't succeed
-  return std::move(blockingConnectHelper(op));
+  return blockingConnectHelper(op);
 }
 
 std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(
