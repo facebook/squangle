@@ -69,6 +69,7 @@
 #include <folly/experimental/fibers/Baton.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/Portability.h>
 #include <folly/Singleton.h>
 #include <wangle/client/ssl/SSLSession.h>
 
@@ -737,8 +738,15 @@ template <typename... Args>
 folly::Future<DbQueryResult> Connection::queryFuture(
     std::unique_ptr<Connection> conn, Args&&... args) {
   Query query{std::forward<Args>(args)...};
+#if __CLANG_PREREQ(3,7)
+# pragma clang diagnostic push
+# pragma clang diagnostic ignored "-Wpessimizing-move"
+#endif
   // This std::move fixes a bug in Clang opt builds: #6120972
   return std::move(queryFuture(std::move(conn), std::move(query)));
+#if __CLANG_PREREQ(3,7)
+# pragma clang diagnostic pop
+#endif
 }
 
 }
