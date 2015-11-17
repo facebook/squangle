@@ -368,10 +368,6 @@ class AsyncConnectionPool
 
     size_t conn_limit_;
     Duration max_idle_time_;
-
-    // Maps the pointer address to the time that it should be expire, the clean
-    // up of expired connections is called by `AsyncConnectionPool`
-    std::unordered_map<MysqlPooledHolder*, Timepoint> idle_expiration_time_;
   } conn_storage_;
 
   class CleanUpTimer : public folly::AsyncTimeout {

@@ -538,8 +538,6 @@ void AsyncConnectionPool::ConnStorage::queueConnection(
 
   // If it doesn't have space, remove the oldest and add this
   MysqlConnectionList& list = stock_[*newConn->getKey()];
-  Timepoint now = std::chrono::high_resolution_clock::now();
-  idle_expiration_time_[newConn.get()] = now + max_idle_time_;
 
   list.push_back(std::move(newConn));
   if (list.size() > conn_limit_) {
@@ -560,10 +558,9 @@ void AsyncConnectionPool::ConnStorage::cleanupConnections() {
       shouldDelete =
           ((*it)->getLifeDuration() != Duration::zero() &&
            ((*it)->getCreationTime() + (*it)->getLifeDuration() < now)) ||
-          idle_expiration_time_[(*it).get()] < now;
+          (*it)->getLastActivityTime() + max_idle_time_ < now;
       // TODO maybe check if by any chance the connection was killed
       if (shouldDelete) {
-        idle_expiration_time_.erase((*it).get());
         it = connList.erase(it);
       } else {
         ++it;
