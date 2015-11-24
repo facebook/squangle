@@ -220,6 +220,10 @@ class QueryArgument {
             typename std::enable_if<std::is_integral<T>::value, T>::type = 0>
   /* implicit */ QueryArgument(T int_val)
       : value_(static_cast<int64_t>(int_val)) {}
+  template <typename T,
+            typename = typename std::enable_if<std::is_enum<T>::value, T>::type>
+  /* implicit */ QueryArgument(T enum_val)
+      : value_(static_cast<int64_t>(enum_val)) {}
   /* implicit */ QueryArgument(double double_val);
 
   /* implicit */ QueryArgument(std::initializer_list<QueryArgument> list);
