@@ -335,6 +335,11 @@ Connection::Connection(AsyncMysqlClient* async_client,
   }
 }
 
+bool Connection::isSSL() const {
+  CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+  return mysql_connection_->mysql()->client_flag & CLIENT_SSL;
+}
+
 void Connection::associateWithClientThread() {
   CHECK_EQ(mysql_operation_thread_id_, std::thread::id());
   mysql_operation_thread_id_ = async_client_->threadId();

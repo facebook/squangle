@@ -546,6 +546,17 @@ class Connection {
     return string(ret);
   }
 
+  // Returns whether or not the SSL session was reused from a previous
+  // connection.
+  // If the connection isn't SSL, it will return false as well.
+  bool sslSessionReused() const {
+    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    return mysql_get_ssl_session_reused(mysql_connection_->mysql());
+  }
+
+  // Checks if `client_flag` is set for SSL.
+  bool isSSL() const;
+
   // Escape the provided string using mysql_real_escape_string(). You almost
   // certainly don't want to use this - look at the Query class instead.
   //
