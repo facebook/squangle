@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <folly/futures/Future.h>
 #include <folly/io/async/SSLContext.h>
 #include <wangle/client/ssl/SSLSession.h>
 #include "squangle/base/ConnectionKey.h"
@@ -18,6 +19,9 @@ class SSLOptionsProviderBase {
   // The SSL Context and Session options to be set for the connection
   virtual std::shared_ptr<folly::SSLContext> getSSLContext(
       const common::mysql_client::ConnectionKey* conn_key) = 0;
+
+  virtual folly::Future<std::shared_ptr<folly::SSLContext>>
+  future_getSSLContext(const common::mysql_client::ConnectionKey* conn_key) = 0;
 
   virtual SSL_SESSION* getSSLSession(
       const common::mysql_client::ConnectionKey* conn_key) = 0;
