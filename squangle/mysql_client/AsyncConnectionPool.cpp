@@ -219,8 +219,8 @@ void AsyncConnectionPool::recycleMysqlConnection(
   // Check server_status for in_transaction bit
   if (mysql_conn->inTransaction()) {
     // To avoid complication, we are just going to close the connection
-    LOG_EVERY_N(ERROR, 1000) << "Closing connection during a transaction "
-                                "without explicitly committing";
+    LOG_EVERY_N(INFO, 1000) << "Closing connection during a transaction."
+                            << " Transaction will rollback.";
     return;
   }
 
