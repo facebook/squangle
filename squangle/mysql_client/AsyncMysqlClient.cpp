@@ -153,6 +153,8 @@ AsyncMysqlClient::~AsyncMysqlClient() {
   tevent_base_.terminateLoopSoon();
   if (std::this_thread::get_id() != threadId()) {
     thread_.join();
+  } else {
+    thread_.detach();
   }
   VLOG(2) << "AsyncMysqlClient finished destructor";
 }
