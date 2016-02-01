@@ -90,65 +90,6 @@ class MysqlConnectionHolder;
 typedef std::function<void(std::unique_ptr<MysqlConnectionHolder>)>
 ConnectionDyingCallback;
 
-class ConnectionOptions {
- public:
-  ConnectionOptions();
-
-  // Each attempt to acquire a connection will take at maximum this duration.
-  // Use setTotalTimeout if you want to limit the timeout for all attempts.
-  ConnectionOptions& setTimeout(Duration dur) {
-    connection_timeout_ = dur;
-    return *this;
-  }
-
-  Duration getTimeout() const { return connection_timeout_; }
-
-  ConnectionOptions& setQueryTimeout(Duration dur) {
-    query_timeout_ = dur;
-    return *this;
-  }
-
-  Duration getQueryTimeout() const { return query_timeout_; }
-
-  ConnectionOptions& setConnectionAttribute(const string& attr,
-                                            const string& value) {
-    connection_attributes_[attr] = value;
-    return *this;
-  }
-
-  const std::unordered_map<string, string>& getConnectionAttributes() const {
-    return connection_attributes_;
-  }
-
-  // Sets the amount of attempts that will be tried in order to acquire the
-  // connection. Each attempt will take at maximum the given timeout. To set
-  // a global timeout that the operation shouldn't take more than, use
-  // setTotalTimeout.
-  ConnectionOptions& setConnectAttempts(uint32_t max_attempts) {
-    max_attempts_ = max_attempts;
-    return *this;
-  }
-
-  uint32_t getConnectAttempts() const { return max_attempts_; }
-
-  // If this is not set, but regular timeout was, the TotalTimeout for the
-  // operation will be the number of attempts times the primary timeout.
-  // Set this if you have strict timeout needs.
-  ConnectionOptions& setTotalTimeout(Duration dur) {
-    total_timeout_ = dur;
-    return *this;
-  }
-
-  Duration getTotalTimeout() const { return total_timeout_; }
-
- private:
-  Duration connection_timeout_;
-  Duration total_timeout_;
-  Duration query_timeout_;
-  std::unordered_map<string, string> connection_attributes_;
-  uint32_t max_attempts_ = 1;
-};
-
 // The client itself.  As mentioned above, in general, it isn't
 // necessary to create a client; instead, simply call defaultClient()
 // and use the client it returns, which is shared process-wide.
@@ -524,8 +465,9 @@ class Connection {
   }
 
   // Default timeout for queries created by this client.
-  void setDefaultQueryTimeout(Duration t) { default_query_timeout_ = t; }
-  void setQueryTimeout(Duration t) { default_query_timeout_ = t; }
+  void setDefaultQueryTimeout(Duration t) { conn_options_.setQueryTimeout(t); }
+  // TODO #9834064
+  void setQueryTimeout(Duration t) { conn_options_.setQueryTimeout(t); }
 
   // set last successful query time to MysqlConnectionHolder
   void setLastActivityTime(Timepoint last_activity_time) {
@@ -616,6 +558,14 @@ class Connection {
     return false;
   }
 
+  const ConnectionOptions& getConnectionOptions() const {
+    return conn_options_;
+  }
+
+  void setConnectionOptions(const ConnectionOptions& conn_options) {
+    conn_options_ = conn_options;
+  }
+
   void setConnectionDyingCallback(ConnectionDyingCallback callback) {
     conn_dying_callback_ = callback;
   }
@@ -697,7 +647,7 @@ class Connection {
   std::unique_ptr<MysqlConnectionHolder> mysql_connection_;
 
   ConnectionKey conn_key_;
-  Duration default_query_timeout_;
+  ConnectionOptions conn_options_;
   std::thread::id mysql_operation_thread_id_;
 
   // Context information for logging purposes.

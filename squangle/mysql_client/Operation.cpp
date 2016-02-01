@@ -35,6 +35,11 @@ int64_t FLAGS_async_mysql_timeout_micros = 60 * 1000 * 1000;
 
 namespace chrono = std::chrono;
 
+ConnectionOptions::ConnectionOptions()
+    : connection_timeout_(FLAGS_async_mysql_timeout_micros),
+      total_timeout_(FLAGS_async_mysql_timeout_micros),
+      query_timeout_(FLAGS_async_mysql_timeout_micros) {}
+
 Operation::Operation(std::unique_ptr<ConnectionProxy>&& safe_conn)
     : state_(OperationState::Unstarted),
       result_(OperationResult::Unknown),
@@ -238,11 +243,8 @@ ConnectOperation::ConnectOperation(AsyncMysqlClient* async_client,
                                    ConnectionKey conn_key)
     : Operation(folly::make_unique<Operation::OwnedConnection>(
           folly::make_unique<Connection>(async_client, conn_key, nullptr))),
-      total_timeout_(Duration(FLAGS_async_mysql_timeout_micros)),
-      attempt_timeout_(Duration(FLAGS_async_mysql_timeout_micros)),
       conn_key_(conn_key),
       flags_(CLIENT_MULTI_STATEMENTS),
-      default_query_timeout_(0),
       active_in_client_(true) {
   async_client->activeConnectionAdded(&conn_key_);
 }
@@ -257,16 +259,53 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   return this;
 }
 
+const ConnectionOptions& ConnectOperation::getConnectionOptions() const {
+  return conn_options_;
+}
+
+ConnectOperation* ConnectOperation::setConnectionAttribute(
+    const string& attr, const string& value) {
+  CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+  conn_options_.setConnectionAttribute(attr, value);
+  return this;
+}
+
+ConnectOperation* ConnectOperation::setConnectionAttributes(
+    const std::unordered_map<string, string>& attributes) {
+  conn_options_.setConnectionAttributes(attributes);
+  return this;
+}
+ConnectOperation* ConnectOperation::setDefaultQueryTimeout(Duration t) {
+  conn_options_.setQueryTimeout(t);
+  return this;
+}
+
+ConnectOperation* ConnectOperation::setTimeout(Duration timeout) {
+  conn_options_.setTimeout(timeout);
+  Operation::setTimeout(timeout);
+  return this;
+}
+ConnectOperation* ConnectOperation::setTotalTimeout(Duration total_timeout) {
+  conn_options_.setTotalTimeout(total_timeout);
+  Operation::setTimeout(min(timeout_, total_timeout));
+  return this;
+}
+ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
+  conn_options_.setConnectAttempts(max_attempts);
+  return this;
+}
+
 bool ConnectOperation::shouldCompleteOperation(OperationResult result) {
   // Cancelled doesn't really get to this point, the Operation is forced to
   // complete by Operation, adding this check here just-in-case.
-  if (attempts_made_ >= max_attempts_ || result == OperationResult::Cancelled) {
+  if (attempts_made_ >= conn_options_.getConnectAttempts() ||
+      result == OperationResult::Cancelled) {
     return true;
   }
 
   auto now =
       std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(1);
-  if (now > start_time_ + total_timeout_) {
+  if (now > start_time_ + conn_options_.getTotalTimeout()) {
     return true;
   }
 
@@ -289,9 +328,9 @@ void ConnectOperation::attemptFailed(OperationResult result) {
   auto now = std::chrono::high_resolution_clock::now();
   // Adjust timeout
   auto timeout_attempt_based =
-      attempt_timeout_ +
+      conn_options_.getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
-  timeout_ = min(timeout_attempt_based, total_timeout_);
+  timeout_ = min(timeout_attempt_based, conn_options_.getTotalTimeout());
 
   specializedRun();
 }
@@ -316,7 +355,7 @@ ConnectOperation* ConnectOperation::specializedRun() {
         }
 
         mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
-        for (const auto& kv : connection_attributes_) {
+        for (const auto& kv : conn_options_.getConnectionAttributes()) {
           mysql_options4(conn()->mysql(),
                          MYSQL_OPT_CONNECT_ATTR_ADD,
                          kv.first.c_str(),
@@ -484,7 +523,7 @@ void ConnectOperation::specializedCompleteOperation() {
   // operation is by cancellation
   DCHECK(conn()->hasInitialized() || result_ == OperationResult::Cancelled);
 
-  conn()->setDefaultQueryTimeout(default_query_timeout_);
+  conn()->setConnectionOptions(conn_options_);
   conn()->setConnectionContext(std::move(connection_context_));
 
   conn()->notify();

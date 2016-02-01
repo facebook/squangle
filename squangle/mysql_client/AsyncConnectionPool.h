@@ -49,6 +49,7 @@ using folly::StringPiece;
 
 class ConnectPoolOperation;
 class AsyncConnectionPool;
+class PoolKey;
 
 // In order to keep always healthy connections avoid and avoid holding one
 // connection for way too long, we have the options:
@@ -115,12 +116,46 @@ class PoolOptions {
   ExpirationPolicy exp_policy_;
 };
 
+class PoolKey {
+ public:
+  // Hashes Connections and Operations waiting for connections based on basic
+  // Connection info (ConnectionKey) and Connection Attributes.
+  PoolKey(ConnectionKey conn_key, ConnectionOptions conn_opts)
+      : connKey(std::move(conn_key)), connOptions(std::move(conn_opts)) {
+    options_hash_ =
+        folly::hash::hash_range(connOptions.getConnectionAttributes().begin(),
+                                connOptions.getConnectionAttributes().end());
+    hash_ = folly::hash::hash_combine(connKey.hash, options_hash_);
+  }
+
+  bool operator==(const PoolKey& rhs) const {
+    return hash_ == rhs.hash_ && options_hash_ == rhs.options_hash_ &&
+           connKey == rhs.connKey;
+  }
+
+  const ConnectionKey connKey;
+  const ConnectionOptions connOptions;
+
+  size_t getHash() const { return hash_; }
+
+ private:
+  size_t options_hash_;
+  size_t hash_;
+};
+
+class PoolKeyHash {
+
+ public:
+  size_t operator()(const PoolKey& k) const { return k.getHash(); }
+};
+
 class MysqlPooledHolder : public MysqlConnectionHolder {
  public:
   // Constructed based on an already existing MysqlConnectionHolder, the values
   // are going to be copied and the old holder will be destroyed.
   MysqlPooledHolder(std::unique_ptr<MysqlConnectionHolder> holder_base,
-                    std::weak_ptr<AsyncConnectionPool> weak_pool);
+                    std::weak_ptr<AsyncConnectionPool> weak_pool,
+                    const PoolKey& pool_key);
 
   ~MysqlPooledHolder();
 
@@ -130,11 +165,15 @@ class MysqlPooledHolder : public MysqlConnectionHolder {
 
   void setOwnerPool(std::weak_ptr<AsyncConnectionPool> pool);
 
+  const PoolKey& getPoolKey() const { return pool_key_; }
+
  private:
   void removeFromPool();
 
   Duration good_for_;
   std::weak_ptr<AsyncConnectionPool> weak_pool_;
+
+  const PoolKey pool_key_;
 };
 
 typedef std::list<std::unique_ptr<MysqlPooledHolder>> MysqlConnectionList;
@@ -260,13 +299,12 @@ class AsyncConnectionPool
   // If we fail in creating the connection, `failedToConnect` will be called.
   // TODO#4527126: maybe have a cache for the unreachable hosts to fail faster
   // these connections.
-  void tryRequestNewConnection(const ConnectionKey* connKey,
-                               Duration timeout = std::chrono::seconds(10));
+  void tryRequestNewConnection(const PoolKey& pool_key);
 
   // Used for when we fail to open a requested connection. In case of mysql
   // failure (e.g. bad password) we propagate the error to all queued
   // ConnectPoolOperation's.
-  void failedToConnect(ConnectOperation& conn_op);
+  void failedToConnect(const PoolKey& pool_key, ConnectOperation& conn_op);
 
   // Anytime a connection is supposed to be added to the pool, being fresh or
   // recycled, we check if there is an operation in wait list for the
@@ -281,21 +319,22 @@ class AsyncConnectionPool
   // limit per key) can fit one more connection. As a final check, checks if
   // it's a waste to create a new connection to avoid start opening a new
   // connection when we already have enough being open for the demand in queue.
-  bool canCreateMoreConnections(const ConnectionKey* conn_key);
+  bool canCreateMoreConnections(const PoolKey& conn_key);
 
   ///////////// Counter control functions
 
   // Note that unlike the AsyncMysqlClient this similar counter is for open
   // connections only, the intent of opening a connect is controlled separately.
-  void addOpenConnection(const ConnectionKey* conn_key);
-  void addOpeningConn(const ConnectionKey* conn_key);
+  void addOpenConnection(const PoolKey& conn_key);
+  void addOpeningConn(const PoolKey& conn_key);
 
-  void removeOpenConnection(const ConnectionKey* conn_key);
-  void removeOpeningConn(const ConnectionKey* conn_key);
+  void removeOpenConnection(const PoolKey& conn_key);
+  void removeOpeningConn(const PoolKey& conn_key);
 
-  void connectionSpotFreed(const ConnectionKey* conn_key);
+  void connectionSpotFreed(const PoolKey& conn_key);
 
-  std::pair<uint64_t, uint64_t> getConnKeyStatus(const ConnectionKey* conn_key);
+  std::pair<uint64_t, uint64_t> numOpenAndPendingPerKey(
+      const PoolKey& conn_key);
 
   // Auxiliary class to isolate the queue code. Clean ups also happen in this
   // class, it mainly manages the ConnectPoolOperation and
@@ -312,18 +351,18 @@ class AsyncConnectionPool
     ~ConnStorage() {}
 
     // Returns an shared pointer of the oldest valid operation in the queue for
-    // the given ConnectionKey. The returned operation is removed from the
+    // the given PoolKey. The returned operation is removed from the
     // queue. We return shared to avoid the instance dying (for any reason)
     // before the connection is given to it.
-    std::shared_ptr<ConnectPoolOperation> popOperation(
-        const ConnectionKey* conn_key);
+    std::shared_ptr<ConnectPoolOperation> popOperation(const PoolKey& pool_key);
 
     // Puts the new operation in the end of the list
-    void queueOperation(std::shared_ptr<ConnectPoolOperation>& poolOp);
+    void queueOperation(const PoolKey& pool_key,
+                        std::shared_ptr<ConnectPoolOperation>& poolOp);
 
     // Calls failureCallback with the error description and removed all
     // the operations for conn_key from the queue.
-    void failOperations(const ConnectionKey* conn_key,
+    void failOperations(const PoolKey& pool_key,
                         OperationResult op_result,
                         int mysql_errno,
                         const string& mysql_error);
@@ -331,8 +370,7 @@ class AsyncConnectionPool
     // Returns a connection for the given ConnectionKey. The connection will be
     // removed from the queue. Depending on the policy, it will give the oldest
     // inserted connection (fifo) or the most recent inserted (lifo).
-    std::unique_ptr<MysqlPooledHolder> popConnection(
-        const ConnectionKey* conn_key);
+    std::unique_ptr<MysqlPooledHolder> popConnection(const PoolKey& pool_key);
 
     // Puts the new connection in the back of the list.
     void queueConnection(std::unique_ptr<MysqlPooledHolder> newConn);
@@ -349,9 +387,9 @@ class AsyncConnectionPool
     // storage
     void clearAll();
 
-    size_t numQueuedOperations(const ConnectionKey* conn_key) {
+    size_t numQueuedOperations(const PoolKey& pool_key) {
       CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
-      return waitList_[*conn_key].size();
+      return waitList_[pool_key].size();
     }
 
    private:
@@ -363,8 +401,8 @@ class AsyncConnectionPool
     // async client in the draining process in case the operation has already
     // been discarded by the creator before got a connection. This also serves
     // to avoid giving them connections
-    unordered_map<ConnectionKey, MysqlConnectionList> stock_;
-    unordered_map<ConnectionKey, PoolOpList> waitList_;
+    unordered_map<PoolKey, MysqlConnectionList, PoolKeyHash> stock_;
+    unordered_map<PoolKey, PoolOpList, PoolKeyHash> waitList_;
 
     size_t conn_limit_;
     Duration max_idle_time_;
@@ -393,11 +431,11 @@ class AsyncConnectionPool
 
   uint32_t num_open_connections_ = 0;
   // Counts the number of open connections for a given connectionKey
-  unordered_map<ConnectionKey, uint64_t> open_connections_;
+  unordered_map<PoolKey, uint64_t, PoolKeyHash> open_connections_;
   // Same as above but for connections that we are still opening
   // This one doesn't need locking, only accessed by client thread
   uint32_t num_pending_connections_ = 0;
-  unordered_map<ConnectionKey, uint64_t> pending_connections_;
+  unordered_map<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
 
   // Used in the destructor to wait cleanup_timer_ be called. It's required by
   // `shutdown_condvar_`

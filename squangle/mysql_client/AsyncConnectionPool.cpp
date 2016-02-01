@@ -32,14 +32,16 @@ constexpr Duration PoolOptions::kDefaultMaxAge;
 
 MysqlPooledHolder::MysqlPooledHolder(
     std::unique_ptr<MysqlConnectionHolder> holder_base,
-    std::weak_ptr<AsyncConnectionPool> weak_pool)
+    std::weak_ptr<AsyncConnectionPool> weak_pool,
+    const PoolKey& pool_key)
     : MysqlConnectionHolder(std::move(holder_base)),
       good_for_(Duration::zero()),
-      weak_pool_(weak_pool) {
+      weak_pool_(weak_pool),
+      pool_key_(pool_key) {
   auto lock_pool = weak_pool.lock();
   if (lock_pool) {
     lock_pool->stats()->incrCreatedPoolConnections();
-    lock_pool->addOpenConnection(getKey());
+    lock_pool->addOpenConnection(pool_key_);
   }
 }
 
@@ -53,7 +55,7 @@ void MysqlPooledHolder::setOwnerPool(std::weak_ptr<AsyncConnectionPool> pool) {
   // Extra care here, checking if we changing it to nullptr
   if (lock_pool) {
     lock_pool->stats()->incrCreatedPoolConnections();
-    lock_pool->addOpenConnection(getKey());
+    lock_pool->addOpenConnection(pool_key_);
   }
 }
 
@@ -61,7 +63,7 @@ void MysqlPooledHolder::removeFromPool() {
   auto lock_pool = weak_pool_.lock();
   if (lock_pool) {
     lock_pool->stats()->incrDestroyedPoolConnections();
-    lock_pool->removeOpenConnection(getKey());
+    lock_pool->removeOpenConnection(pool_key_);
   }
 }
 
@@ -259,9 +261,12 @@ void AsyncConnectionPool::registerForConnection(
     }
   }
   stats()->incrConnectionsRequested();
-  auto conn_key = raw_pool_op->getKey();
+  // Pass that to pool
+  auto pool_key = PoolKey(raw_pool_op->getConnectionKey(),
+                          raw_pool_op->getConnectionOptions());
+
   std::unique_ptr<MysqlPooledHolder> mysql_conn =
-      conn_storage_.popConnection(conn_key);
+      conn_storage_.popConnection(pool_key);
 
   if (mysql_conn == nullptr) {
     stats()->incrPoolMisses();
@@ -274,9 +279,8 @@ void AsyncConnectionPool::registerForConnection(
       raw_pool_op->getSharedPointer());
     // Sanity check
     DCHECK(pool_op != nullptr);
-    conn_storage_.queueOperation(pool_op);
-
-    tryRequestNewConnection(conn_key, raw_pool_op->getAttemptTimeout());
+    conn_storage_.queueOperation(pool_key, pool_op);
+    tryRequestNewConnection(pool_key);
   } else {
     // Cache hit
     stats()->incrPoolHits();
@@ -286,14 +290,13 @@ void AsyncConnectionPool::registerForConnection(
   }
 }
 
-bool AsyncConnectionPool::canCreateMoreConnections(
-    const ConnectionKey* conn_key) {
+bool AsyncConnectionPool::canCreateMoreConnections(const PoolKey& pool_key) {
   CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   std::unique_lock<std::mutex> l(counter_mutex_);
-  auto open_conns = open_connections_[*conn_key];
-  auto pending_conns = pending_connections_[*conn_key];
+  auto open_conns = open_connections_[pool_key];
+  auto pending_conns = pending_connections_[pool_key];
 
-  auto enqueued_pool_ops = conn_storage_.numQueuedOperations(conn_key);
+  auto enqueued_pool_ops = conn_storage_.numQueuedOperations(pool_key);
 
   auto client_total_conns = mysql_client_->numStartedAndOpenConnections();
   auto client_conn_limit = mysql_client_->getPoolsConnectionLimit();
@@ -317,60 +320,58 @@ bool AsyncConnectionPool::canCreateMoreConnections(
   return false;
 }
 
-std::pair<uint64_t, uint64_t> AsyncConnectionPool::getConnKeyStatus(
-    const ConnectionKey* conn_key) {
+std::pair<uint64_t, uint64_t> AsyncConnectionPool::numOpenAndPendingPerKey(
+    const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
-  auto open_conns = open_connections_[*conn_key];
-  auto pending_conns = pending_connections_[*conn_key];
+  auto open_conns = open_connections_[pool_key];
+  auto pending_conns = pending_connections_[pool_key];
   return std::make_pair(open_conns, pending_conns);
 }
 
-void AsyncConnectionPool::addOpenConnection(const ConnectionKey* conn_key) {
+void AsyncConnectionPool::addOpenConnection(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
-  ++open_connections_[*conn_key];
+  ++open_connections_[pool_key];
   ++num_open_connections_;
 }
 
-void AsyncConnectionPool::removeOpenConnection(const ConnectionKey* conn_key) {
+void AsyncConnectionPool::removeOpenConnection(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
 
-  auto iter = open_connections_.find(*conn_key);
+  auto iter = open_connections_.find(pool_key);
   DCHECK(iter != open_connections_.end());
   if (--iter->second == 0) {
     open_connections_.erase(iter);
   }
 
   --num_open_connections_;
-  connectionSpotFreed(conn_key);
+  connectionSpotFreed(pool_key);
 }
 
-void AsyncConnectionPool::addOpeningConn(const ConnectionKey* conn_key) {
+void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
-  ++pending_connections_[*conn_key];
+  ++pending_connections_[pool_key];
   ++num_pending_connections_;
 }
 
-void AsyncConnectionPool::removeOpeningConn(const ConnectionKey* conn_key) {
+void AsyncConnectionPool::removeOpeningConn(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
-  --pending_connections_[*conn_key];
+  --pending_connections_[pool_key];
   --num_pending_connections_;
 }
 
-void AsyncConnectionPool::connectionSpotFreed(const ConnectionKey* conn_key) {
+void AsyncConnectionPool::connectionSpotFreed(const PoolKey& pool_key) {
   // Now we check if we should create more connections in case there are queued
   // operations in need
   auto weak_pool = getSelfWeakPointer();
-  auto key = *conn_key;
-  mysql_client_->runInThread([weak_pool, key]() {
+  mysql_client_->runInThread([weak_pool, pool_key]() {
     auto pool = weak_pool.lock();
     if (pool) {
-      pool->tryRequestNewConnection(&key);
+      pool->tryRequestNewConnection(pool_key);
     }
   });
 }
 
-void AsyncConnectionPool::tryRequestNewConnection(const ConnectionKey* conn_key,
-                                                  Duration timeout) {
+void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
   // Only called internally, this doesn't need to check if it's shutting
   // down
   CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
@@ -382,23 +383,24 @@ void AsyncConnectionPool::tryRequestNewConnection(const ConnectionKey* conn_key,
   }
 
   // Checking if limits allow creating more connections
-  if (canCreateMoreConnections(conn_key)) {
+  if (canCreateMoreConnections(pool_key)) {
     VLOG(11) << "Requesting new Connection";
     // get a shared pointer for operation
 
-    auto connOp = mysql_client_->beginConnection(*conn_key);
-    connOp->setTimeout(timeout);
+    auto connOp = mysql_client_->beginConnection(pool_key.connKey);
+    connOp->setConnectionOptions(pool_key.connOptions);
     auto pool_ptr = getSelfWeakPointer();
-    // The attribute part we can do later
-    connOp->setCallback([pool_ptr](ConnectOperation& connOp) {
+
+    // ADRIANA The attribute part we can do later :D time to do it
+    connOp->setCallback([pool_key, pool_ptr](ConnectOperation& connOp) {
       auto locked_pool = pool_ptr.lock();
       if (!locked_pool) {
         return;
       }
       if (!connOp.ok()) {
         VLOG(2) << "Failed to create new connection";
-        locked_pool->removeOpeningConn(connOp.getKey());
-        locked_pool->failedToConnect(connOp);
+        locked_pool->removeOpeningConn(pool_key);
+        locked_pool->failedToConnect(pool_key, connOp);
         return;
       }
       auto conn = connOp.releaseConnection();
@@ -406,14 +408,14 @@ void AsyncConnectionPool::tryRequestNewConnection(const ConnectionKey* conn_key,
       // Now we got a connection from the client, it will become a pooled
       // connection
       auto pooled_conn = folly::make_unique<MysqlPooledHolder>(
-          std::move(mysql_conn), pool_ptr);
-      locked_pool->removeOpeningConn(pooled_conn->getKey());
+          std::move(mysql_conn), pool_ptr, pool_key);
+      locked_pool->removeOpeningConn(pool_key);
       locked_pool->addConnection(std::move(pooled_conn), true);
     });
 
     try {
       connOp->run();
-      addOpeningConn(conn_key);
+      addOpeningConn(pool_key);
     }
     catch (OperationStateException& e) {
       LOG(ERROR) << "Client is drain or dying, cannot ask for more connections";
@@ -421,16 +423,17 @@ void AsyncConnectionPool::tryRequestNewConnection(const ConnectionKey* conn_key,
   }
 }
 
-void AsyncConnectionPool::failedToConnect(ConnectOperation& conn_op) {
+void AsyncConnectionPool::failedToConnect(const PoolKey& pool_key,
+                                          ConnectOperation& conn_op) {
   // Propagating ConnectOperation failure to queued operations in case
   // This will help us fail fast incorrect passwords or users.
   if (conn_op.result() == OperationResult::Failed) {
-    conn_storage_.failOperations(conn_op.getKey(),
+    conn_storage_.failOperations(pool_key,
                                  conn_op.result(),
                                  conn_op.mysql_errno(),
                                  conn_op.mysql_error());
   }
-  connectionSpotFreed(conn_op.getKey());
+  connectionSpotFreed(pool_key);
 }
 
 // Shall be called anytime a fresh connection is ready or a recycled
@@ -447,7 +450,7 @@ void AsyncConnectionPool::addConnection(
   }
 
   VLOG(11) << "New connection ready to be used";
-  auto pool_op = conn_storage_.popOperation(mysql_conn->getKey());
+  auto pool_op = conn_storage_.popOperation(mysql_conn->getPoolKey());
   if (pool_op == nullptr) {
     VLOG(11) << "No operations waiting for Connection, enqueueing it";
     conn_storage_.queueConnection(std::move(mysql_conn));
@@ -468,43 +471,39 @@ void AsyncConnectionPool::CleanUpTimer::timeoutExpired() noexcept {
 }
 
 std::shared_ptr<ConnectPoolOperation>
-AsyncConnectionPool::ConnStorage::popOperation(const ConnectionKey* conn_key) {
+AsyncConnectionPool::ConnStorage::popOperation(const PoolKey& pool_key) {
   CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  PoolOpList& list = waitList_[*conn_key];
+  PoolOpList& list = waitList_[pool_key];
   while (!list.empty()) {
     std::weak_ptr<ConnectPoolOperation> weak_op = list.front();
     list.pop_front();
     auto ret = weak_op.lock();
     if (ret && !ret->done()) {
-      VLOG(11) << "Operation found for " << conn_key->getDisplayString();
       return ret;
     }
   }
 
-  VLOG(11) << "No operations in waitList " << conn_key->getDisplayString();
   return nullptr;
 }
 
 void AsyncConnectionPool::ConnStorage::queueOperation(
-    std::shared_ptr<ConnectPoolOperation>& pool_op) {
+    const PoolKey& pool_key, std::shared_ptr<ConnectPoolOperation>& pool_op) {
   CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  PoolOpList& list = waitList_[*pool_op->getKey()];
+  PoolOpList& list = waitList_[pool_key];
   std::weak_ptr<ConnectPoolOperation> weak_op = pool_op;
   list.push_back(std::move(weak_op));
-  VLOG(11) << "Enqueued pool operation in "
-           << pool_op->getKey()->getDisplayString();
 }
 
 void AsyncConnectionPool::ConnStorage::failOperations(
-    const ConnectionKey* conn_key,
+    const PoolKey& pool_key,
     OperationResult op_result,
     int mysql_errno,
     const string& mysql_error) {
   CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  PoolOpList& list = waitList_[*conn_key];
+  PoolOpList& list = waitList_[pool_key];
   while (!list.empty()) {
     std::weak_ptr<ConnectPoolOperation> weak_op = list.front();
     list.pop_front();
@@ -516,15 +515,13 @@ void AsyncConnectionPool::ConnStorage::failOperations(
 }
 
 std::unique_ptr<MysqlPooledHolder>
-AsyncConnectionPool::ConnStorage::popConnection(const ConnectionKey* conn_key) {
+AsyncConnectionPool::ConnStorage::popConnection(const PoolKey& pool_key) {
   CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  auto iter = stock_.find(*conn_key);
+  auto iter = stock_.find(pool_key);
   if (iter == stock_.end() || iter->second.empty()) {
-    VLOG(11) << "No connections in queue for " << conn_key->getDisplayString();
     return nullptr;
   } else {
-    VLOG(11) << "Connection found for " << conn_key->getDisplayString();
     std::unique_ptr<MysqlPooledHolder> ret;
     ret = std::move(iter->second.front());
     iter->second.pop_front();
@@ -537,7 +534,7 @@ void AsyncConnectionPool::ConnStorage::queueConnection(
   CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   // If it doesn't have space, remove the oldest and add this
-  MysqlConnectionList& list = stock_[*newConn->getKey()];
+  MysqlConnectionList& list = stock_[newConn->getPoolKey()];
 
   list.push_back(std::move(newConn));
   if (list.size() > conn_limit_) {
@@ -634,9 +631,10 @@ void ConnectPoolOperation::attemptFailed(OperationResult result) {
   auto now = std::chrono::high_resolution_clock::now();
   // Adjust timeout
   auto timeout_attempt_based =
-      attempt_timeout_ +
+      getConnectionOptions().getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
-  timeout_ = min(timeout_attempt_based, total_timeout_);
+  timeout_ =
+      min(timeout_attempt_based, getConnectionOptions().getTotalTimeout());
 
   specializedRun();
 }
@@ -684,9 +682,10 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
   if (locked_pool) {
     // Check if the timeout happened because of the host is being slow or the
     // pool is lacking resources
-    auto key_status = locked_pool->getConnKeyStatus(getKey());
-    auto num_open = key_status.first;
-    auto num_opening = key_status.second;
+    auto pool_key = PoolKey(getConnectionKey(), getConnectionOptions());
+    auto open_and_pending = locked_pool->numOpenAndPendingPerKey(pool_key);
+    auto num_open = open_and_pending.first;
+    auto num_opening = open_and_pending.second;
 
     // As a way to be realistic regarding the reason a connection was not
     // obtained, we start from the principle that this is pool's fault.
@@ -695,7 +694,7 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     // The second rule is applied where the resource restriction is so small
     // that the pool can't even try to open a connection.
     if (!(num_open == 0 && (num_opening > 0 ||
-                            locked_pool->canCreateMoreConnections(getKey())))) {
+                            locked_pool->canCreateMoreConnections(pool_key)))) {
       auto delta = std::chrono::high_resolution_clock::now() - start_time_;
       int64_t delta_micros =
           std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
@@ -730,6 +729,7 @@ void ConnectPoolOperation::connectionCallback(
       mysql_get_file_descriptor(mysql_conn->mysql()));
 
   conn()->setMysqlConnectionHolder(std::move(mysql_conn));
+  conn()->setConnectionOptions(getConnectionOptions());
   auto pool = pool_;
   conn()->setConnectionDyingCallback([pool](
       std::unique_ptr<MysqlConnectionHolder> mysql_conn) {

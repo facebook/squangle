@@ -43,12 +43,6 @@ namespace mysql_client {
 #ifdef NO_LIB_GFLAGS
 extern int64_t FLAGS_async_mysql_timeout_micros;
 #endif
-
-ConnectionOptions::ConnectionOptions()
-    : connection_timeout_(FLAGS_async_mysql_timeout_micros),
-      total_timeout_(FLAGS_async_mysql_timeout_micros),
-      query_timeout_(FLAGS_async_mysql_timeout_micros) {}
-
 namespace {
 folly::Singleton<AsyncMysqlClient> client;
 }
@@ -394,7 +388,7 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
   auto ret = std::make_shared<QueryType>(
       std::move(conn_ptr),
       std::move(query));
-  Duration timeout = ret->connection()->default_query_timeout_;
+  Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {
     ret->setTimeout(timeout);
   }

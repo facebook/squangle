@@ -120,6 +120,76 @@ enum class OperationResult { Unknown, Succeeded, Failed, Cancelled, TimedOut, };
 // indicating that all queries have been successfully fetched.
 enum class QueryCallbackReason { RowsFetched, QueryBoundary, Failure, Success };
 
+class ConnectionOptions {
+ public:
+  ConnectionOptions();
+
+  // Each attempt to acquire a connection will take at maximum this duration.
+  // Use setTotalTimeout if you want to limit the timeout for all attempts.
+  ConnectionOptions& setTimeout(Duration dur) {
+    connection_timeout_ = dur;
+    return *this;
+  }
+
+  Duration getTimeout() const { return connection_timeout_; }
+
+  ConnectionOptions& setQueryTimeout(Duration dur) {
+    query_timeout_ = dur;
+    return *this;
+  }
+
+  Duration getQueryTimeout() const { return query_timeout_; }
+
+  ConnectionOptions& setConnectionAttribute(const string& attr,
+                                            const string& value) {
+    connection_attributes_[attr] = value;
+    return *this;
+  }
+
+  const std::unordered_map<string, string>& connectionAttributes() const {
+    return connection_attributes_;
+  }
+
+  ConnectionOptions& setConnectionAttributes(
+      const std::unordered_map<string, string>& attributes) {
+    connection_attributes_ = attributes;
+    return *this;
+  }
+
+  // MySQL 5.6 connection attributes.  Sent at time of connect.
+  const std::unordered_map<string, string>& getConnectionAttributes() const {
+    return connection_attributes_;
+  }
+
+  // Sets the amount of attempts that will be tried in order to acquire the
+  // connection. Each attempt will take at maximum the given timeout. To set
+  // a global timeout that the operation shouldn't take more than, use
+  // setTotalTimeout.
+  ConnectionOptions& setConnectAttempts(uint32_t max_attempts) {
+    max_attempts_ = max_attempts;
+    return *this;
+  }
+
+  uint32_t getConnectAttempts() const { return max_attempts_; }
+
+  // If this is not set, but regular timeout was, the TotalTimeout for the
+  // operation will be the number of attempts times the primary timeout.
+  // Set this if you have strict timeout needs.
+  ConnectionOptions& setTotalTimeout(Duration dur) {
+    total_timeout_ = dur;
+    return *this;
+  }
+
+  Duration getTotalTimeout() const { return total_timeout_; }
+
+ private:
+  Duration connection_timeout_;
+  Duration total_timeout_;
+  Duration query_timeout_;
+  std::unordered_map<string, string> connection_attributes_;
+  uint32_t max_attempts_ = 1;
+};
+
 // The abstract base for our available Operations.  Subclasses share
 // intimate knowledge with the Operation class (most member variables
 // are protected).
@@ -367,27 +437,21 @@ class ConnectOperation : public Operation {
 
   const string& database() const { return conn_key_.db_name; }
   const string& user() const { return conn_key_.user; }
-  int connectionFlags() const { return flags_; }
 
+  const ConnectionKey& getConnectionKey() const { return conn_key_; }
+  const ConnectionOptions& getConnectionOptions() const;
   const ConnectionKey* getKey() const { return &conn_key_; }
 
   // Get and set MySQL 5.6 connection attributes.
   ConnectOperation* setConnectionAttribute(const string& attr,
-                                           const string& value) {
-    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
-    connection_attributes_[attr] = value;
-    return this;
-  }
+                                           const string& value);
 
   const std::unordered_map<string, string>& connectionAttributes() const {
-    return connection_attributes_;
+    return conn_options_.getConnectionAttributes();
   }
 
   ConnectOperation* setConnectionAttributes(
-      const std::unordered_map<string, string>& attributes) {
-    connection_attributes_ = attributes;
-    return this;
-  }
+      const std::unordered_map<string, string>& attributes);
 
   ConnectOperation* setSSLOptionsProviderBase(
       SSLOptionsProviderBase* ssl_options_provider) {
@@ -397,25 +461,7 @@ class ConnectOperation : public Operation {
 
   // Default timeout for queries created by the connection this
   // operation will create.
-  ConnectOperation* setDefaultQueryTimeout(Duration t) {
-    default_query_timeout_ = t;
-    return this;
-  }
-
-  // To set connection flags before connecting process has started.
-  ConnectOperation* setConnectionFlag(int new_flags) {
-    CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
-    flags_ = new_flags;
-    return this;
-  }
-
-  // To add connection flags before connecting process has started.
-  ConnectOperation* addConnectionFlag(int new_flags) {
-    CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
-    flags_ |= new_flags;
-    return this;
-  }
-
+  ConnectOperation* setDefaultQueryTimeout(Duration t);
   ConnectOperation* setConnectionContext(
       std::unique_ptr<db::ConnectionContextBase>&& e) {
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
@@ -437,11 +483,7 @@ class ConnectOperation : public Operation {
   // Overriding to narrow the return type
   // Each connect attempt will take at most this timeout to retry to acquire
   // the connection.
-  ConnectOperation* setTimeout(Duration timeout) {
-    attempt_timeout_ = timeout;
-    Operation::setTimeout(timeout);
-    return this;
-  }
+  ConnectOperation* setTimeout(Duration timeout);
 
   ConnectOperation* setUserData(folly::dynamic val) {
     Operation::setUserData(std::move(val));
@@ -452,24 +494,17 @@ class ConnectOperation : public Operation {
   // Each attempt will take at most `setTimeout`. Use this in case
   // you have strong timeout restrictions but still want the connection to
   // retry.
-  ConnectOperation* setTotalTimeout(Duration total_timeout) {
-    timeout_ = min(timeout_, total_timeout);
-    total_timeout_ = total_timeout;
-    return this;
-  }
+  ConnectOperation* setTotalTimeout(Duration total_timeout);
 
   // Sets the number of attempts this operation will try to acquire a mysql
   // connection.
-  ConnectOperation* setConnectAttempts(uint32_t max_attempts) {
-    max_attempts_ = max_attempts;
-    return this;
-  }
+  ConnectOperation* setConnectAttempts(uint32_t max_attempts);
 
   uint32_t attemptsMade() const { return attempts_made_; }
 
-  Duration getAttemptTimeout() const { return attempt_timeout_; }
+  Duration getAttemptTimeout() const { return conn_options_.getTimeout(); }
 
-  ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_opts);
+  ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_options);
 
   static constexpr Duration kMinimumViableConnectTimeout =
       std::chrono::microseconds(50);
@@ -491,11 +526,9 @@ class ConnectOperation : public Operation {
 
   wangle::SSLSessionPtr getSSLSession();
 
-  uint32_t max_attempts_ = 1;
   uint32_t attempts_made_ = 0;
 
-  Duration total_timeout_;
-  Duration attempt_timeout_;
+  ConnectionOptions conn_options_;
 
  private:
   void logConnectCompleted(OperationResult result);
@@ -503,14 +536,11 @@ class ConnectOperation : public Operation {
   void maybeStoreSSLSession();
 
   const ConnectionKey conn_key_;
+
   int flags_;
-  Duration default_query_timeout_;
 
   // Context information for logging purposes.
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
-
-  // MySQL 5.6 connection attributes.  Sent at time of connect.
-  std::unordered_map<string, string> connection_attributes_;
 
   SSLOptionsProviderBase* ssl_options_provider_{nullptr};
 
