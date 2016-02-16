@@ -295,6 +295,12 @@ ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
   return this;
 }
 
+ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
+    std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider) {
+  ssl_options_provider_ = std::move(ssl_options_provider);
+  return this;
+}
+
 bool ConnectOperation::shouldCompleteOperation(OperationResult result) {
   // Cancelled doesn't really get to this point, the Operation is forced to
   // complete by Operation, adding this check here just-in-case.
@@ -362,7 +368,7 @@ ConnectOperation* ConnectOperation::specializedRun() {
                          kv.second.c_str());
         }
         if (ssl_options_provider_) {
-          auto ssl_context_ = ssl_options_provider_->getSSLContext(getKey());
+          auto ssl_context_ = ssl_options_provider_->getSSLContext();
           if (ssl_context_) {
             if (connection_context_) {
               connection_context_->isSslConnection = true;
@@ -371,7 +377,7 @@ ConnectOperation* ConnectOperation::specializedRun() {
                           MYSQL_OPT_SSL_CONTEXT,
                           ssl_context_->getSSLCtx());
 
-            auto ssl_session_ = ssl_options_provider_->getSSLSession(getKey());
+            auto ssl_session_ = ssl_options_provider_->getSSLSession();
             if (ssl_session_) {
               mysql_options4(conn()->mysql(),
                              MYSQL_OPT_SSL_SESSION,
@@ -505,10 +511,8 @@ void ConnectOperation::maybeStoreSSLSession() {
   }
 
   if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    ssl_options_provider_->storeSSLSession(
-        wangle::SSLSessionPtr(
-            (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())),
-        getKey());
+    ssl_options_provider_->storeSSLSession(wangle::SSLSessionPtr(
+        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())));
   } else {
     async_client()->stats()->incrReusedSSLSessions();
   }

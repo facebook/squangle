@@ -454,10 +454,7 @@ class ConnectOperation : public Operation {
       const std::unordered_map<string, string>& attributes);
 
   ConnectOperation* setSSLOptionsProviderBase(
-      SSLOptionsProviderBase* ssl_options_provider) {
-    ssl_options_provider_ = ssl_options_provider;
-    return this;
-  }
+      std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider);
 
   // Default timeout for queries created by the connection this
   // operation will create.
@@ -542,7 +539,8 @@ class ConnectOperation : public Operation {
   // Context information for logging purposes.
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
-  SSLOptionsProviderBase* ssl_options_provider_{nullptr};
+  // Provider for SSL connection options
+  std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider_;
 
   ConnectCallback connect_callback_;
   bool active_in_client_;
