@@ -96,10 +96,10 @@ bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
   return true;
 }
 
-void AsyncMysqlClient::drain(bool also_shutdown) {
+void AsyncMysqlClient::drain(bool also_block_operations) {
   {
     std::unique_lock<std::mutex> lock(pending_operations_mutex_);
-    shutting_down_ = also_shutdown;
+    block_operations_ = also_block_operations;
 
     auto it = pending_operations_.begin();
     // Clean out any unstarted operations.
@@ -118,18 +118,21 @@ void AsyncMysqlClient::drain(bool also_shutdown) {
 
   // Now wait for any started operations to complete.
   std::unique_lock<std::mutex> counter_lock(this->counters_mutex_);
-  active_connections_closed_cv_.wait(counter_lock,
-      [&also_shutdown, this] {
-      if (also_shutdown) {
-        VLOG(11) << "Waiting for " << this->active_connection_counter_
-                 << " connections to be released before shutting client down";
-      }
-      return this->active_connection_counter_ == 0;
-    }
-  );
+  active_connections_closed_cv_.wait(
+      counter_lock,
+      [&also_block_operations, this] {
+        if (also_block_operations) {
+          VLOG(11) << "Waiting for " << this->active_connection_counter_
+                   << " connections to be released before shutting client down";
+        }
+        return this->active_connection_counter_ == 0;
+      });
 }
 
-AsyncMysqlClient::~AsyncMysqlClient() {
+void AsyncMysqlClient::shutdownClient() {
+  if (is_shutdown_.exchange(true)) {
+    return;
+  }
   // Drain anything we currently have, and if those operations make
   // new operations, that's okay.
   drain(false);
@@ -150,9 +153,12 @@ AsyncMysqlClient::~AsyncMysqlClient() {
   } else {
     thread_.detach();
   }
-  VLOG(2) << "AsyncMysqlClient finished destructor";
 }
 
+AsyncMysqlClient::~AsyncMysqlClient() {
+  shutdownClient();
+  VLOG(2) << "AsyncMysqlClient finished destructor";
+}
 
 void AsyncMysqlClient::setDBLoggerForTesting(
     std::unique_ptr<db::SquangleLoggerBase> dbLogger) {

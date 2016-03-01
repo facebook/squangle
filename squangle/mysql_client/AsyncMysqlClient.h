@@ -137,15 +137,17 @@ class AsyncMysqlClient {
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   // Stop accepting new queries and connections.
-  void shutdown() {
+  void blockIncomingOperations() {
     std::unique_lock<std::mutex> l(pending_operations_mutex_);
-    shutting_down_ = true;
+    block_operations_ = true;
   }
 
-  // Drain any remaining operations.  If also_shutdown is true, then
+  void shutdownClient();
+
+  // Drain any remaining operations.  If also_block_operations is true, then
   // any attempt to add operations during or after this drain will
   // fail harshly.
-  void drain(bool also_shutdown);
+  void drain(bool also_block_operations);
 
   folly::EventBase* getEventBase() { return &tevent_base_; }
 
@@ -270,7 +272,7 @@ class AsyncMysqlClient {
   // Add a pending operation to the client.
   void addOperation(std::shared_ptr<Operation> op) {
     std::unique_lock<std::mutex> l(pending_operations_mutex_);
-    if (shutting_down_) {
+    if (block_operations_) {
       LOG(ERROR) << "Attempt to start operation when client is shutting down";
       op->cancel();
     }
@@ -298,7 +300,8 @@ class AsyncMysqlClient {
   // thread_ is where loop() runs and most of the class does its work.
   std::thread thread_;
 
-  // pending_operations_mutex_ protects pending_operations_ and shutdown,
+  // pending_operations_mutex_ protects pending_operations_ and
+  // blockIncomingOperations(),
   // this mutex is meant for external operations on the client. For example,
   // when the user wants to begin an operation.
   std::mutex pending_operations_mutex_;
@@ -315,8 +318,10 @@ class AsyncMysqlClient {
   // Our event loop.
   folly::EventBase tevent_base_;
 
-  // Are we shutting down?
-  bool shutting_down_ = false;
+  // Are we accepting new connections
+  bool block_operations_ = false;
+  // Used to guard thread destruction
+  std::atomic<bool> is_shutdown_{false};
 
   // We count the number of references we have from Connections and
   // ConnectionOperations.  This is used for draining and destruction;
