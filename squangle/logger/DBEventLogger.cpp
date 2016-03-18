@@ -14,16 +14,18 @@
 namespace facebook {
 namespace db {
 
-void ConnectionContextBase::collectNormalValues
-    (AddNormalValueFunction add) const {
+void ConnectionContextBase::collectNormalValues(
+    AddNormalValueFunction add) const {
   add("is_ssl_connection", folly::to<std::string, bool>(isSslConnection));
+  add("ssl_session_reused", folly::to<std::string, bool>(sslSessionReused));
 }
 
-void DBSimpleLogger::logQuerySuccess(Duration query_time,
-                                     QueryType query_type,
-                                     int queries_executed,
-                                     const std::string& query,
-                                     const SquangleLoggingData& connInfo) {
+void DBSimpleLogger::logQuerySuccess(
+    Duration query_time,
+    QueryType query_type,
+    int queries_executed,
+    const std::string& query,
+    const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << query << "\") succeeded.";
 }

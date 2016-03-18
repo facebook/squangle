@@ -46,6 +46,7 @@ class ConnectionContextBase {
   virtual ~ConnectionContextBase() {}
   virtual void collectNormalValues(AddNormalValueFunction add) const = 0;
   bool isSslConnection = false;
+  bool sslSessionReused = false;
 };
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;

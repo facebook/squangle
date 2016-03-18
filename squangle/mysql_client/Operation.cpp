@@ -511,17 +511,19 @@ void ConnectOperation::maybeStoreSSLSession() {
   }
 
   if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    ssl_options_provider_->storeSSLSession(wangle::SSLSessionPtr(
-        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())));
+    ssl_options_provider_->storeSSLSession(
+        wangle::SSLSessionPtr(
+            (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())));
   } else {
+    connection_context_->sslSessionReused = true;
     async_client()->stats()->incrReusedSSLSessions();
   }
 }
 
 void ConnectOperation::specializedCompleteOperation() {
-  logConnectCompleted(result_);
-
   maybeStoreSSLSession();
+
+  logConnectCompleted(result_);
 
   // If connection_initialized_ is false the only way to complete the
   // operation is by cancellation
