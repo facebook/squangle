@@ -318,7 +318,7 @@ void Query::appendValueClauses(folly::fbstring* ret,
     }
     first_param = false;
     appendColumnTableName(ret, key_value.first);
-    if (key_value.second.isNull()) {
+    if (key_value.second.isNull() && sep[0] != ',') {
       ret->append(" IS NULL");
     } else {
       ret->append(" = ");
