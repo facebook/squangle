@@ -143,6 +143,11 @@ class RowFields {
     return mysql_field_flags_[fieldIndex(field_name)];
   }
 
+  // Check if the row contains the field name.
+  bool containsFieldName(StringPiece field_name) const {
+    return field_name_map_.find(field_name) != field_name_map_.end();
+  }
+
   // What is the name of the i'th column in the result set?
   StringPiece fieldName(size_t i) const { return field_names_[i]; }
 
