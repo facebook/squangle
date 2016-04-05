@@ -215,6 +215,21 @@ void parseError(const StringPiece s, size_t offset, const StringPiece message) {
   throw std::invalid_argument(msg);
 }
 
+// Raise an exception for format string/value mismatches
+void formatStringParseError(
+    StringPiece query_text,
+    size_t offset,
+    char format_specifier,
+    StringPiece value_type) {
+  parseError(
+      query_text,
+      offset,
+      folly::sformat(
+          "invalid value type {} for format string %{}",
+          value_type,
+          format_specifier));
+}
+
 // Consume the next x bytes from s, updating offset, and raising an
 // exception if there aren't sufficient bytes left.
 StringPiece advance(const StringPiece s, size_t* offset, size_t num) {
@@ -271,7 +286,7 @@ void Query::appendValue(folly::fbstring* s,
                         MYSQL* connection) const {
   if (d.isString()) {
     if (type != 's' && type != 'v') {
-      parseError(query_text_, offset, "%s used with non-string");
+      formatStringParseError(query_text_, offset, type, "string");
     }
     auto value = d.asString();
     s->reserve(s->size() + value.size() + 4);
@@ -280,21 +295,18 @@ void Query::appendValue(folly::fbstring* s,
     s->push_back('"');
   } else if (d.isInt()) {
     if (type != 'd' && type != 'v') {
-      parseError(query_text_, offset, "%d used with non-integer");
+      formatStringParseError(query_text_, offset, type, "int");
     }
     s->append(d.asString());
   } else if (d.isDouble()) {
     if (type != 'f' && type != 'v') {
-      parseError(query_text_, offset, "%f used with non-double");
+      formatStringParseError(query_text_, offset, type, "double");
     }
     s->append(d.asString());
   } else if (d.isNull()) {
     s->append("NULL");
   } else {
-    parseError(
-        query_text_,
-        offset,
-        folly::format("invalid type for %{}: {}", type, d.typeName()).str());
+    formatStringParseError(query_text_, offset, type, d.typeName());
   }
 }
 
