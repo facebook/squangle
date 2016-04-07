@@ -12,6 +12,7 @@
 #include "squangle/mysql_client/AsyncHelpers.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
+#include <folly/MoveWrapper.h>
 #include <folly/futures/Promise.h>
 
 namespace facebook {
