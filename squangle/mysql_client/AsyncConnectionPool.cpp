@@ -630,8 +630,7 @@ void ConnectPoolOperation::attemptFailed(OperationResult result) {
 
   auto now = std::chrono::high_resolution_clock::now();
   // Adjust timeout
-  auto timeout_attempt_based =
-      getConnectionOptions().getTimeout() +
+  auto timeout_attempt_based = getConnectionOptions().getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
   timeout_ =
       min(timeout_attempt_based, getConnectionOptions().getTotalTimeout());

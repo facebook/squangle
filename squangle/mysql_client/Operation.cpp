@@ -256,6 +256,10 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
+  auto provider = conn_opts.getSSLOptionsProvider();
+  if (provider) {
+    setSSLOptionsProvider(std::move(provider));
+  }
   return this;
 }
 
@@ -297,7 +301,12 @@ ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
 
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
     std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider) {
-  ssl_options_provider_ = std::move(ssl_options_provider);
+  LOG(ERROR) << "Using deprecated function";
+  return this;
+}
+ConnectOperation* ConnectOperation::setSSLOptionsProvider(
+    std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider) {
+  conn_options_.setSSLOptionsProvider(ssl_options_provider);
   return this;
 }
 
@@ -362,27 +371,31 @@ ConnectOperation* ConnectOperation::specializedRun() {
 
         mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
         for (const auto& kv : conn_options_.getConnectionAttributes()) {
-          mysql_options4(conn()->mysql(),
-                         MYSQL_OPT_CONNECT_ATTR_ADD,
-                         kv.first.c_str(),
-                         kv.second.c_str());
+          mysql_options4(
+              conn()->mysql(),
+              MYSQL_OPT_CONNECT_ATTR_ADD,
+              kv.first.c_str(),
+              kv.second.c_str());
         }
-        if (ssl_options_provider_) {
-          auto ssl_context_ = ssl_options_provider_->getSSLContext();
+        auto provider = conn_options_.getSSLOptionsProviderPtr();
+        if (provider) {
+          auto ssl_context_ = provider->getSSLContext();
           if (ssl_context_) {
             if (connection_context_) {
               connection_context_->isSslConnection = true;
             }
-            mysql_options(conn()->mysql(),
-                          MYSQL_OPT_SSL_CONTEXT,
-                          ssl_context_->getSSLCtx());
+            mysql_options(
+                conn()->mysql(),
+                MYSQL_OPT_SSL_CONTEXT,
+                ssl_context_->getSSLCtx());
 
-            auto ssl_session_ = ssl_options_provider_->getSSLSession();
+            auto ssl_session_ = provider->getSSLSession();
             if (ssl_session_) {
-              mysql_options4(conn()->mysql(),
-                             MYSQL_OPT_SSL_SESSION,
-                             ssl_session_,
-                             nullptr);
+              mysql_options4(
+                  conn()->mysql(),
+                  MYSQL_OPT_SSL_SESSION,
+                  ssl_session_,
+                  nullptr);
             }
           }
         }
@@ -501,7 +514,8 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
 
 void ConnectOperation::maybeStoreSSLSession() {
   // if there is an ssl provider set
-  if (!ssl_options_provider_) {
+  auto provider = conn_options_.getSSLOptionsProviderPtr();
+  if (!provider) {
     return;
   }
 
@@ -511,9 +525,8 @@ void ConnectOperation::maybeStoreSSLSession() {
   }
 
   if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    ssl_options_provider_->storeSSLSession(
-        wangle::SSLSessionPtr(
-            (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())));
+    provider->storeSSLSession(wangle::SSLSessionPtr(
+        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql())));
   } else {
     if (connection_context_) {
       connection_context_->sslSessionReused = true;

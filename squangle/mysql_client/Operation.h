@@ -138,10 +138,27 @@ class ConnectionOptions {
     return *this;
   }
 
-  Duration getQueryTimeout() const { return query_timeout_; }
+  Duration getQueryTimeout() const {
+    return query_timeout_;
+  }
 
-  ConnectionOptions& setConnectionAttribute(const string& attr,
-                                            const string& value) {
+  ConnectionOptions& setSSLOptionsProvider(
+      std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider) {
+    ssl_options_provider_ = ssl_options_provider;
+    return *this;
+  }
+
+  std::shared_ptr<SSLOptionsProviderBase> getSSLOptionsProvider() const {
+    return ssl_options_provider_;
+  }
+
+  SSLOptionsProviderBase* getSSLOptionsProviderPtr() const {
+    return ssl_options_provider_.get();
+  }
+
+  ConnectionOptions& setConnectionAttribute(
+      const string& attr,
+      const string& value) {
     connection_attributes_[attr] = value;
     return *this;
   }
@@ -186,6 +203,7 @@ class ConnectionOptions {
   Duration connection_timeout_;
   Duration total_timeout_;
   Duration query_timeout_;
+  std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> connection_attributes_;
   uint32_t max_attempts_ = 1;
 };
@@ -455,6 +473,8 @@ class ConnectOperation : public Operation {
 
   ConnectOperation* setSSLOptionsProviderBase(
       std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider);
+  ConnectOperation* setSSLOptionsProvider(
+      std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider);
 
   // Default timeout for queries created by the connection this
   // operation will create.
@@ -538,9 +558,6 @@ class ConnectOperation : public Operation {
 
   // Context information for logging purposes.
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
-
-  // Provider for SSL connection options
-  std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider_;
 
   ConnectCallback connect_callback_;
   bool active_in_client_;
