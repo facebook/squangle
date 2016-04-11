@@ -117,7 +117,7 @@ void AsyncConnectionPool::shutdown() {
     cleanup_timer_.cancelTimeout();
     conn_storage_.clearAll();
     finished_shutdown_.store(true, std::memory_order_relaxed);
-    LOG(INFO) << "Shutting down in tevent thread";
+    VLOG(1) << "Shutting down in tevent thread";
   } else {
     mysql_client_->runInThread([this]() {
       cleanup_timer_.cancelTimeout();
