@@ -246,7 +246,7 @@ void appendEscapedString(folly::fbstring* dest,
                          const folly::fbstring& value,
                          MYSQL* connection) {
   if (!connection) {
-    VLOG(1) << "connectionless escape performed; this should only occur in "
+    VLOG(3) << "connectionless escape performed; this should only occur in "
             << "testing.";
     *dest += value;
     return;
