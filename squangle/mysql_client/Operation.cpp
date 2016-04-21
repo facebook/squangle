@@ -45,7 +45,7 @@ Operation::Operation(std::unique_ptr<ConnectionProxy>&& safe_conn)
       result_(OperationResult::Unknown),
       conn_ptr_(std::move(safe_conn)),
       mysql_errno_(0),
-      user_data_{},
+      user_data_(folly::dynamic::object()),
       observer_callback_(nullptr),
       async_client_(conn()->async_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
@@ -470,7 +470,7 @@ void ConnectOperation::socketActionable() {
       return;
     }
   }
-  DCHECK(false) << "should not reach here";
+  LOG(DFATAL) << "should not reach here";
 }
 
 void ConnectOperation::specializedTimeoutTriggered() {
@@ -576,18 +576,14 @@ void ConnectOperation::removeClientReference() {
   }
 }
 
-FetchOperation::FetchOperation(std::unique_ptr<ConnectionProxy>&& conn,
-                               db::QueryType query_type)
-    : Operation(std::move(conn)),
-      num_fields_(0),
-      num_rows_seen_(0),
-      cancel_(false),
-      num_queries_executed_(0),
-      query_result_(folly::make_unique<QueryResult>(0)),
-      fetch_action_(FetchAction::StartQuery),
-      query_type_(query_type),
-      query_executed_(false),
-      mysql_query_result_(nullptr) {}
+FetchOperation::FetchOperation(
+    std::unique_ptr<ConnectionProxy>&& conn,
+    db::QueryType query_type)
+    : Operation(std::move(conn)), query_type_(query_type) {}
+
+bool FetchOperation::isStreamAccessAllowed() {
+  return async_client()->threadId() == std::this_thread::get_id();
+}
 
 FetchOperation* FetchOperation::specializedRun() {
   if (!async_client()->runInThread([this]() {
@@ -607,13 +603,78 @@ FetchOperation* FetchOperation::specializedRun() {
   return this;
 }
 
+FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result)
+    : mysql_query_result_(mysql_query_result),
+      row_fields_(
+          mysql_fetch_fields(mysql_query_result),
+          mysql_num_fields(mysql_query_result)) {}
+
+FetchOperation::RowStream::~RowStream() {
+  if (mysql_query_result_) {
+    mysql_free_result(mysql_query_result_);
+    mysql_query_result_ = nullptr;
+  }
+}
+
+EphemeralRow FetchOperation::RowStream::consumeRow() {
+  if (!current_row_) {
+    LOG(DFATAL) << "Illegal operation";
+  }
+  EphemeralRow eph_row(std::move(*current_row_));
+  current_row_.reset();
+  return eph_row;
+}
+
+bool FetchOperation::RowStream::hasNext() {
+  // Slurp needs to happen after `consumeRow` has been called.
+  // Because it will move the buffer.
+  slurp();
+  // First iteration
+  return bool(current_row_);
+}
+
+bool FetchOperation::RowStream::slurp() {
+  CHECK_THROW(mysql_query_result_ != nullptr, OperationStateException);
+  if (current_row_ || query_finished_) {
+    return true;
+  }
+  MYSQL_ROW row;
+  int status = mysql_fetch_row_nonblocking(mysql_query_result_, &row);
+  if (status != NET_ASYNC_COMPLETE) {
+    return false;
+  }
+  if (row == nullptr) {
+    query_finished_ = true;
+    return true;
+  }
+  unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_);
+  current_row_ =
+      folly::make_unique<EphemeralRow>(row, field_lengths, &row_fields_);
+  return true;
+}
+
+uint64_t FetchOperation::currentLastInsertId() {
+  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  return current_last_insert_id_;
+}
+
+uint64_t FetchOperation::currentAffectedRows() {
+  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  return current_affected_rows_;
+}
+
+FetchOperation::RowStream* FetchOperation::rowStream() {
+  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  return current_row_stream_.get();
+}
+
 void FetchOperation::socketActionable() {
   CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
 
-  // This loops runs the fetch actions required to successfully execute query,
+  // This loop runs the fetch actions required to successfully execute query,
   // request next results, fetch results, identify errors and complete operation
   // and queries.
-  // All callbacks are done in the specialized methods that children must
+  // All callbacks are done in the `notify` methods that children must
   // override.
   // Some actions may request an action above it (like CompleteQuery may request
   // StartQuery) this is why we use this loop.
@@ -632,12 +693,14 @@ void FetchOperation::socketActionable() {
       int status = 0;
 
       if (query_executed_) {
+        ++num_current_query_;
         status = mysql_next_result_nonblocking(conn()->mysql(), &error);
       } else {
-        status = mysql_real_query_nonblocking(conn()->mysql(),
-                                              rendered_multi_query_.data(),
-                                              rendered_multi_query_.size(),
-                                              &error);
+        status = mysql_real_query_nonblocking(
+            conn()->mysql(),
+            rendered_multi_query_.data(),
+            rendered_multi_query_.size(),
+            &error);
       }
 
       if (status != NET_ASYNC_COMPLETE) {
@@ -645,11 +708,11 @@ void FetchOperation::socketActionable() {
         return;
       }
 
+      current_last_insert_id_ = 0;
+      current_affected_rows_ = 0;
       query_executed_ = true;
-      query_result_ = folly::make_unique<QueryResult>(num_queries_executed_);
       if (error) {
-        fetch_action_ = FetchAction::CompleteOperation;
-        snapshotMysqlErrors();
+        fetch_action_ = FetchAction::CompleteQuery;
       } else {
         fetch_action_ = FetchAction::InitFetch;
       }
@@ -664,48 +727,51 @@ void FetchOperation::socketActionable() {
     //  - CompleteQuery: no rows to fetch (complete query will read rowsAffected
     //                   and lastInsertId to add to result
     if (fetch_action_ == FetchAction::InitFetch) {
-      mysql_query_result_ = mysql_use_result(conn()->mysql());
-      num_fields_ = mysql_field_count(conn()->mysql());
+      auto* mysql_query_result = mysql_use_result(conn()->mysql());
+      auto num_fields = mysql_field_count(conn()->mysql());
 
       // Check to see if this an empty query or an error
-      if (!mysql_query_result_ && num_fields_ > 0) {
-        // Fail Query
-        snapshotMysqlErrors();
-        fetch_action_ = FetchAction::CompleteOperation;
+      if (!mysql_query_result && num_fields > 0) {
+        // Failure. CompleteQuery will read errors.
+        fetch_action_ = FetchAction::CompleteQuery;
       } else {
-        bool rows_to_fetch = readMysqlFields();
-        if (rows_to_fetch) {
-          query_result_->setRowFields(row_fields_info_);
+        if (num_fields > 0) {
+          current_row_stream_ =
+              folly::make_unique<RowStream>(mysql_query_result);
+
           fetch_action_ = FetchAction::Fetch;
         } else {
           fetch_action_ = FetchAction::CompleteQuery;
         }
+        notifyInitQuery();
       }
-      specializedInitQuery();
     }
 
     // This action is going to stick around until all rows are fetched or an
-    // error occurs. In case of all rows were fetched or error, slurpRows is
-    // going to return true, it returns false when it needs to wait for socket
-    // actionable. slurpRows calls specializedRowsFetched in children classes in
-    // case we have new rows.
+    // error occurs. When the RowStream is ready, we notify the subclasses for
+    // them to consume it.
+    // If row_stream_ isn't ready, we wait for socket actionable.
     // Next Actions:
     //  - Fetch: in case it needs to fetch more rows, we break the loop and wait
     //           for socketActionable to be called again
     //  - CompleteQuery: an error occurred or rows finished to fetch
     if (fetch_action_ == FetchAction::Fetch) {
-      bool query_finished = slurpRows();
-      if (query_finished) {
-        snapshotMysqlErrors();
+      DCHECK(current_row_stream_ != nullptr);
+      // When the query finished, `is_ready` is true, but there are no rows.
+      bool is_ready = current_row_stream_->slurp();
+      if (!is_ready) {
+        waitForSocketActionable();
+        break;
+      }
+      if (current_row_stream_->hasQueryFinished()) {
         fetch_action_ = FetchAction::CompleteQuery;
       } else {
-        // Wait for socket actionable to continue fetch
-        break;
+        notifyRowsReady();
       }
     }
 
-    // In case the query has least started and finished by error or not, here
-    // the final checks and data are gathered for the current query.
+    // In case the query has at least started and finished by error or not,
+    // here the final checks and data are gathered for the current query.
     // It checks if any errors occurred during query, and call children classes
     // to deal with their specialized query completion.
     // Next Actions:
@@ -715,30 +781,26 @@ void FetchOperation::socketActionable() {
     //  - CompleteOperation: In case an error occurred during query or there are
     //                       no more results to read.
     if (fetch_action_ == FetchAction::CompleteQuery) {
+      snapshotMysqlErrors();
+
+      bool more_results = false;
       if (mysql_errno_ != 0) {
-        query_result_->setOperationResult(OperationResult::Failed);
-
         fetch_action_ = FetchAction::CompleteOperation;
-        // finished with error and has no more results
-        specializedCompleteQuery(false, false);
       } else {
-        // Stash these away now (when we're in the async mysql thread).
-        query_result_->setNumRowsAffected(mysql_affected_rows(conn()->mysql()));
-        query_result_->setLastInsertId(mysql_insert_id(conn()->mysql()));
-        query_result_->setOperationResult(OperationResult::Succeeded);
-
-        auto more_results = mysql_more_results(conn()->mysql());
+        current_last_insert_id_ = mysql_insert_id(conn()->mysql());
+        current_affected_rows_ = mysql_affected_rows(conn()->mysql());
+        more_results = mysql_more_results(conn()->mysql());
         fetch_action_ = more_results ? FetchAction::StartQuery
                                      : FetchAction::CompleteOperation;
+
         // Call it after setting the fetch_action_ so the child class can
         // decide if it wants to change the state
-        specializedCompleteQuery(true, more_results);
+
         ++num_queries_executed_;
+        notifyQuerySuccess(more_results);
       }
-      if (mysql_query_result_) {
-        mysql_free_result(mysql_query_result_);
-        mysql_query_result_ = nullptr;
-      }
+
+      current_row_stream_ = nullptr;
     }
 
     // Once this action is set, the operation is going to be completed no matter
@@ -758,97 +820,41 @@ void FetchOperation::socketActionable() {
 }
 
 namespace {
-void appendRow(RowBlock* block,
-               MYSQL_ROW mysql_row,
-               unsigned long* field_lengths,
-               int num_fields) {
+void copyRowToRowBlock(RowBlock* block, const EphemeralRow& eph_row) {
   block->startRow();
-  for (int i = 0; i < num_fields; ++i) {
-    if (mysql_row[i] == nullptr) {
+  for (int i = 0; i < eph_row.numFields(); ++i) {
+    if (eph_row.isNull(i)) {
       block->appendNull();
     } else {
-      block->appendValue(StringPiece(mysql_row[i], field_lengths[i]));
+      block->appendValue(eph_row[i]);
     }
   }
   block->finishRow();
 }
+
+RowBlock makeRowBlockFromStream(
+    std::shared_ptr<RowFields> row_fields,
+    FetchOperation::RowStream* row_stream) {
+  RowBlock row_block(std::move(row_fields));
+  // Consume row_stream
+  while (row_stream->hasNext()) {
+    auto eph_row = row_stream->consumeRow();
+    copyRowToRowBlock(&row_block, eph_row);
+  }
+  return row_block;
 }
-
-bool FetchOperation::slurpRows() {
-  bool query_finished = false;
-  // Fetch current query
-  RowBlock row_block(row_fields_info_);
-  while (1) {
-    MYSQL_ROW row;
-    int status = mysql_fetch_row_nonblocking(mysql_query_result_, &row);
-    if (status != NET_ASYNC_COMPLETE) {
-      waitForSocketActionable();
-      break;
-    }
-    last_row_time_ = chrono::high_resolution_clock::now();
-    if (row == nullptr) {
-      query_finished = true;
-      break;
-    }
-    unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_);
-    appendRow(&row_block, row, field_lengths, row_fields_info_->numFields());
-    ++num_rows_seen_;
-  }
-
-  // Process fetched rows
-  if (!row_block.empty()) {
-    specializedRowsFetched(std::move(row_block));
-  }
-
-  // Wait for socket actionable
-  return query_finished;
-}
-
-bool FetchOperation::readMysqlFields() {
-  std::vector<string> field_names;
-  folly::StringKeyedUnorderedMap<int> field_name_map;
-  std::vector<uint64_t> mysql_field_flags;
-  std::vector<enum_field_types> mysql_field_types;
-
-  field_names.clear();
-  field_name_map.clear();
-  if (num_fields_ == 0) {
-    return false;
-  }
-
-  field_names.reserve(num_fields_);
-  for (int i = 0; i < num_fields_; ++i) {
-    MYSQL_FIELD* mysql_field = mysql_fetch_field(mysql_query_result_);
-    if (mysql_field) {
-      field_names.emplace_back(mysql_field->name, mysql_field->name_length);
-      mysql_field_flags.push_back(mysql_field->flags);
-      mysql_field_types.push_back(mysql_field->type);
-      field_name_map[mysql_field->name] = i;
-    }
-  }
-  row_fields_info_ = std::make_shared<RowFields>(std::move(field_name_map),
-                                                 std::move(field_names),
-                                                 std::move(mysql_field_flags),
-                                                 std::move(mysql_field_types));
-
-  return true;
 }
 
 void FetchOperation::specializedTimeoutTriggered() {
   auto delta = chrono::high_resolution_clock::now() - start_time_;
-  auto row_delta = chrono::high_resolution_clock::now() - last_row_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
-  int64_t row_delta_micros =
-      chrono::duration_cast<chrono::microseconds>(row_delta).count();
   std::string msg;
-  if (num_rows_seen_ > 0) {
+  if (rowStream() && rowStream()->numRowsSeen()) {
     msg = folly::stringPrintf(
-        "async query timed out (%lu rows, took %.2fms, "
-        "last row time %.2fms)",
-        num_rows_seen_,
-        delta_micros / 1000.0,
-        row_delta_micros / 1000.0);
+        "async query timed out (%lu rows, took %.2fms, ",
+        rowStream()->numRowsSeen(),
+        delta_micros / 1000.0);
   } else {
     msg =
         folly::stringPrintf("async query timed out (no rows seen, took %.2fms)",
@@ -863,11 +869,12 @@ void FetchOperation::specializedCompleteOperation() {
   if (result_ == OperationResult::Succeeded) {
     // set last successful query time to MysqlConnectionHolder
     conn()->setLastActivityTime(chrono::high_resolution_clock::now());
-    async_client()->logQuerySuccess(elapsed(),
-                                    query_type_,
-                                    num_queries_executed_,
-                                    rendered_multi_query_,
-                                    *conn().get());
+    async_client()->logQuerySuccess(
+        elapsed(),
+        query_type_,
+        num_queries_executed_,
+        rendered_multi_query_,
+        *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result_ == OperationResult::Cancelled) {
@@ -875,26 +882,22 @@ void FetchOperation::specializedCompleteOperation() {
     } else if (result_ == OperationResult::TimedOut) {
       reason = db::FailureReason::TIMEOUT;
     }
-    async_client()->logQueryFailure(reason,
-                                    elapsed(),
-                                    query_type_,
-                                    num_queries_executed_,
-                                    rendered_multi_query_,
-                                    *conn().get());
+    async_client()->logQueryFailure(
+        reason,
+        elapsed(),
+        query_type_,
+        num_queries_executed_,
+        rendered_multi_query_,
+        *conn().get());
   }
 
-  // Probably cancelled and wasn't initialized
-  if (query_result_ == nullptr) {
-    query_result_ = folly::make_unique<QueryResult>(num_queries_executed_);
+  if (result_ != OperationResult::Succeeded) {
+    notifyFailure(result_);
   }
-  query_result_->setOperationResult(result_);
+  // This frees the `Operation::wait()` call. We need to free it here because
+  // callback can stealConnection and we can't notify anymore.
   conn()->notify();
-}
-
-FetchOperation::~FetchOperation() {
-  if (mysql_query_result_) {
-    mysql_free_result(mysql_query_result_);
-  }
+  notifyOperationCompleted(result_);
 }
 
 void FetchOperation::mustSucceed() {
@@ -905,126 +908,158 @@ void FetchOperation::mustSucceed() {
   }
 }
 
-QueryOperation::QueryOperation(std::unique_ptr<ConnectionProxy>&& conn,
-                               Query&& query)
+QueryOperation::QueryOperation(
+    std::unique_ptr<ConnectionProxy>&& conn,
+    Query&& query)
     : FetchOperation(std::move(conn), db::QueryType::MultiQuery),
-      query_(std::move(query)) {}
+      query_(std::move(query)),
+      query_result_(folly::make_unique<QueryResult>(0)) {}
 
 folly::fbstring QueryOperation::renderedQuery() {
   CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   return query_.render(conn()->mysql());
 }
 
-void QueryOperation::specializedInitQuery() {
-  // Doesn't have anything to initialize
+void QueryOperation::notifyInitQuery() {
+  auto* row_stream = rowStream();
+  if (row_stream) {
+    // Populate RowFields, this is the metadata of rows.
+    query_result_->setRowFields(
+        row_stream->getEphemeralRowFields()->makeBufferedFields());
+  }
 }
 
-void QueryOperation::specializedRowsFetched(RowBlock&& row_block) {
-  if (query_callback_) {
+void QueryOperation::notifyRowsReady() {
+  // QueryOperation acts as consumer of FetchOperation, and will buffer the
+  // result.
+  auto row_block =
+      makeRowBlockFromStream(query_result_->getSharedRowFields(), rowStream());
+
+  // Empty result set
+  if (row_block.numRows() == 0) {
+    return;
+  }
+  if (buffered_query_callback_) {
     query_result_->setPartialRows(std::move(row_block));
-    query_callback_(
+    buffered_query_callback_(
         *this, query_result_.get(), QueryCallbackReason::RowsFetched);
   } else {
     query_result_->appendRowBlock(std::move(row_block));
   }
 }
 
-void QueryOperation::specializedCompleteQuery(bool success, bool more_results) {
+void QueryOperation::notifyQuerySuccess(bool more_results) {
   if (more_results) {
     // Bad usage of QueryOperation, we are going to cancel the query
     cancel_ = true;
+    fetch_action_ = FetchAction::CompleteOperation;
   }
-  if (success) {
-    query_result_->setPartial(false);
-  }
+
+  query_result_->setOperationResult(OperationResult::Succeeded);
+  query_result_->setNumRowsAffected(FetchOperation::currentAffectedRows());
+  query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
+
+  query_result_->setPartial(false);
+
   // We are not going to make callback to user now since this only one query,
   // we make when we finish the operation
-  fetch_action_ = FetchAction::CompleteOperation;
 }
 
-void QueryOperation::specializedCompleteOperation() {
-  // Do parent first
-  FetchOperation::specializedCompleteOperation();
+void QueryOperation::notifyFailure(OperationResult result) {
+  // Next call will be to notify user
+  query_result_->setOperationResult(result);
+}
 
-  if (query_callback_) {
-    query_callback_(*this,
-                    query_result_.get(),
-                    result_ == OperationResult::Succeeded
-                        ? QueryCallbackReason::Success
-                        : QueryCallbackReason::Failure);
+void QueryOperation::notifyOperationCompleted(OperationResult result) {
+  query_result_->setOperationResult(result);
+
+  auto reason =
+      (result == OperationResult::Succeeded ? QueryCallbackReason::Success
+                                            : QueryCallbackReason::Failure);
+
+  if (buffered_query_callback_) {
+    buffered_query_callback_(*this, query_result_.get(), reason);
     // Release callback since no other callbacks will be made
-    query_callback_ = nullptr;
+    buffered_query_callback_ = nullptr;
   }
 }
 
-QueryOperation::~QueryOperation() {}
-
 MultiQueryOperation::MultiQueryOperation(
-    std::unique_ptr<ConnectionProxy>&& conn, std::vector<Query>&& queries)
+    std::unique_ptr<ConnectionProxy>&& conn,
+    std::vector<Query>&& queries)
     : FetchOperation(std::move(conn), db::QueryType::MultiQuery),
-      queries_(std::move(queries)) {}
+      queries_(std::move(queries)),
+      current_query_result_(folly::make_unique<QueryResult>(0)) {}
 
 folly::fbstring MultiQueryOperation::renderedQuery() {
   CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   return Query::renderMultiQuery(conn()->mysql(), queries_);
 }
 
-void MultiQueryOperation::specializedInitQuery() {
-  // Doesn't have anything to initialize
+void MultiQueryOperation::notifyInitQuery() {
+  auto* row_stream = rowStream();
+  if (row_stream) {
+    // Populate RowFields, this is the metadata of rows.
+    current_query_result_->setRowFields(
+        row_stream->getEphemeralRowFields()->makeBufferedFields());
+  }
 }
 
-void MultiQueryOperation::specializedRowsFetched(RowBlock&& row_block) {
-  if (query_callback_) {
-    query_result_->setPartialRows(std::move(row_block));
-    query_callback_(
-        *this, query_result_.get(), QueryCallbackReason::RowsFetched);
+void MultiQueryOperation::notifyRowsReady() {
+  // Create buffered RowBlock
+  auto row_block = makeRowBlockFromStream(
+      current_query_result_->getSharedRowFields(), rowStream());
+  if (row_block.numRows() == 0) {
+    return;
+  }
+
+  if (buffered_query_callback_) {
+    current_query_result_->setPartialRows(std::move(row_block));
+    buffered_query_callback_(
+        *this, current_query_result_.get(), QueryCallbackReason::RowsFetched);
   } else {
-    query_result_->appendRowBlock(std::move(row_block));
+    current_query_result_->appendRowBlock(std::move(row_block));
   }
 }
 
-void MultiQueryOperation::specializedCompleteQuery(bool success,
-                                                   bool more_results) {
-  query_result_->setPartial(false);
-  if (success) {
-    if (query_callback_) {
-      query_callback_(
-          *this, query_result_.get(), QueryCallbackReason::QueryBoundary);
-    }
-    // If it failed we don't make the callback here, we wait to callback in
-    // completeOperation
-  }
-  if (!query_callback_ && more_results) {
-    // leave the last one to emplace_back in specializedCompleteOperation
-    query_results_.emplace_back(std::move(*query_result_.get()));
-    query_result_.reset();
-  }
+void MultiQueryOperation::notifyFailure(OperationResult result) {
+  // This needs to be called before notifyOperationCompleted, because
+  // in non-callback mode we "notify" the conditional variable in `Connection`.
+  current_query_result_->setOperationResult(result);
 }
 
-void MultiQueryOperation::specializedCompleteOperation() {
-  // If there is no query callback, we need to move the last row in
-  // before calling specializedCompleteOperation -- otherwise,
-  // specializedCompleteOperation will notify the operation as being
-  // complete while we then try to mutate query_results_.
-  if (!query_callback_) {
-    if (result_ == OperationResult::Succeeded) {
-      query_results_.emplace_back(std::move(*query_result_.get()));
-      query_result_.reset();
-    }
+void MultiQueryOperation::notifyQuerySuccess(bool) {
+  current_query_result_->setPartial(false);
+
+  current_query_result_->setOperationResult(OperationResult::Succeeded);
+  current_query_result_->setNumRowsAffected(
+      FetchOperation::currentAffectedRows());
+  current_query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
+
+  if (buffered_query_callback_) {
+    buffered_query_callback_(
+        *this, current_query_result_.get(), QueryCallbackReason::QueryBoundary);
+  } else {
+    query_results_.emplace_back(std::move(*current_query_result_.get()));
   }
+  current_query_result_ =
+      folly::make_unique<QueryResult>(current_query_result_->queryNum() + 1);
+}
 
-  // Now complete the operation.
-  FetchOperation::specializedCompleteOperation();
-
+void MultiQueryOperation::notifyOperationCompleted(OperationResult result) {
+  if (!buffered_query_callback_) { // No callback to be done
+    return;
+  }
+  // Nothing that changes the non-callback state is safe to be done here.
+  current_query_result_->setOperationResult(result);
+  auto reason =
+      (result == OperationResult::Succeeded ? QueryCallbackReason::Success
+                                            : QueryCallbackReason::Failure);
   // If there was a callback, it fires now.
-  if (query_callback_) {
-    query_callback_(*this,
-                    query_result_.get(),
-                    result_ == OperationResult::Succeeded
-                        ? QueryCallbackReason::Success
-                        : QueryCallbackReason::Failure);
+  if (buffered_query_callback_) {
+    buffered_query_callback_(*this, current_query_result_.get(), reason);
     // Release callback since no other callbacks will be made
-    query_callback_ = nullptr;
+    buffered_query_callback_ = nullptr;
   }
 }
 
@@ -1038,37 +1073,71 @@ folly::StringPiece Operation::stateString() const {
   return Operation::toString(state());
 }
 
+folly::StringPiece Operation::toString(QueryCallbackReason reason) {
+  switch (reason) {
+    case QueryCallbackReason::RowsFetched:
+      return "RowsFetched";
+    case QueryCallbackReason::QueryBoundary:
+      return "QueryBoundary";
+    case QueryCallbackReason::Failure:
+      return "Failure";
+    case QueryCallbackReason::Success:
+      return "Success";
+  }
+  LOG(DFATAL) << "unable to convert reason to string: "
+              << static_cast<int>(reason);
+  return "Unknown reason";
+}
+
 folly::StringPiece Operation::toString(OperationState state) {
   switch (state) {
-  case OperationState::Unstarted:
-    return "Unstarted";
-  case OperationState::Pending:
-    return "Pending";
-  case OperationState::Cancelling:
-    return "Cancelling";
-  case OperationState::Completed:
-    return "Completed";
+    case OperationState::Unstarted:
+      return "Unstarted";
+    case OperationState::Pending:
+      return "Pending";
+    case OperationState::Cancelling:
+      return "Cancelling";
+    case OperationState::Completed:
+      return "Completed";
   }
-  DCHECK(false)
-      << "unable to convert state to string: " << static_cast<int>(state);
+  LOG(DFATAL) << "unable to convert state to string: "
+              << static_cast<int>(state);
   return "Unknown state";
 }
 
 folly::StringPiece Operation::toString(OperationResult result) {
   switch (result) {
-  case OperationResult::Succeeded:
-    return "Succeeded";
-  case OperationResult::Unknown:
-    return "Unknown";
-  case OperationResult::Failed:
-    return "Failed";
-  case OperationResult::Cancelled:
-    return "Cancelled";
-  case OperationResult::TimedOut:
-    return "TimedOut";
+    case OperationResult::Succeeded:
+      return "Succeeded";
+    case OperationResult::Unknown:
+      return "Unknown";
+    case OperationResult::Failed:
+      return "Failed";
+    case OperationResult::Cancelled:
+      return "Cancelled";
+    case OperationResult::TimedOut:
+      return "TimedOut";
   }
-  DCHECK(false)
-      << "unable to convert result to string: " << static_cast<int>(result);
+  LOG(DFATAL) << "unable to convert result to string: "
+              << static_cast<int>(result);
+  return "Unknown result";
+}
+
+folly::StringPiece FetchOperation::toString(FetchAction action) {
+  switch (action) {
+    case FetchAction::StartQuery:
+      return "StartQuery";
+    case FetchAction::InitFetch:
+      return "InitFetch";
+    case FetchAction::Fetch:
+      return "Fetch";
+    case FetchAction::CompleteQuery:
+      return "CompleteQuery";
+    case FetchAction::CompleteOperation:
+      return "CompleteOperation";
+  }
+  LOG(DFATAL) << "unable to convert result to string: "
+              << static_cast<int>(action);
   return "Unknown result";
 }
 

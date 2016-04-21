@@ -324,9 +324,10 @@ std::unique_ptr<Connection> AsyncMysqlClient::adoptConnection(
   return conn;
 }
 
-Connection::Connection(AsyncMysqlClient* async_client,
-                       ConnectionKey conn_key,
-                       MYSQL* existing_connection)
+Connection::Connection(
+    AsyncMysqlClient* async_client,
+    ConnectionKey conn_key,
+    MYSQL* existing_connection)
     : conn_key_(conn_key),
       async_client_(async_client),
       socket_handler_(async_client_->getEventBase()),
@@ -415,7 +416,8 @@ std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
 
 template <>
 folly::Future<DbQueryResult> Connection::queryFuture(
-    std::unique_ptr<Connection> conn, Query&& query) {
+    std::unique_ptr<Connection> conn,
+    Query&& query) {
   auto op = beginQuery(std::move(conn), std::move(query));
   return toFuture(op);
 }
@@ -440,7 +442,6 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   return toFuture(op);
 }
-
 
 template <>
 DbQueryResult Connection::query(Query&& query) {

@@ -15,6 +15,45 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
+std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
+  if (num_fields_ == 0) {
+    return nullptr;
+  }
+  std::vector<string> field_names;
+  folly::StringKeyedUnorderedMap<int> field_name_map;
+  std::vector<uint64_t> mysql_field_flags;
+  std::vector<enum_field_types> mysql_field_types;
+
+  field_names.reserve(num_fields_);
+  for (int i = 0; i < num_fields_; ++i) {
+    MYSQL_FIELD* mysql_field = &fields_[i];
+    field_names.emplace_back(mysql_field->name, mysql_field->name_length);
+    mysql_field_flags.push_back(mysql_field->flags);
+    mysql_field_types.push_back(mysql_field->type);
+    field_name_map[mysql_field->name] = i;
+  }
+  return std::make_shared<RowFields>(
+      std::move(field_name_map),
+      std::move(field_names),
+      std::move(mysql_field_flags),
+      std::move(mysql_field_types));
+}
+
+StringPiece EphemeralRow::operator[](size_t col) const {
+  DCHECK_LT(col, row_fields_->numFields());
+  auto length = field_lengths_[col];
+  return StringPiece(mysql_row_[col], mysql_row_[col] + length);
+}
+
+bool EphemeralRow::isNull(size_t col) const {
+  DCHECK_LT(col, row_fields_->numFields());
+  return (mysql_row_[col] == nullptr);
+}
+
+int EphemeralRow::numFields() const {
+  return row_fields_->numFields();
+}
+
 Row::Row(const RowBlock* row_block, size_t row_number)
     : row_block_(row_block), row_number_(row_number) {
   CHECK_LT(row_number, row_block->numRows());

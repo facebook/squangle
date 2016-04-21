@@ -186,6 +186,9 @@ class QueryResult {
   bool succeeded() const;
 
   RowFields* getRowFields() const { return row_fields_info_.get(); }
+  std::shared_ptr<RowFields> getSharedRowFields() const {
+    return row_fields_info_;
+  }
 
   // Only call this if you are in a callback and really want the Rows.
   // If you want to iterate through rows just use the iterator class here.
@@ -295,8 +298,8 @@ class QueryResult {
 
   Iterator end() const { return Iterator(&row_blocks_, row_blocks_.size(), 0); }
 
-  void setRowFields(std::shared_ptr<RowFields>& row_fields_info) {
-    row_fields_info_ = row_fields_info;
+  void setRowFields(std::shared_ptr<RowFields> row_fields_info) {
+    row_fields_info_ = std::move(row_fields_info);
   }
 
   void appendRowBlock(RowBlock&& block) {

@@ -93,10 +93,10 @@ typedef std::function<void(ConnectOperation&)> ConnectCallback;
 // after the callback for the specific operation is called, if one is defined.
 typedef std::function<void(Operation&)> ObserverCallback;
 typedef std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>
-QueryCallback;
+    QueryCallback;
 typedef std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>
-MultiQueryCallback;
+    MultiQueryCallback;
 
 using std::vector;
 using std::string;
@@ -216,11 +216,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // No public constructor.
   virtual ~Operation();
 
-  virtual Operation* run();
+  Operation* run();
 
   // Set a timeout; otherwise FLAGS_async_mysql_timeout_micros is
   // used.
-  virtual Operation* setTimeout(Duration timeout) {
+  Operation* setTimeout(Duration timeout) {
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
     timeout_ = timeout;
     return this;
@@ -266,6 +266,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   static folly::StringPiece toString(OperationState state);
   static folly::StringPiece toString(OperationResult result);
+  static folly::StringPiece toString(QueryCallbackReason reason);
 
   // An Operation can have a folly::dynamic associated with it.  This
   // can represent anything the caller wants to track and is primarily
@@ -495,7 +496,7 @@ class ConnectOperation : public Operation {
   // able to call make_shared.
   ConnectOperation(AsyncMysqlClient* async_client, ConnectionKey conn_key);
 
-  virtual void mustSucceed();
+  void mustSucceed() override;
 
   // Overriding to narrow the return type
   // Each connect attempt will take at most this timeout to retry to acquire
@@ -530,10 +531,10 @@ class ConnectOperation : public Operation {
   virtual void attemptFailed(OperationResult result);
   virtual void attemptSucceeded(OperationResult result);
 
-  virtual ConnectOperation* specializedRun();
-  virtual void socketActionable();
-  virtual void specializedTimeoutTriggered();
-  virtual void specializedCompleteOperation();
+  ConnectOperation* specializedRun() override;
+  void socketActionable() override;
+  void specializedTimeoutTriggered() override;
+  void specializedCompleteOperation() override;
 
   // Removes the Client ref, it can be called by child classes without needing
   // to add them as friend classes of AsyncMysqlClient
@@ -567,11 +568,16 @@ class ConnectOperation : public Operation {
 
 // A fetching operation (query or multiple queries) use the same primary
 // actions. This is an abstract base for this kind of operation.
+// FetchOperation controls the flow of fetching a result:
+//  - When there are rows to be read, it will identify it and call the
+//  subclasses for them to consume the state;
+//  - When there are no rows to be read or an error happened, proper
+//  notifications will be made as well.
 class FetchOperation : public Operation {
  public:
-  virtual ~FetchOperation();
+  virtual ~FetchOperation() = default;
 
-  virtual void mustSucceed();
+  void mustSucceed() override;
 
   // Return the query as it was sent to MySQL (i.e., for a single
   // query, the query itself, but for multiquery, all queries
@@ -587,11 +593,66 @@ class FetchOperation : public Operation {
     return num_queries_executed_;
   }
 
- protected:
-  virtual FetchOperation* specializedRun();
+  // This class encapsulates the operations and access to the MySQL ResultSet.
+  // When the consumer receives a notification for RowsFetched, it should
+  // consume `rowStream`:
+  //   while (rowStream->hasNext()) {
+  //     EphemeralRow row = consumeRow();
+  //   }
+  // The state within RowStream is also used for FetchOperation to know whether
+  // or not to go to next query.
+  class RowStream {
+   public:
+    explicit RowStream(MYSQL_RES* mysql_query_result);
 
-  explicit FetchOperation(std::unique_ptr<ConnectionProxy>&& conn,
-                          db::QueryType query_type);
+    ~RowStream();
+
+    EphemeralRow consumeRow();
+
+    bool hasNext();
+
+    EphemeralRowFields* getEphemeralRowFields() {
+      return &row_fields_;
+    }
+
+   private:
+    friend class FetchOperation;
+    bool slurp();
+    // user shouldn't take information from this
+    bool hasQueryFinished() {
+      return query_finished_;
+    }
+    uint64_t numRowsSeen() const {
+      return num_rows_seen_;
+    }
+
+    bool query_finished_ = false;
+    uint64_t num_rows_seen_ = 0;
+
+    // All memory lifetime is guaranteed by FetchOpeation.
+    MYSQL_RES* mysql_query_result_ = nullptr;
+    std::unique_ptr<EphemeralRow> current_row_;
+    EphemeralRowFields row_fields_;
+  };
+
+  // Streaming calls. Should only be called when using the StreamCallback.
+  // TODO#10716355: We shouldn't let these functions visible for non-stream
+  // mode. Leaking for tests.
+  uint64_t currentLastInsertId();
+  uint64_t currentAffectedRows();
+
+  int numCurrentQuery() const {
+    return num_current_query_;
+  }
+
+  RowStream* rowStream();
+
+ protected:
+  FetchOperation* specializedRun() override;
+
+  explicit FetchOperation(
+      std::unique_ptr<ConnectionProxy>&& conn,
+      db::QueryType query_type);
 
   enum class FetchAction {
     StartQuery,
@@ -601,49 +662,54 @@ class FetchOperation : public Operation {
     CompleteOperation
   };
 
+  void setFetchAction(FetchAction action);
+  static folly::StringPiece toString(FetchAction action);
+
   // In socket actionable it is analyzed the action that is required to continue
   // the operation. For example, if the fetch action is StartQuery, it runs
   // query or requests more results depending if it had already ran or not the
   // query. The same process happens for the other FetchActions.
   // The action member can be changed in other member functions called in
   // socketActionable to keep the fetching flow running.
-  virtual void socketActionable();
-  virtual void specializedTimeoutTriggered();
-  virtual void specializedCompleteOperation();
+  void socketActionable() override;
+  void specializedTimeoutTriggered() override;
+  void specializedCompleteOperation() override;
 
   // Overridden in child classes and invoked when the Query fetching
   // has done specific actions that might be needed for report (callbacks,
   // store fetched data, initialize data).
-  virtual void specializedInitQuery() = 0;
-  virtual void specializedRowsFetched(RowBlock&& row_block) = 0;
-  virtual void specializedCompleteQuery(bool success, bool more_results) = 0;
+  virtual void notifyInitQuery() = 0;
+  virtual void notifyRowsReady() = 0;
+  virtual void notifyQuerySuccess(bool more_results) = 0;
+  virtual void notifyFailure(OperationResult result) = 0;
+  virtual void notifyOperationCompleted(OperationResult result) = 0;
 
   virtual folly::fbstring renderedQuery() = 0;
 
-  // Current query data
-  int num_fields_;
-  uint64_t num_rows_seen_;
-  bool cancel_;
-  int num_queries_executed_;
+  FetchAction fetch_action_ = FetchAction::StartQuery;
 
-  std::shared_ptr<RowFields> row_fields_info_;
-  std::unique_ptr<QueryResult> query_result_;
+  bool cancel_ = false;
 
-  FetchAction fetch_action_;
-
-  folly::fbstring rendered_multi_query_;
+ private:
+  // Checks if the current thread has access to stream, or result data.
+  bool isStreamAccessAllowed();
 
   // For stats purposes
   db::QueryType query_type_;
 
- private:
-  bool slurpRows();
-  bool readMysqlFields();
+  // Current query data
+  std::unique_ptr<RowStream> current_row_stream_;
+  bool query_executed_ = false;
+  // TODO: Rename `executed` to `succeeded`
+  int num_queries_executed_ = 0;
+  // During a `notify` call, the consumer might want to know the index of the
+  // current query, that's what `num_current_query_` is counting.
+  int num_current_query_ = 0;
 
-  bool query_executed_;
+  uint64_t current_affected_rows_ = 0;
+  uint64_t current_last_insert_id_ = 0;
 
-  MYSQL_RES* mysql_query_result_;
-  Timepoint last_row_time_;
+  folly::fbstring rendered_multi_query_;
 };
 
 // An operation representing a query.  If a callback is set, it
@@ -654,9 +720,11 @@ class FetchOperation : public Operation {
 // Constructed via Connection::beginQuery.
 class QueryOperation : public FetchOperation {
  public:
-  virtual ~QueryOperation();
+  virtual ~QueryOperation() = default;
 
-  void setCallback(QueryCallback cb) { query_callback_ = cb; }
+  void setCallback(QueryCallback cb) {
+    buffered_query_callback_ = cb;
+  }
 
   // Steal all rows.  Only valid if there is no callback.  Inefficient
   // for large result sets.
@@ -671,16 +739,22 @@ class QueryOperation : public FetchOperation {
   }
 
   // Returns the Query of this operation
-  const Query& getQuery() const { return query_; }
+  const Query& getQuery() const {
+    return query_;
+  }
 
   // Steal all rows.  Only valid if there is no callback.  Inefficient
   // for large result sets.
   vector<RowBlock>&& stealRows() { return query_result_->stealRows(); }
 
-  const vector<RowBlock>& rows() const { return query_result_->rows(); }
+  const vector<RowBlock>& rows() const {
+    return query_result_->rows();
+  }
 
   // Last insert id (aka mysql_insert_id).
-  uint64_t lastInsertId() const { return query_result_->lastInsertId(); }
+  uint64_t lastInsertId() const {
+    return query_result_->lastInsertId();
+  }
 
   // Number of rows affected (aka mysql_affected_rows).
   uint64_t numRowsAffected() const { return query_result_->numRowsAffected(); }
@@ -706,19 +780,19 @@ class QueryOperation : public FetchOperation {
   }
 
  protected:
-  virtual folly::fbstring renderedQuery();
+  folly::fbstring renderedQuery() override;
 
-  virtual void specializedInitQuery();
-  virtual void specializedRowsFetched(RowBlock&& row_block);
-  virtual void specializedCompleteQuery(bool success, bool more_results);
-
-  // Calls the FetchOperation specializedCompleteOperation and then does
-  // callbacks if needed
-  virtual void specializedCompleteOperation();
+  void notifyInitQuery() override;
+  void notifyRowsReady() override;
+  void notifyQuerySuccess(bool more_results) override;
+  void notifyFailure(OperationResult result) override;
+  void notifyOperationCompleted(OperationResult result) override;
 
  private:
   Query query_;
-  QueryCallback query_callback_;
+  QueryCallback buffered_query_callback_;
+
+  std::unique_ptr<QueryResult> query_result_;
 
   friend class Connection;
 };
@@ -737,7 +811,9 @@ class MultiQueryOperation : public FetchOperation {
   // Set our callback.  This is invoked multiple times -- once for
   // every RowBatch and once, with nullptr for the RowBatch,
   // indicating the query is complete.
-  void setCallback(MultiQueryCallback cb) { query_callback_ = cb; }
+  void setCallback(MultiQueryCallback cb) {
+    buffered_query_callback_ = cb;
+  }
 
   // Steal all rows. Only valid if there is no callback. Inefficient
   // for large result sets.
@@ -766,8 +842,9 @@ class MultiQueryOperation : public FetchOperation {
 
   // Don't call this; it's public strictly for Connection to be able
   // to call make_shared.
-  MultiQueryOperation(std::unique_ptr<ConnectionProxy>&& connection,
-                      std::vector<Query>&& queries);
+  MultiQueryOperation(
+      std::unique_ptr<ConnectionProxy>&& connection,
+      std::vector<Query>&& queries);
 
   // Overriding to narrow the return type
   MultiQueryOperation* setTimeout(Duration timeout) {
@@ -781,23 +858,28 @@ class MultiQueryOperation : public FetchOperation {
   }
 
  protected:
-  virtual folly::fbstring renderedQuery();
+  folly::fbstring renderedQuery() override;
 
-  virtual void specializedInitQuery();
-  virtual void specializedRowsFetched(RowBlock&& row_block);
-  virtual void specializedCompleteQuery(bool success, bool more_results);
+  void notifyInitQuery() override;
+  void notifyRowsReady() override;
+  void notifyQuerySuccess(bool more_results) override;
+  void notifyFailure(OperationResult result) override;
+  void notifyOperationCompleted(OperationResult result) override;
 
   // Calls the FetchOperation specializedCompleteOperation and then does
   // callbacks if needed
-  virtual void specializedCompleteOperation();
 
  private:
   const std::vector<Query> queries_;
-  MultiQueryCallback query_callback_;
+  MultiQueryCallback buffered_query_callback_;
 
   // Storage fields for every statement in the query
   // Only to be used if there is no callback set.
   std::vector<QueryResult> query_results_;
+  // Buffer to trans to `query_results_` and for buffered callback.
+  std::unique_ptr<QueryResult> current_query_result_;
+
+  int num_current_query_ = 0;
 
   friend class Connection;
 };

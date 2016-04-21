@@ -200,7 +200,7 @@ class RowBlock {
  public:
   class Iterator;
 
-  explicit RowBlock(std::shared_ptr<RowFields>& row_fields)
+  explicit RowBlock(std::shared_ptr<RowFields> row_fields)
       : row_fields_info_(row_fields) {}
 
   ~RowBlock() {}
@@ -347,6 +347,55 @@ class RowBlock {
 
   RowBlock(const RowBlock&) = delete;
   RowBlock& operator=(const RowBlock&) = delete;
+};
+
+class EphemeralRowFields {
+ public:
+  EphemeralRowFields(MYSQL_FIELD* fields, int num_fields)
+      : fields_(fields), num_fields_(num_fields) {}
+
+  int numFields() const {
+    return num_fields_;
+  }
+
+  std::shared_ptr<RowFields> makeBufferedFields() const;
+
+  EphemeralRowFields(EphemeralRowFields const&) = delete;
+  EphemeralRowFields& operator=(EphemeralRowFields const&) = delete;
+
+ private:
+  MYSQL_FIELD* fields_;
+  int num_fields_;
+};
+
+class EphemeralRow {
+ public:
+  EphemeralRow(
+      MYSQL_ROW mysql_row,
+      unsigned long* field_lengths,
+      EphemeralRowFields* row_fields)
+      : mysql_row_(mysql_row),
+        field_lengths_(field_lengths),
+        row_fields_(row_fields) {}
+
+  // Beginning simple, just give the basic indexing.
+  StringPiece operator[](size_t col) const;
+
+  bool isNull(size_t col) const;
+
+  int numFields() const;
+
+  EphemeralRow(EphemeralRow const&) = delete;
+  EphemeralRow& operator=(EphemeralRow const&) = delete;
+
+  EphemeralRow(EphemeralRow&&) = default;
+  EphemeralRow& operator=(EphemeralRow&&) = default;
+
+ private:
+  MYSQL_ROW mysql_row_;
+  unsigned long* field_lengths_;
+
+  EphemeralRowFields* row_fields_;
 };
 
 // Declarations of specializations and trivial implementations.
