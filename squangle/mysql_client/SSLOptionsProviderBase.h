@@ -2,10 +2,11 @@
 
 #pragma once
 
-#include <folly/futures/Future.h>
-#include <folly/io/async/SSLContext.h>
 #include <wangle/client/ssl/SSLSession.h>
-#include "squangle/base/ConnectionKey.h"
+
+namespace folly {
+class SSLContext;
+}
 
 namespace facebook {
 namespace common {
