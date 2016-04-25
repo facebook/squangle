@@ -386,6 +386,15 @@ std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
       std::move(queries));
 }
 
+template <>
+std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
+    std::unique_ptr<Connection> conn,
+    std::vector<Query>&& queries) {
+  return beginAnyQuery<MultiQueryStreamOperation>(
+      folly::make_unique<Operation::OwnedConnection>(std::move(conn)),
+      std::move(queries));
+}
+
 template <typename QueryType, typename QueryArg>
 std::shared_ptr<QueryType> Connection::beginAnyQuery(
     std::unique_ptr<Operation::ConnectionProxy> conn_ptr, QueryArg&& query) {
@@ -412,6 +421,14 @@ std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
     std::unique_ptr<Connection> conn, Query&& query) {
   return Connection::beginMultiQuery(std::move(conn),
                                      std::vector<Query>{std::move(query)});
+}
+
+template <>
+std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
+    std::unique_ptr<Connection> conn,
+    Query&& query) {
+  return Connection::beginMultiQueryStreaming(
+      std::move(conn), std::vector<Query>{std::move(query)});
 }
 
 template <>

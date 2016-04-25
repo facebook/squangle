@@ -70,6 +70,7 @@ class AsyncMysqlClient;
 class QueryResult;
 class ConnectOperation;
 class FetchOperation;
+class MultiQueryStreamOperation;
 class QueryOperation;
 class MultiQueryOperation;
 class Operation;
@@ -80,6 +81,8 @@ class ConnectionOptions;
 class SSLOptionsProviderBase;
 
 enum class QueryCallbackReason;
+
+enum class StreamState;
 
 // Simplify some std::chrono types.
 typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
@@ -119,6 +122,8 @@ enum class OperationResult { Unknown, Succeeded, Failed, Cancelled, TimedOut, };
 // query failed (OperationResult is Failed) we use Failure. Success is for
 // indicating that all queries have been successfully fetched.
 enum class QueryCallbackReason { RowsFetched, QueryBoundary, Failure, Success };
+
+enum class StreamState { InitQuery, RowsReady, QueryEnded, Failure, Success };
 
 class ConnectionOptions {
  public:
@@ -267,6 +272,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   static folly::StringPiece toString(OperationState state);
   static folly::StringPiece toString(OperationResult result);
   static folly::StringPiece toString(QueryCallbackReason reason);
+  static folly::StringPiece toString(StreamState state);
 
   // An Operation can have a folly::dynamic associated with it.  This
   // can represent anything the caller wants to track and is primarily
@@ -570,9 +576,14 @@ class ConnectOperation : public Operation {
 // actions. This is an abstract base for this kind of operation.
 // FetchOperation controls the flow of fetching a result:
 //  - When there are rows to be read, it will identify it and call the
-//  subclasses for them to consume the state;
+//  subclasses
+// for them to consume the state;
 //  - When there are no rows to be read or an error happened, proper
-//  notifications will be made as well.
+//  notifications
+// will be made as well.
+// This is the only Operation that can be paused, and the pause should only be
+// called from within `notify` calls. That will allow another thread to read the
+// state.
 class FetchOperation : public Operation {
  public:
   virtual ~FetchOperation() = default;
@@ -647,6 +658,14 @@ class FetchOperation : public Operation {
 
   RowStream* rowStream();
 
+  // Stalls the FetchOperation until `resume` is called.
+  // This is used to allow another thread to access the socket functions.
+  void pauseForConsumer();
+
+  // Resumes the operation to the action it was before `pause` was called.
+  // Should only be called after pause.
+  void resume();
+
  protected:
   FetchOperation* specializedRun() override;
 
@@ -658,6 +677,7 @@ class FetchOperation : public Operation {
     StartQuery,
     InitFetch,
     Fetch,
+    WaitForConsumer,
     CompleteQuery,
     CompleteOperation
   };
@@ -686,13 +706,13 @@ class FetchOperation : public Operation {
 
   virtual folly::fbstring renderedQuery() = 0;
 
-  FetchAction fetch_action_ = FetchAction::StartQuery;
-
   bool cancel_ = false;
 
  private:
+  friend class MultiQueryStreamHandler;
   // Checks if the current thread has access to stream, or result data.
   bool isStreamAccessAllowed();
+  bool isPaused();
 
   // For stats purposes
   db::QueryType query_type_;
@@ -709,7 +729,51 @@ class FetchOperation : public Operation {
   uint64_t current_affected_rows_ = 0;
   uint64_t current_last_insert_id_ = 0;
 
+  // When the Fetch gets paused, active fetch action moves to `WaitForConsumer`
+  // and the action that got paused gets saved so tat `resume` can set it
+  // properly afterwards.
+  FetchAction active_fetch_action_ = FetchAction::StartQuery;
+  FetchAction paused_action_ = FetchAction::StartQuery;
+
   folly::fbstring rendered_multi_query_;
+};
+
+// This operation only supports one mode: streaming callback. This is a
+// simple layer on top of FetchOperation to adapt from `notify` to
+// StreamCallback.
+// This is an experimental class. Please don't use directly.
+class MultiQueryStreamOperation : public FetchOperation {
+ public:
+  virtual ~MultiQueryStreamOperation() = default;
+
+  typedef std::function<void(FetchOperation*, StreamState)> Callback;
+
+  void setCallback(Callback sc) {
+    stream_callback_ = sc;
+  }
+
+  void notifyInitQuery() override;
+  void notifyRowsReady() override;
+  void notifyQuerySuccess(bool more_results) override;
+  void notifyFailure(OperationResult result) override;
+  void notifyOperationCompleted(OperationResult result) override;
+
+  folly::fbstring renderedQuery() override;
+
+  // Overriding to narrow the return type
+  MultiQueryStreamOperation* setTimeout(Duration timeout) {
+    Operation::setTimeout(timeout);
+    return this;
+  }
+
+  MultiQueryStreamOperation(
+      std::unique_ptr<ConnectionProxy>&& connection,
+      std::vector<Query>&& queries);
+
+ private:
+  const std::vector<Query> queries_;
+
+  Callback stream_callback_;
 };
 
 // An operation representing a query.  If a callback is set, it

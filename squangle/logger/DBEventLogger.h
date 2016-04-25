@@ -33,6 +33,7 @@ enum class QueryType {
   Unknown, // Default value
   SingleQuery,
   MultiQuery,
+  StreamMultiQuery,
 };
 
 typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
@@ -101,6 +102,8 @@ class DBLoggerBase {
       return "SingleQuery";
     case QueryType::MultiQuery:
       return "MultiQuery";
+    case QueryType::StreamMultiQuery:
+      return "StreamMultiQuery";
     default:
       return "Unknown";
     }

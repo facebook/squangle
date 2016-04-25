@@ -425,6 +425,12 @@ class Connection {
     return op;
   }
 
+  // Experimental
+  template <typename... Args>
+  static std::shared_ptr<MultiQueryStreamOperation> beginMultiQueryStreaming(
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
+
   // Synchronous calls
   template <typename... Args>
   DbQueryResult query(Args&&... args);
@@ -584,6 +590,7 @@ class Connection {
   friend class FetchOperation;
   friend class QueryOperation;
   friend class MultiQueryOperation;
+  friend class MultiQueryStreamOperation;
 
   ConnectionSocketHandler* socketHandler() { return &socket_handler_; }
 

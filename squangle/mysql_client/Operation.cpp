@@ -582,7 +582,13 @@ FetchOperation::FetchOperation(
     : Operation(std::move(conn)), query_type_(query_type) {}
 
 bool FetchOperation::isStreamAccessAllowed() {
-  return async_client()->threadId() == std::this_thread::get_id();
+  // XOR if isPaused or the caller is coming from IO Thread
+  return isPaused() !=
+      (async_client()->threadId() == std::this_thread::get_id());
+}
+
+bool FetchOperation::isPaused() {
+  return active_fetch_action_ == FetchAction::WaitForConsumer;
 }
 
 FetchOperation* FetchOperation::specializedRun() {
@@ -653,6 +659,14 @@ bool FetchOperation::RowStream::slurp() {
   return true;
 }
 
+void FetchOperation::setFetchAction(FetchAction action) {
+  if (isPaused()) {
+    paused_action_ = action;
+  } else {
+    active_fetch_action_ = action;
+  }
+}
+
 uint64_t FetchOperation::currentLastInsertId() {
   CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
   return current_last_insert_id_;
@@ -670,12 +684,14 @@ FetchOperation::RowStream* FetchOperation::rowStream() {
 
 void FetchOperation::socketActionable() {
   CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
   // This loop runs the fetch actions required to successfully execute query,
   // request next results, fetch results, identify errors and complete operation
   // and queries.
   // All callbacks are done in the `notify` methods that children must
-  // override.
+  // override. During callbacks for actions `Fetch` and `CompleteQuery`,
+  // the consumer is allowed to pause the operation.
   // Some actions may request an action above it (like CompleteQuery may request
   // StartQuery) this is why we use this loop.
   while (1) {
@@ -688,7 +704,7 @@ void FetchOperation::socketActionable() {
     //  - CompleteOperation: if it fails to execute query or request next
     //                       results.
     //  - InitFetch: no errors during results request, so we initiate fetch.
-    if (fetch_action_ == FetchAction::StartQuery) {
+    if (active_fetch_action_ == FetchAction::StartQuery) {
       int error = 0;
       int status = 0;
 
@@ -712,9 +728,9 @@ void FetchOperation::socketActionable() {
       current_affected_rows_ = 0;
       query_executed_ = true;
       if (error) {
-        fetch_action_ = FetchAction::CompleteQuery;
+        active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
-        fetch_action_ = FetchAction::InitFetch;
+        active_fetch_action_ = FetchAction::InitFetch;
       }
     }
 
@@ -726,22 +742,22 @@ void FetchOperation::socketActionable() {
     //  - Fetch: there are rows to fetch in this query
     //  - CompleteQuery: no rows to fetch (complete query will read rowsAffected
     //                   and lastInsertId to add to result
-    if (fetch_action_ == FetchAction::InitFetch) {
+    if (active_fetch_action_ == FetchAction::InitFetch) {
       auto* mysql_query_result = mysql_use_result(conn()->mysql());
       auto num_fields = mysql_field_count(conn()->mysql());
 
       // Check to see if this an empty query or an error
       if (!mysql_query_result && num_fields > 0) {
         // Failure. CompleteQuery will read errors.
-        fetch_action_ = FetchAction::CompleteQuery;
+        active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         if (num_fields > 0) {
           current_row_stream_ =
               folly::make_unique<RowStream>(mysql_query_result);
 
-          fetch_action_ = FetchAction::Fetch;
+          active_fetch_action_ = FetchAction::Fetch;
         } else {
-          fetch_action_ = FetchAction::CompleteQuery;
+          active_fetch_action_ = FetchAction::CompleteQuery;
         }
         notifyInitQuery();
       }
@@ -750,13 +766,25 @@ void FetchOperation::socketActionable() {
     // This action is going to stick around until all rows are fetched or an
     // error occurs. When the RowStream is ready, we notify the subclasses for
     // them to consume it.
+    // If `pause` is called during the callback and the stream is consumed then,
+    // `row_stream_` is checked and we skip to the next action `CompleteQuery`.
     // If row_stream_ isn't ready, we wait for socket actionable.
     // Next Actions:
     //  - Fetch: in case it needs to fetch more rows, we break the loop and wait
     //           for socketActionable to be called again
     //  - CompleteQuery: an error occurred or rows finished to fetch
-    if (fetch_action_ == FetchAction::Fetch) {
+    //  - WaitForConsumer: in case `pause` is called during `notifyRowsReady`
+    if (active_fetch_action_ == FetchAction::Fetch) {
       DCHECK(current_row_stream_ != nullptr);
+      // Try to catch when the user didn't pause or consumed the rows
+      if (current_row_stream_->current_row_) {
+        // This should help
+        LOG(ERROR) << "Rows not consumed. Perhaps missing `pause`?";
+        cancel_ = true;
+        active_fetch_action_ = FetchAction::CompleteQuery;
+        continue;
+      }
+
       // When the query finished, `is_ready` is true, but there are no rows.
       bool is_ready = current_row_stream_->slurp();
       if (!is_ready) {
@@ -764,7 +792,7 @@ void FetchOperation::socketActionable() {
         break;
       }
       if (current_row_stream_->hasQueryFinished()) {
-        fetch_action_ = FetchAction::CompleteQuery;
+        active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         notifyRowsReady();
       }
@@ -774,26 +802,29 @@ void FetchOperation::socketActionable() {
     // here the final checks and data are gathered for the current query.
     // It checks if any errors occurred during query, and call children classes
     // to deal with their specialized query completion.
+    // If `pause` is called, then `paused_action_` will be already `StartQuery`
+    // or `CompleteOperation`.
     // Next Actions:
     //  - StartQuery: There are more results and children is not opposed to it.
     //                QueryOperation child sets to CompleteOperation, since it
     //                is not supposed to receive more than one result.
     //  - CompleteOperation: In case an error occurred during query or there are
     //                       no more results to read.
-    if (fetch_action_ == FetchAction::CompleteQuery) {
+    //  - WaitForConsumer: In case `pause` is called during notification.
+    if (active_fetch_action_ == FetchAction::CompleteQuery) {
       snapshotMysqlErrors();
 
       bool more_results = false;
-      if (mysql_errno_ != 0) {
-        fetch_action_ = FetchAction::CompleteOperation;
+      if (mysql_errno_ != 0 || cancel_) {
+        active_fetch_action_ = FetchAction::CompleteOperation;
       } else {
         current_last_insert_id_ = mysql_insert_id(conn()->mysql());
         current_affected_rows_ = mysql_affected_rows(conn()->mysql());
         more_results = mysql_more_results(conn()->mysql());
-        fetch_action_ = more_results ? FetchAction::StartQuery
+        active_fetch_action_ = more_results ? FetchAction::StartQuery
                                      : FetchAction::CompleteOperation;
 
-        // Call it after setting the fetch_action_ so the child class can
+        // Call it after setting the active_fetch_action_ so the child class can
         // decide if it wants to change the state
 
         ++num_queries_executed_;
@@ -805,7 +836,7 @@ void FetchOperation::socketActionable() {
 
     // Once this action is set, the operation is going to be completed no matter
     // the reason it was called. It exists the loop.
-    if (fetch_action_ == FetchAction::CompleteOperation) {
+    if (active_fetch_action_ == FetchAction::CompleteOperation) {
       if (cancel_) {
         state_ = OperationState::Cancelling;
         completeOperation(OperationResult::Cancelled);
@@ -816,7 +847,42 @@ void FetchOperation::socketActionable() {
       }
       break;
     }
+
+    // If `pause` is called during the operation callbacks, this the Action it
+    // should come to.
+    // It's not necessary to unregister the socket event,  so just cancel the
+    // timeout and wait for `resume` to be called.
+    if (active_fetch_action_ == FetchAction::WaitForConsumer) {
+      conn()->socketHandler()->cancelTimeout();
+      break;
+    }
   }
+}
+
+void FetchOperation::pauseForConsumer() {
+  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK(state() == OperationState::Pending);
+
+  paused_action_ = active_fetch_action_;
+  active_fetch_action_ = FetchAction::WaitForConsumer;
+}
+
+void FetchOperation::resume() {
+  DCHECK(active_fetch_action_ == FetchAction::WaitForConsumer);
+  async_client()->runInThread([this]() {
+    CHECK_THROW(isPaused(), OperationStateException);
+
+    // We should only allow pauses during fetch or between queries.
+    // If we come back as RowsFetched and the stream has completed the query,
+    // `socketActionable` will change the `active_fetch_action_` and we will
+    // start the Query completion process.
+    // When we pause between queries, the value of `paused_action_` is already
+    // the value of the next states: StartQuery or CompleteOperation.
+    active_fetch_action_ = paused_action_;
+    // Leave timeout to be reset or checked when we hit
+    // `waitForSocketActionable`
+    socketActionable();
+  });
 }
 
 namespace {
@@ -846,6 +912,7 @@ RowBlock makeRowBlockFromStream(
 }
 
 void FetchOperation::specializedTimeoutTriggered() {
+  DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
   auto delta = chrono::high_resolution_clock::now() - start_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
@@ -908,6 +975,47 @@ void FetchOperation::mustSucceed() {
   }
 }
 
+MultiQueryStreamOperation::MultiQueryStreamOperation(
+    std::unique_ptr<ConnectionProxy>&& conn,
+    std::vector<Query>&& queries)
+    : FetchOperation(std::move(conn), db::QueryType::StreamMultiQuery),
+      queries_(std::move(queries)) {}
+
+folly::fbstring MultiQueryStreamOperation::renderedQuery() {
+  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  return Query::renderMultiQuery(conn()->mysql(), queries_);
+}
+
+void MultiQueryStreamOperation::notifyInitQuery() {
+  stream_callback_(this, StreamState::InitQuery);
+}
+
+void MultiQueryStreamOperation::notifyRowsReady() {
+  stream_callback_(this, StreamState::RowsReady);
+}
+
+void MultiQueryStreamOperation::notifyQuerySuccess(bool) {
+  // Query Boundary, only for streaming to allow the user to read from the
+  // connection.
+  // This will allow pause in the end of the query. End of operations don't
+  // allow.
+  stream_callback_(this, StreamState::QueryEnded);
+}
+
+void MultiQueryStreamOperation::notifyFailure(OperationResult) {
+  // Nop
+}
+
+void MultiQueryStreamOperation::notifyOperationCompleted(
+    OperationResult result) {
+  auto reason =
+      (result == OperationResult::Succeeded ? StreamState::Success
+                                            : StreamState::Failure);
+
+  stream_callback_(this, reason);
+  stream_callback_ = nullptr;
+}
+
 QueryOperation::QueryOperation(
     std::unique_ptr<ConnectionProxy>&& conn,
     Query&& query)
@@ -952,7 +1060,7 @@ void QueryOperation::notifyQuerySuccess(bool more_results) {
   if (more_results) {
     // Bad usage of QueryOperation, we are going to cancel the query
     cancel_ = true;
-    fetch_action_ = FetchAction::CompleteOperation;
+    setFetchAction(FetchAction::CompleteOperation);
   }
 
   query_result_->setOperationResult(OperationResult::Succeeded);
@@ -1073,6 +1181,24 @@ folly::StringPiece Operation::stateString() const {
   return Operation::toString(state());
 }
 
+folly::StringPiece Operation::toString(StreamState state) {
+  switch (state) {
+    case StreamState::InitQuery:
+      return "InitQuery";
+    case StreamState::RowsReady:
+      return "RowsReady";
+    case StreamState::QueryEnded:
+      return "QueryEnded";
+    case StreamState::Failure:
+      return "Failure";
+    case StreamState::Success:
+      return "Success";
+  }
+  LOG(DFATAL) << "unable to convert state to string: "
+              << static_cast<int>(state);
+  return "Unknown state";
+}
+
 folly::StringPiece Operation::toString(QueryCallbackReason reason) {
   switch (reason) {
     case QueryCallbackReason::RowsFetched:
@@ -1131,6 +1257,8 @@ folly::StringPiece FetchOperation::toString(FetchAction action) {
       return "InitFetch";
     case FetchAction::Fetch:
       return "Fetch";
+    case FetchAction::WaitForConsumer:
+      return "WaitForConsumer";
     case FetchAction::CompleteQuery:
       return "CompleteQuery";
     case FetchAction::CompleteOperation:
