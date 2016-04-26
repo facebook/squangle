@@ -18,16 +18,14 @@
 #include <folly/ThreadName.h>
 #include <folly/Memory.h>
 #include <folly/io/async/EventBaseManager.h>
+#include <folly/portability/GFlags.h>
 
 #include <mysql.h>
 
 #include <unistd.h>
 #include <fcntl.h>
 
-#ifndef NO_LIB_GFLAGS
-#include "common/config/Flags.h" // nolint
 DECLARE_int64(async_mysql_timeout_micros);
-#endif
 
 namespace {
 class InitMysqlLibrary {
@@ -40,9 +38,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-#ifdef NO_LIB_GFLAGS
-extern int64_t FLAGS_async_mysql_timeout_micros;
-#endif
 namespace {
 folly::Singleton<AsyncMysqlClient> client;
 }

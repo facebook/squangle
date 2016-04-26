@@ -14,24 +14,19 @@
 
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
+#include <folly/portability/GFlags.h>
+
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
 #include <wangle/client/ssl/SSLSession.h>
 
-#ifndef NO_LIB_GFLAGS
-#include "common/config/Flags.h" // nolint
 DEFINE_int64(async_mysql_timeout_micros,
              60 * 1000 * 1000,
              "default timeout, in micros, for mysql operations");
-#endif
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
-
-#ifdef NO_LIB_GFLAGS
-int64_t FLAGS_async_mysql_timeout_micros = 60 * 1000 * 1000;
-#endif
 
 namespace chrono = std::chrono;
 
