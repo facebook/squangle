@@ -79,6 +79,7 @@ class ConnectionKey;
 class ConnectionSocketHandler;
 class ConnectionOptions;
 class SSLOptionsProviderBase;
+class MultiQueryStreamHandler;
 
 enum class QueryCallbackReason;
 

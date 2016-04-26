@@ -14,8 +14,10 @@
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/base/ExceptionUtil.h"
 
-#include <chrono>
 #include <folly/Exception.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/experimental/fibers/Baton.h>
+#include <chrono>
 
 namespace facebook {
 namespace common {
@@ -330,6 +332,139 @@ class QueryResult {
   OperationResult operation_result_;
 
   vector<RowBlock> row_blocks_;
+};
+
+class FetchOperation;
+class StreamedQueryResult;
+class MultiQueryStreamHandler;
+enum class StreamState;
+
+class StreamedQueryResult {
+ public:
+  uint64_t numAffectedRows() {
+    checkAccessToResult();
+    return num_affected_rows_;
+  }
+  uint64_t lastInsertId() {
+    // Will throw exception if there was an error
+    checkAccessToResult();
+    return last_insert_id_;
+  }
+
+  class Iterator;
+
+  class Iterator : public boost::iterator_facade<
+                       Iterator,
+                       const EphemeralRow,
+                       boost::forward_traversal_tag> {
+   public:
+    Iterator(StreamedQueryResult* query_res, int row_num)
+        : query_res_(query_res), row_num_(row_num) {}
+
+    void increment();
+    const EphemeralRow& dereference() const;
+
+    bool equal(const Iterator& other) const {
+      return row_num_ == other.row_num_;
+    }
+
+   private:
+    friend class StreamedQueryResult;
+
+    StreamedQueryResult* query_res_;
+    folly::Optional<EphemeralRow> current_row_;
+    int row_num_;
+  };
+
+  Iterator begin();
+
+  Iterator end();
+
+  explicit StreamedQueryResult(MultiQueryStreamHandler* handler);
+  ~StreamedQueryResult();
+
+  StreamedQueryResult(const StreamedQueryResult&) = delete;
+  StreamedQueryResult& operator=(StreamedQueryResult const&) = delete;
+
+  folly::Optional<EphemeralRow> nextRow();
+
+ private:
+  friend class Iterator;
+  friend class MultiQueryStreamHandler;
+
+  void setResult(int64_t affected_rows, int64_t last_insert_id);
+  void setException(folly::exception_wrapper ex);
+  void freeHandler();
+
+  void checkStoredException();
+  void checkAccessToResult();
+
+  // This baton is notified by read_ready or query_finished
+  // It will always block in "increment"
+  folly::fibers::Baton stream_baton_;
+
+  MultiQueryStreamHandler* stream_handler_;
+
+  size_t num_rows_ = 0;
+  int64_t num_affected_rows_ = -1;
+  int64_t last_insert_id_ = 0;
+
+  folly::exception_wrapper exception_wrapper_;
+};
+
+class MultiQueryStreamHandler {
+ public:
+  explicit MultiQueryStreamHandler(std::shared_ptr<FetchOperation> op);
+
+  // Returns the next Query or nullptr if there are no more query results to be
+  // read.
+  std::unique_ptr<StreamedQueryResult> nextQuery();
+
+  std::unique_ptr<Connection> releaseConnection();
+
+ private:
+  friend class Connection;
+  friend class StreamedQueryResult;
+
+  void streamCallback(FetchOperation* op, StreamState state);
+  // This allows the User Thread to know what to read from `FetchOperation`.
+  // The states `InitResult`, `ReadRows`, `ReadResult` are synchronization
+  // points. So the FetchOperation is going to be paused and will require
+  // `resume` to proceed.
+  enum class State {
+    InitResult,
+    ReadRows,
+    ReadResult,
+    OperationSucceeded,
+    OperationFailed,
+  };
+  State state_ = State::InitResult;
+
+  // Provider to StreamedQueryResult call
+  folly::Optional<EphemeralRow> fetchOneRow();
+
+  void fetchQueryEnd();
+
+  void resumeOperation();
+  void handleQueryEnded();
+  void handleQueryFailed();
+  void handleBadState();
+
+  static std::string toString(State state);
+
+  // Access protected by state_baton_ and pause;
+  folly::fibers::Baton state_baton_;
+
+  folly::exception_wrapper exception_wrapper_;
+
+  // Created in `NextQuery` and unique_ptr is returned to the user. The one
+  // given to the user will only get destroyed when the query ends and we
+  // clear this pointer.
+  // This is only used when `StreamQueryResult` itself calls the Handler for
+  // events.
+  StreamedQueryResult* current_result_ = nullptr;
+
+  std::shared_ptr<FetchOperation> fetch_operation_;
 };
 
 typedef FetchResult<std::vector<QueryResult>> DbMultiQueryResult;

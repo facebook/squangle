@@ -438,6 +438,13 @@ class Connection {
   template <typename... Args>
   DbMultiQueryResult multiQuery(Args&&... args);
 
+  // EXPERIMENTAL
+
+  // StreamResultHandler
+  static std::unique_ptr<MultiQueryStreamHandler> streamMultiQuery(
+      std::unique_ptr<Connection> connection,
+      std::vector<Query> queries);
+
   // variant that takes a QueryOperation for more convenient chaining of
   // queries.
   //

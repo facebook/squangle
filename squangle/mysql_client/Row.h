@@ -391,11 +391,13 @@ class EphemeralRow {
   EphemeralRow(EphemeralRow&&) = default;
   EphemeralRow& operator=(EphemeralRow&&) = default;
 
- private:
-  MYSQL_ROW mysql_row_;
-  unsigned long* field_lengths_;
+  EphemeralRow() = default;
 
-  EphemeralRowFields* row_fields_;
+ private:
+  MYSQL_ROW mysql_row_ = nullptr;
+  unsigned long* field_lengths_ = nullptr;
+
+  EphemeralRowFields* row_fields_ = nullptr;
 };
 
 // Declarations of specializations and trivial implementations.
