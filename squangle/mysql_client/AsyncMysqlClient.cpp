@@ -22,8 +22,8 @@
 
 #include <mysql.h>
 
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 DECLARE_int64(async_mysql_timeout_micros);
 
@@ -39,7 +39,9 @@ namespace common {
 namespace mysql_client {
 
 namespace {
-folly::Singleton<AsyncMysqlClient> client;
+folly::Singleton<AsyncMysqlClient> client(
+    []() { return new AsyncMysqlClient; },
+    AsyncMysqlClient::deleter);
 }
 
 std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
@@ -106,7 +108,7 @@ void AsyncMysqlClient::drain(bool also_block_operations) {
         (*it)->cancel();
         it = pending_operations_.erase(it);
       } else {
-      ++it;
+        ++it;
       }
     }
   }
@@ -114,8 +116,7 @@ void AsyncMysqlClient::drain(bool also_block_operations) {
   // Now wait for any started operations to complete.
   std::unique_lock<std::mutex> counter_lock(this->counters_mutex_);
   active_connections_closed_cv_.wait(
-      counter_lock,
-      [&also_block_operations, this] {
+      counter_lock, [&also_block_operations, this] {
         if (also_block_operations) {
           VLOG(11) << "Waiting for " << this->active_connection_counter_
                    << " connections to be released before shutting client down";
@@ -125,6 +126,7 @@ void AsyncMysqlClient::drain(bool also_block_operations) {
 }
 
 void AsyncMysqlClient::shutdownClient() {
+  DCHECK(std::this_thread::get_id() != threadId());
   if (is_shutdown_.exchange(true)) {
     return;
   }
@@ -146,6 +148,7 @@ void AsyncMysqlClient::shutdownClient() {
   if (std::this_thread::get_id() != threadId()) {
     thread_.join();
   } else {
+    LOG(ERROR) << "shutdownClient() called from AsyncMysql thread";
     thread_.detach();
   }
 }

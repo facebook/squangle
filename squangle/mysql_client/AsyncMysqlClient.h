@@ -98,6 +98,17 @@ class AsyncMysqlClient {
   AsyncMysqlClient();
   ~AsyncMysqlClient();
 
+  static void deleter(AsyncMysqlClient* client) {
+    // If we are dying in the thread we own, spin up a new thread to
+    // call delete. This allows the asyncmysql thread to terminate safely
+    if (std::this_thread::get_id() == client->threadId()) {
+      std::thread myThread{[client]() { delete client; }};
+      myThread.detach();
+    } else {
+      delete client;
+    }
+  }
+
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
   // Initiate a connection to a database.  This is the main entrypoint.
@@ -142,6 +153,7 @@ class AsyncMysqlClient {
     block_operations_ = true;
   }
 
+  // Do not call this from inside the AsyncMysql thread
   void shutdownClient();
 
   // Drain any remaining operations.  If also_block_operations is true, then
