@@ -189,6 +189,9 @@ std::unique_ptr<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
   } else if (state_ == State::OperationFailed) {
     handleQueryFailed();
   } else if (state_ != State::OperationSucceeded) {
+    LOG(DFATAL) << "Bad state transition. Perhaps reading next result without"
+                << " deleting or consuming current stream? Current state is "
+                << toString(state_) << ".";
     handleBadState();
   }
   return res;
@@ -203,6 +206,9 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
 
   exception_wrapper_ = folly::make_exception_wrapper<OperationStateException>(
       "Trying to release connection without consuming stream");
+  LOG(DFATAL) << "Releasing the Connection without reading result. Read stream"
+              << " content or delete stream result. Current state "
+              << toString(state_) << ".";
   handleBadState();
 
   // Should throw above.
@@ -257,6 +263,9 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow() {
   } else if (state_ == State::OperationFailed) {
     handleQueryFailed();
   } else {
+    LOG(DFATAL) << "Bad state transition. Only ReadRows, ReadResult and "
+                << "OperationFailed are allowed. Received "
+                << toString(state_) << ".";
     handleBadState();
   }
   return folly::Optional<EphemeralRow>();
@@ -270,6 +279,8 @@ void MultiQueryStreamHandler::fetchQueryEnd() {
   } else if (state_ == State::OperationFailed) {
     handleQueryFailed();
   } else {
+    LOG(DFATAL) << "Expected end of query, but received " << toString(state_)
+                << ".";
     handleBadState();
   }
 }
@@ -297,10 +308,6 @@ void MultiQueryStreamHandler::handleQueryFailed() {
   }
 }
 void MultiQueryStreamHandler::handleBadState() {
-  // TODO: This is for bad usage. We need to improve the error messages and
-  // how to diagnose. Simple for now.
-  LOG(DFATAL) << "Something went wrong. Waiting for rows but got "
-              << toString(state_);
   fetch_operation_->cancel();
   resumeOperation();
 }
