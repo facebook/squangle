@@ -20,6 +20,9 @@ class SSLOptionsProviderBase {
   // The SSL Context and Session options to be set for the connection
   virtual std::shared_ptr<folly::SSLContext> getSSLContext() = 0;
 
+  // The CRYPTO reference count for the session should already be incremented.
+  // Libmysqlclient layer will take ownership of the session and free it when
+  // connection succeeds or fails.
   virtual SSL_SESSION* getSSLSession() = 0;
 
   // this function is called when an SSL connection is successfully established
