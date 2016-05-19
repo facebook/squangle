@@ -66,7 +66,7 @@
 #include <unordered_map>
 
 #include <folly/Exception.h>
-#include <folly/experimental/fibers/Baton.h>
+#include <folly/fibers/Baton.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/Portability.h>

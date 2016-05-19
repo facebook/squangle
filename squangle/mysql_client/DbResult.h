@@ -16,7 +16,7 @@
 
 #include <folly/Exception.h>
 #include <folly/ExceptionWrapper.h>
-#include <folly/experimental/fibers/Baton.h>
+#include <folly/fibers/Baton.h>
 #include <chrono>
 
 namespace facebook {
