@@ -390,7 +390,7 @@ ConnectOperation* ConnectOperation::specializedRun() {
                   conn()->mysql(),
                   MYSQL_OPT_SSL_SESSION,
                   ssl_session_,
-                  (void*)1); /* takeOwnership=true */
+                  nullptr);
             }
           }
         }
