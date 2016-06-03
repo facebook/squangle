@@ -312,6 +312,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   std::shared_ptr<Operation> getSharedPointer();
 
   AsyncMysqlClient* async_client();
+
+  // Flag internal async client errors; this always becomes a MySQL
+  // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
+  void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
+
  protected:
   class ConnectionProxy;
   explicit Operation(std::unique_ptr<ConnectionProxy>&& conn);
@@ -323,10 +328,6 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Save any mysql errors that occurred (since we may hand off the
   // Connection before the user wants this information).
   void snapshotMysqlErrors();
-
-  // Flag internal async client errors; this always becomes a MySQL
-  // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
-  void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
 
   // Same as above, but specify the error code.
   void setAsyncClientError(int mysql_errno,
@@ -533,7 +534,6 @@ class ConnectOperation : public Operation {
 
   static constexpr Duration kMinimumViableConnectTimeout =
       std::chrono::microseconds(50);
-
  protected:
   virtual void attemptFailed(OperationResult result);
   virtual void attemptSucceeded(OperationResult result);
