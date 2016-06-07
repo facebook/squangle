@@ -96,7 +96,7 @@ ConnectionDyingCallback;
 class AsyncMysqlClient {
  public:
   AsyncMysqlClient();
-  ~AsyncMysqlClient();
+  virtual ~AsyncMysqlClient();
 
   static void deleter(AsyncMysqlClient* client) {
     // If we are dying in the thread we own, spin up a new thread to
