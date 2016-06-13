@@ -96,7 +96,9 @@ StringPiece RowBlock::getField(size_t row, size_t field_num) const {
     field_size = field_offsets_[entry + 1] - field_offsets_[entry];
   }
 
-  return StringPiece(&buffer_[field_offsets_[entry]], field_size);
+  return field_size != 0
+      ? StringPiece(&buffer_[field_offsets_[entry]], field_size)
+      : StringPiece();
 }
 
 template <>
