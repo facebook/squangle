@@ -467,6 +467,10 @@ class ConnectPoolOperation : public ConnectOperation {
                        ConnectionKey conn_key)
       : ConnectOperation(client.get(), conn_key), pool_(pool) {}
 
+  db::OperationType getOperationType() const override {
+    return db::OperationType::PoolConnect;
+  }
+
  protected:
   virtual void attemptFailed(OperationResult result) override;
 

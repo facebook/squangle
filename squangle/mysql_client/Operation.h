@@ -317,6 +317,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
   void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
 
+  virtual db::OperationType getOperationType() const = 0;
+
  protected:
   class ConnectionProxy;
   explicit Operation(std::unique_ptr<ConnectionProxy>&& conn);
@@ -534,6 +536,11 @@ class ConnectOperation : public Operation {
 
   static constexpr Duration kMinimumViableConnectTimeout =
       std::chrono::microseconds(50);
+
+  virtual db::OperationType getOperationType() const override {
+    return db::OperationType::Connect;
+  }
+
  protected:
   virtual void attemptFailed(OperationResult result);
   virtual void attemptSucceeded(OperationResult result);
@@ -670,9 +677,7 @@ class FetchOperation : public Operation {
  protected:
   FetchOperation* specializedRun() override;
 
-  explicit FetchOperation(
-      std::unique_ptr<ConnectionProxy>&& conn,
-      db::QueryType query_type);
+  explicit FetchOperation(std::unique_ptr<ConnectionProxy>&& conn);
 
   enum class FetchAction {
     StartQuery,
@@ -714,9 +719,6 @@ class FetchOperation : public Operation {
   // Checks if the current thread has access to stream, or result data.
   bool isStreamAccessAllowed();
   bool isPaused();
-
-  // For stats purposes
-  db::QueryType query_type_;
 
   // Current query data
   std::unique_ptr<RowStream> current_row_stream_;
@@ -770,6 +772,10 @@ class MultiQueryStreamOperation : public FetchOperation {
   MultiQueryStreamOperation(
       std::unique_ptr<ConnectionProxy>&& connection,
       std::vector<Query>&& queries);
+
+  db::OperationType getOperationType() const override {
+    return db::OperationType::MultiQueryStream;
+  }
 
  private:
   const std::vector<Query> queries_;
@@ -842,6 +848,10 @@ class QueryOperation : public FetchOperation {
   QueryOperation* setUserData(folly::dynamic val) {
     Operation::setUserData(std::move(val));
     return this;
+  }
+
+  db::OperationType getOperationType() const override {
+    return db::OperationType::Query;
   }
 
  protected:
@@ -920,6 +930,10 @@ class MultiQueryOperation : public FetchOperation {
   MultiQueryOperation* setUserData(folly::dynamic val) {
     Operation::setUserData(std::move(val));
     return this;
+  }
+
+  db::OperationType getOperationType() const override {
+    return db::OperationType::MultiQuery;
   }
 
  protected:

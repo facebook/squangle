@@ -491,7 +491,10 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
       end_time_ - start_time_);
   if (result == OperationResult::Succeeded) {
     async_client()->logConnectionSuccess(
-        elapsed, *conn()->getKey(), connection_context_.get());
+        getOperationType(),
+        elapsed,
+        *conn()->getKey(),
+        connection_context_.get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result == OperationResult::TimedOut) {
@@ -499,11 +502,13 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
     } else if (result == OperationResult::Cancelled) {
       reason = db::FailureReason::CANCELLED;
     }
-    async_client()->logConnectionFailure(reason,
-                                         elapsed,
-                                         *conn()->getKey(),
-                                         conn()->mysql(),
-                                         connection_context_.get());
+    async_client()->logConnectionFailure(
+        getOperationType(),
+        reason,
+        elapsed,
+        *conn()->getKey(),
+        conn()->mysql(),
+        connection_context_.get());
   }
 }
 
@@ -574,10 +579,8 @@ void ConnectOperation::removeClientReference() {
   }
 }
 
-FetchOperation::FetchOperation(
-    std::unique_ptr<ConnectionProxy>&& conn,
-    db::QueryType query_type)
-    : Operation(std::move(conn)), query_type_(query_type) {}
+FetchOperation::FetchOperation(std::unique_ptr<ConnectionProxy>&& conn)
+    : Operation(std::move(conn)) {}
 
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
@@ -935,8 +938,8 @@ void FetchOperation::specializedCompleteOperation() {
     // set last successful query time to MysqlConnectionHolder
     conn()->setLastActivityTime(chrono::high_resolution_clock::now());
     async_client()->logQuerySuccess(
+        getOperationType(),
         elapsed(),
-        query_type_,
         num_queries_executed_,
         rendered_multi_query_,
         *conn().get());
@@ -948,9 +951,9 @@ void FetchOperation::specializedCompleteOperation() {
       reason = db::FailureReason::TIMEOUT;
     }
     async_client()->logQueryFailure(
+        getOperationType(),
         reason,
         elapsed(),
-        query_type_,
         num_queries_executed_,
         rendered_multi_query_,
         *conn().get());
@@ -976,8 +979,7 @@ void FetchOperation::mustSucceed() {
 MultiQueryStreamOperation::MultiQueryStreamOperation(
     std::unique_ptr<ConnectionProxy>&& conn,
     std::vector<Query>&& queries)
-    : FetchOperation(std::move(conn), db::QueryType::StreamMultiQuery),
-      queries_(std::move(queries)) {}
+    : FetchOperation(std::move(conn)), queries_(std::move(queries)) {}
 
 folly::fbstring MultiQueryStreamOperation::renderedQuery() {
   CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
@@ -1017,7 +1019,7 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
 QueryOperation::QueryOperation(
     std::unique_ptr<ConnectionProxy>&& conn,
     Query&& query)
-    : FetchOperation(std::move(conn), db::QueryType::MultiQuery),
+    : FetchOperation(std::move(conn)),
       query_(std::move(query)),
       query_result_(folly::make_unique<QueryResult>(0)) {}
 
@@ -1093,7 +1095,7 @@ void QueryOperation::notifyOperationCompleted(OperationResult result) {
 MultiQueryOperation::MultiQueryOperation(
     std::unique_ptr<ConnectionProxy>&& conn,
     std::vector<Query>&& queries)
-    : FetchOperation(std::move(conn), db::QueryType::MultiQuery),
+    : FetchOperation(std::move(conn)),
       queries_(std::move(queries)),
       current_query_result_(folly::make_unique<QueryResult>(0)) {}
 

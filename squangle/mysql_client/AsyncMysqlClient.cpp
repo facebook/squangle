@@ -168,36 +168,38 @@ void AsyncMysqlClient::setDBCounterForTesting(
   client_stats_ = std::move(dbCounter);
 }
 
-void AsyncMysqlClient::logQuerySuccess(Duration dur,
-                                       db::QueryType type,
-                                       int queries_executed,
-                                       const folly::fbstring& query,
-                                       const Connection& conn) {
+void AsyncMysqlClient::logQuerySuccess(
+    db::OperationType type,
+    Duration dur,
+    int queries_executed,
+    const folly::fbstring& query,
+    const Connection& conn) {
   CHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrSucceededQueries();
   if (db_logger_) {
     db_logger_->logQuerySuccess(
-        dur,
         type,
+        dur,
         queries_executed,
         query.toStdString(),
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
 
-void AsyncMysqlClient::logQueryFailure(db::FailureReason reason,
-                                       Duration duration,
-                                       db::QueryType type,
-                                       int queries_executed,
-                                       const folly::fbstring& query,
-                                       const Connection& conn) {
+void AsyncMysqlClient::logQueryFailure(
+    db::OperationType type,
+    db::FailureReason reason,
+    Duration duration,
+    int queries_executed,
+    const folly::fbstring& query,
+    const Connection& conn) {
   CHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrFailedQueries();
   if (db_logger_) {
     db_logger_->logQueryFailure(
+        type,
         reason,
         duration,
-        type,
         queries_executed,
         query.toStdString(),
         conn.mysql(),
@@ -206,6 +208,7 @@ void AsyncMysqlClient::logQueryFailure(db::FailureReason reason,
 }
 
 void AsyncMysqlClient::logConnectionSuccess(
+    db::OperationType type,
     Duration duration,
     const ConnectionKey& conn_key,
     const db::ConnectionContextBase* connection_context) {
@@ -215,11 +218,12 @@ void AsyncMysqlClient::logConnectionSuccess(
   }
   if (db_logger_) {
     db_logger_->logConnectionSuccess(
-        duration, makeSquangleLoggingData(&conn_key, connection_context));
+        type, duration, makeSquangleLoggingData(&conn_key, connection_context));
   }
 }
 
 void AsyncMysqlClient::logConnectionFailure(
+    db::OperationType type,
     db::FailureReason reason,
     Duration duration,
     const ConnectionKey& conn_key,
@@ -229,6 +233,7 @@ void AsyncMysqlClient::logConnectionFailure(
   stats()->incrFailedConnections();
   if (db_logger_) {
     db_logger_->logConnectionFailure(
+        type,
         reason,
         duration,
         mysql,

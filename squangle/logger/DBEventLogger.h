@@ -29,11 +29,14 @@ enum class FailureReason {
   DATABASE_ERROR,
 };
 
-enum class QueryType {
-  Unknown, // Default value
-  SingleQuery,
+enum class OperationType {
+  None,
+  Query,
   MultiQuery,
-  StreamMultiQuery,
+  MultiQueryStream,
+  Connect,
+  PoolConnect,
+  TestDatabase
 };
 
 typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
@@ -74,41 +77,33 @@ class DBLoggerBase {
   virtual ~DBLoggerBase() {}
 
   // Basic logging functions to be overloaded in children
-  virtual void logQuerySuccess(Duration query_time,
-                               QueryType query_type,
-                               int queries_executed,
-                               const std::string& query,
-                               const TConnectionInfo& connInfo) = 0;
+  virtual void logQuerySuccess(
+      OperationType operation_type,
+      Duration query_time,
+      int queries_executed,
+      const std::string& query,
+      const TConnectionInfo& connInfo) = 0;
 
-  virtual void logQueryFailure(FailureReason reason,
-                               Duration query_time,
-                               QueryType query_type,
-                               int queries_executed,
-                               const std::string& query,
-                               MYSQL* mysqlConn,
-                               const TConnectionInfo& connInfo) = 0;
+  virtual void logQueryFailure(
+      OperationType operation_type,
+      FailureReason reason,
+      Duration query_time,
+      int queries_executed,
+      const std::string& query,
+      MYSQL* mysqlConn,
+      const TConnectionInfo& connInfo) = 0;
 
-  virtual void logConnectionSuccess(Duration connect_time,
-                                    const TConnectionInfo& connInfo) = 0;
+  virtual void logConnectionSuccess(
+      OperationType operation_type,
+      Duration connect_time,
+      const TConnectionInfo& connInfo) = 0;
 
-  virtual void logConnectionFailure(FailureReason reason,
-                                    Duration connect_time,
-                                    MYSQL* mysqlConn,
-                                    const TConnectionInfo& connInfo) = 0;
-
-  const char* QueryTypeString(QueryType type) {
-    switch (type) {
-    case QueryType::SingleQuery:
-      return "SingleQuery";
-    case QueryType::MultiQuery:
-      return "MultiQuery";
-    case QueryType::StreamMultiQuery:
-      return "StreamMultiQuery";
-    default:
-      return "Unknown";
-    }
-    return "(should not happen)";
-  }
+  virtual void logConnectionFailure(
+      OperationType operation_type,
+      FailureReason reason,
+      Duration connect_time,
+      MYSQL* mysqlConn,
+      const TConnectionInfo& connInfo) = 0;
 
   const char* FailureString(FailureReason reason) {
     switch (reason) {
@@ -120,6 +115,26 @@ class DBLoggerBase {
       return "Cancelled";
     case FailureReason::DATABASE_ERROR:
       return "DatabaseError";
+    }
+    return "(should not happen)";
+  }
+
+  folly::StringPiece toString(OperationType operation_type) {
+    switch (operation_type) {
+      case OperationType::None:
+        return "None";
+      case OperationType::Query:
+        return "Query";
+      case OperationType::MultiQuery:
+        return "MultiQuery";
+      case OperationType::MultiQueryStream:
+        return "MultiQueryStream";
+      case OperationType::Connect:
+        return "Connect";
+      case OperationType::PoolConnect:
+        return "PoolConnect";
+      case OperationType::TestDatabase:
+        return "TestDatabase";
     }
     return "(should not happen)";
   }
@@ -137,27 +152,33 @@ class DBSimpleLogger : public SquangleLoggerBase {
 
   virtual ~DBSimpleLogger() {}
 
-  void logQuerySuccess(Duration query_time,
-                       QueryType query_type,
-                       int queries_executed,
-                       const std::string& query,
-                       const SquangleLoggingData& connInfo) override;
+  void logQuerySuccess(
+      OperationType operation_type,
+      Duration query_time,
+      int queries_executed,
+      const std::string& query,
+      const SquangleLoggingData& connInfo) override;
 
-  void logQueryFailure(FailureReason reason,
-                       Duration query_time,
-                       QueryType query_type,
-                       int queries_executed,
-                       const std::string& query,
-                       MYSQL* mysqlConn,
-                       const SquangleLoggingData& connInfo) override;
+  void logQueryFailure(
+      OperationType operation_type,
+      FailureReason reason,
+      Duration query_time,
+      int queries_executed,
+      const std::string& query,
+      MYSQL* mysqlConn,
+      const SquangleLoggingData& connInfo) override;
 
-  void logConnectionSuccess(Duration connect_time,
-                            const SquangleLoggingData& connInfo) override;
+  void logConnectionSuccess(
+      OperationType operation_type,
+      Duration connect_time,
+      const SquangleLoggingData& connInfo) override;
 
-  void logConnectionFailure(FailureReason reason,
-                            Duration connect_time,
-                            MYSQL* mysqlConn,
-                            const SquangleLoggingData& connInfo) override;
+  void logConnectionFailure(
+      OperationType operation_type,
+      FailureReason reason,
+      Duration connect_time,
+      MYSQL* mysqlConn,
+      const SquangleLoggingData& connInfo) override;
 };
 }
 }

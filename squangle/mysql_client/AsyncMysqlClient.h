@@ -171,25 +171,29 @@ class AsyncMysqlClient {
     delicate_connection_failure_ = true;
   }
 
-  void logQuerySuccess(Duration dur,
-                       db::QueryType type,
-                       int queries_executed,
-                       const folly::fbstring& query,
-                       const Connection& conn);
+  void logQuerySuccess(
+      db::OperationType operation_name,
+      Duration dur,
+      int queries_executed,
+      const folly::fbstring& query,
+      const Connection& conn);
 
-  void logQueryFailure(db::FailureReason reason,
-                       Duration duration,
-                       db::QueryType type,
-                       int queries_executed,
-                       const folly::fbstring& query,
-                       const Connection& conn);
+  void logQueryFailure(
+      db::OperationType operation_name,
+      db::FailureReason reason,
+      Duration duration,
+      int queries_executed,
+      const folly::fbstring& query,
+      const Connection& conn);
 
   void logConnectionSuccess(
+      db::OperationType operation_name,
       Duration dur,
       const ConnectionKey& conn_key,
       const db::ConnectionContextBase* extra_logging_data);
 
   void logConnectionFailure(
+      db::OperationType operation_name,
       db::FailureReason reason,
       Duration dur,
       const ConnectionKey& conn_key,

@@ -21,36 +21,41 @@ void ConnectionContextBase::collectNormalValues(
 }
 
 void DBSimpleLogger::logQuerySuccess(
-    Duration query_time,
-    QueryType query_type,
-    int queries_executed,
+    OperationType,
+    Duration,
+    int,
     const std::string& query,
-    const SquangleLoggingData& connInfo) {
+    const SquangleLoggingData&) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << query << "\") succeeded.";
 }
 
-void DBSimpleLogger::logQueryFailure(FailureReason reason,
-                                     Duration query_time,
-                                     QueryType query_type,
-                                     int queries_executed,
-                                     const std::string& query,
-                                     MYSQL* mysqlConn,
-                                     const SquangleLoggingData& connInfo) {
+void DBSimpleLogger::logQueryFailure(
+    OperationType,
+    FailureReason,
+    Duration,
+    int,
+    const std::string& query,
+    MYSQL*,
+    const SquangleLoggingData&) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << query << "\") failed.";
 }
 
-void DBSimpleLogger::logConnectionSuccess(Duration connect_time,
-                                          const SquangleLoggingData& connInfo) {
+void DBSimpleLogger::logConnectionSuccess(
+    OperationType,
+    Duration,
+    const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << connInfo.connKey->host << " succeeded";
 }
 
-void DBSimpleLogger::logConnectionFailure(FailureReason reason,
-                                          Duration connect_time,
-                                          MYSQL* mysqlConn,
-                                          const SquangleLoggingData& connInfo) {
+void DBSimpleLogger::logConnectionFailure(
+    OperationType,
+    FailureReason,
+    Duration,
+    MYSQL*,
+    const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << connInfo.connKey->host << " failed";
 }
