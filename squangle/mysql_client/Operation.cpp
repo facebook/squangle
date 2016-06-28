@@ -35,10 +35,10 @@ ConnectionOptions::ConnectionOptions()
       total_timeout_(FLAGS_async_mysql_timeout_micros),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
-Operation::Operation(std::unique_ptr<ConnectionProxy>&& safe_conn)
+Operation::Operation(ConnectionProxy&& safe_conn)
     : state_(OperationState::Unstarted),
       result_(OperationResult::Unknown),
-      conn_ptr_(std::move(safe_conn)),
+      conn_proxy_(std::move(safe_conn)),
       mysql_errno_(0),
       user_data_(folly::dynamic::object()),
       observer_callback_(nullptr),
@@ -175,7 +175,7 @@ std::unique_ptr<Connection>&& Operation::releaseConnection() {
   CHECK_THROW(state_ == OperationState::Completed ||
                   state_ == OperationState::Unstarted,
               OperationStateException);
-  return std::move(conn_ptr_->releaseConnection());
+  return std::move(conn_proxy_.releaseConnection());
 }
 
 void Operation::snapshotMysqlErrors() {
@@ -234,10 +234,11 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
   }
 }
 
-ConnectOperation::ConnectOperation(AsyncMysqlClient* async_client,
-                                   ConnectionKey conn_key)
-    : Operation(folly::make_unique<Operation::OwnedConnection>(
-          folly::make_unique<Connection>(async_client, conn_key, nullptr))),
+ConnectOperation::ConnectOperation(
+    AsyncMysqlClient* async_client,
+    ConnectionKey conn_key)
+    : Operation(Operation::ConnectionProxy(Operation::OwnedConnection(
+          folly::make_unique<Connection>(async_client, conn_key, nullptr)))),
       conn_key_(conn_key),
       flags_(CLIENT_MULTI_STATEMENTS),
       active_in_client_(true) {
@@ -579,7 +580,7 @@ void ConnectOperation::removeClientReference() {
   }
 }
 
-FetchOperation::FetchOperation(std::unique_ptr<ConnectionProxy>&& conn)
+FetchOperation::FetchOperation(ConnectionProxy&& conn)
     : Operation(std::move(conn)) {}
 
 bool FetchOperation::isStreamAccessAllowed() {
@@ -977,7 +978,7 @@ void FetchOperation::mustSucceed() {
 }
 
 MultiQueryStreamOperation::MultiQueryStreamOperation(
-    std::unique_ptr<ConnectionProxy>&& conn,
+    ConnectionProxy&& conn,
     std::vector<Query>&& queries)
     : FetchOperation(std::move(conn)), queries_(std::move(queries)) {}
 
@@ -1017,7 +1018,7 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
 }
 
 QueryOperation::QueryOperation(
-    std::unique_ptr<ConnectionProxy>&& conn,
+    ConnectionProxy&& conn,
     Query&& query)
     : FetchOperation(std::move(conn)),
       query_(std::move(query)),
@@ -1093,7 +1094,7 @@ void QueryOperation::notifyOperationCompleted(OperationResult result) {
 }
 
 MultiQueryOperation::MultiQueryOperation(
-    std::unique_ptr<ConnectionProxy>&& conn,
+    ConnectionProxy&& conn,
     std::vector<Query>&& queries)
     : FetchOperation(std::move(conn)),
       queries_(std::move(queries)),
@@ -1269,20 +1270,6 @@ folly::StringPiece FetchOperation::toString(FetchAction action) {
   return "Unknown result";
 }
 
-Operation::OwnedConnection::OwnedConnection(
-    std::unique_ptr<Connection>&& conn)
-    : Operation::ConnectionProxy(), conn_(std::move(conn)) {}
-
-std::unique_ptr<Connection>&&
-Operation::OwnedConnection::releaseConnection() {
-  return std::move(conn_);
-}
-
-std::unique_ptr<Connection>&&
-Operation::ReferencedConnection::releaseConnection() {
-  throw std::runtime_error("ReleaseConnection can't be called in sync mode");
-}
-
 std::unique_ptr<Connection> blockingConnectHelper(
     std::shared_ptr<ConnectOperation>& conn_op) {
   conn_op->run()->wait();
@@ -1296,6 +1283,38 @@ std::unique_ptr<Connection> blockingConnectHelper(
 
   return std::move(conn_op->releaseConnection());
 }
+
+Operation::OwnedConnection::OwnedConnection() {}
+
+Operation::OwnedConnection::OwnedConnection(std::unique_ptr<Connection>&& conn)
+    : conn_(std::move(conn)) {}
+
+Connection* Operation::OwnedConnection::get() {
+  return conn_.get();
+}
+
+std::unique_ptr<Connection>&& Operation::OwnedConnection::releaseConnection() {
+  return std::move(conn_);
+}
+
+Operation::ConnectionProxy::ConnectionProxy(Operation::OwnedConnection&& conn)
+    : ownedConn_(std::move(conn)) {}
+
+Operation::ConnectionProxy::ConnectionProxy(
+    Operation::ReferencedConnection&& conn)
+    : referencedConn_(std::move(conn)) {}
+
+Connection* Operation::ConnectionProxy::get() {
+  return ownedConn_.get() ? ownedConn_.get() : referencedConn_.get();
+}
+
+std::unique_ptr<Connection>&& Operation::ConnectionProxy::releaseConnection() {
+  if (ownedConn_.get() != nullptr) {
+    return ownedConn_.releaseConnection();
+  }
+  throw std::runtime_error("Releasing connection from referenced conn");
+}
+
 }
 }
 } // namespace facebook::common::mysql_client

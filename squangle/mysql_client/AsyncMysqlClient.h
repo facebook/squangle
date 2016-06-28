@@ -662,7 +662,7 @@ class Connection {
   // that both need to do.
   template <typename QueryType, typename QueryArg>
   static std::shared_ptr<QueryType> beginAnyQuery(
-      std::unique_ptr<Operation::ConnectionProxy> conn_ptr, QueryArg&& query);
+      Operation::ConnectionProxy&& conn_proxy, QueryArg&& query);
 
   void checkOperationInProgress() {
     if (sync_operation_in_progress_) {

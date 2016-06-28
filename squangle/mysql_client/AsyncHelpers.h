@@ -12,6 +12,7 @@
 
 #include <vector>
 
+#include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/Operation.h"
 
 namespace facebook {

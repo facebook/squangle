@@ -291,7 +291,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Connections are transferred across operations.  At any one time,
   // there is one unique owner of the connection.
   std::unique_ptr<Connection>&& releaseConnection();
-  Connection* connection() { return conn_ptr_->get(); }
+  Connection* connection() { return conn_proxy_.get(); }
 
   // Various accessors for our Operation's start, end, and total elapsed time.
   Timepoint startTime() const { return start_time_; }
@@ -321,11 +321,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
  protected:
   class ConnectionProxy;
-  explicit Operation(std::unique_ptr<ConnectionProxy>&& conn);
+  explicit Operation(ConnectionProxy&& conn);
 
 
-  ConnectionProxy& conn() { return *conn_ptr_.get(); }
-  const ConnectionProxy& conn() const { return *conn_ptr_.get(); }
+  ConnectionProxy& conn() { return conn_proxy_; }
+  const ConnectionProxy& conn() const { return conn_proxy_; }
 
   // Save any mysql errors that occurred (since we may hand off the
   // Connection before the user wants this information).
@@ -358,6 +358,26 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual void specializedTimeoutTriggered() = 0;
   virtual void specializedCompleteOperation() = 0;
 
+  class OwnedConnection {
+   public:
+    OwnedConnection();
+    explicit OwnedConnection(std::unique_ptr<Connection>&& conn);
+    Connection* get();
+    std::unique_ptr<Connection>&& releaseConnection();
+   private:
+    std::unique_ptr<Connection> conn_;
+  };
+
+  class ReferencedConnection {
+   public:
+    ReferencedConnection() : conn_(nullptr) {}
+    explicit ReferencedConnection(Connection* conn)
+        : conn_(conn) {}
+    Connection* get() { return conn_; }
+   private:
+    Connection* conn_;
+  };
+
   // Base class for a wrapper around the 2 types of connection
   // pointers we accept in the Operation:
   // - OwnedConnection: will hold an unique_ptr to the Connection
@@ -366,54 +386,28 @@ class Operation : public std::enable_shared_from_this<Operation> {
   //   to the Operation;
   class ConnectionProxy {
    public:
-    ConnectionProxy() {}
+    explicit ConnectionProxy(OwnedConnection&& conn);
+    explicit ConnectionProxy(ReferencedConnection&& conn);
 
-    virtual ~ConnectionProxy() {}
+    Connection* get();
 
-    virtual Connection* get() = 0;
-    virtual const Connection* get() const = 0;
+    std::unique_ptr<Connection>&& releaseConnection();
+
+    const Connection* get() const {
+      return const_cast<ConnectionProxy*>(this)->get();
+    }
 
     Connection* operator->() { return get(); }
     const Connection* operator->() const { return get(); }
-
-    virtual std::unique_ptr<Connection>&& releaseConnection() = 0;
 
     ConnectionProxy(ConnectionProxy&&) = default;
     ConnectionProxy& operator=(ConnectionProxy&&) = default;
 
     ConnectionProxy(ConnectionProxy const&) = delete;
     ConnectionProxy& operator=(ConnectionProxy const&) = delete;
-  };
-
-  class OwnedConnection : public ConnectionProxy {
-   public:
-    explicit OwnedConnection(std::unique_ptr<Connection>&& conn);
-
-    Connection* get() override { return conn_.get(); }
-    const Connection* get() const override { return conn_.get(); }
-
-    std::unique_ptr<Connection>&& releaseConnection() override;
-
    private:
-    std::unique_ptr<Connection> conn_;
-  };
-
-  class ReferencedConnection : public ConnectionProxy {
-   public:
-    explicit ReferencedConnection(Connection* conn)
-        : ConnectionProxy(), conn_(conn) {}
-
-    Connection* get() override { return conn_; }
-
-    const Connection* get() const override { return conn_; }
-
-    // Releasing connection in sync mode is not needed since it doesn't hold
-    // an unique_ptr, also, the user never holds the Operation in this mode.
-    // This will throw exception in case gets called.
-    std::unique_ptr<Connection>&& releaseConnection() override;
-
-   private:
-    Connection* conn_;
+    OwnedConnection ownedConn_;
+    ReferencedConnection referencedConn_;
   };
 
   // Data members; subclasses freely interact with these.
@@ -427,7 +421,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Our Connection object.  Created by ConnectOperation and moved
   // into QueryOperations.
-  std::unique_ptr<ConnectionProxy> conn_ptr_;
+  ConnectionProxy conn_proxy_;
 
   // Errors that may have occurred.
   int mysql_errno_;
@@ -677,7 +671,7 @@ class FetchOperation : public Operation {
  protected:
   FetchOperation* specializedRun() override;
 
-  explicit FetchOperation(std::unique_ptr<ConnectionProxy>&& conn);
+  explicit FetchOperation(ConnectionProxy&& conn);
 
   enum class FetchAction {
     StartQuery,
@@ -770,7 +764,7 @@ class MultiQueryStreamOperation : public FetchOperation {
   }
 
   MultiQueryStreamOperation(
-      std::unique_ptr<ConnectionProxy>&& connection,
+      ConnectionProxy&& connection,
       std::vector<Query>&& queries);
 
   db::OperationType getOperationType() const override {
@@ -836,7 +830,7 @@ class QueryOperation : public FetchOperation {
 
   // Don't call this; it's public strictly for Connection to be able
   // to call make_shared.
-  QueryOperation(std::unique_ptr<ConnectionProxy>&& connection,
+  QueryOperation(ConnectionProxy&& connection,
                  Query&& query);
 
   // Overriding to narrow the return type
@@ -918,7 +912,7 @@ class MultiQueryOperation : public FetchOperation {
   // Don't call this; it's public strictly for Connection to be able
   // to call make_shared.
   MultiQueryOperation(
-      std::unique_ptr<ConnectionProxy>&& connection,
+      ConnectionProxy&& connection,
       std::vector<Query>&& queries);
 
   // Overriding to narrow the return type

@@ -377,7 +377,7 @@ template <>
 std::shared_ptr<QueryOperation> Connection::beginQuery(
     std::unique_ptr<Connection> conn, Query&& query) {
   return beginAnyQuery<QueryOperation>(
-    folly::make_unique<Operation::OwnedConnection>(std::move(conn)),
+    Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
     std::move(query));
 }
 
@@ -385,7 +385,7 @@ template <>
 std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
     std::unique_ptr<Connection> conn, std::vector<Query>&& queries) {
   return beginAnyQuery<MultiQueryOperation>(
-      folly::make_unique<Operation::OwnedConnection>(std::move(conn)),
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
 }
 
@@ -394,18 +394,18 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
     std::unique_ptr<Connection> conn,
     std::vector<Query>&& queries) {
   return beginAnyQuery<MultiQueryStreamOperation>(
-      folly::make_unique<Operation::OwnedConnection>(std::move(conn)),
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
 }
 
 template <typename QueryType, typename QueryArg>
 std::shared_ptr<QueryType> Connection::beginAnyQuery(
-    std::unique_ptr<Operation::ConnectionProxy> conn_ptr, QueryArg&& query) {
-  CHECK_THROW(conn_ptr->get(), InvalidConnectionException);
-  CHECK_THROW(conn_ptr->get()->ok(), InvalidConnectionException);
-  conn_ptr->get()->checkOperationInProgress();
+    Operation::ConnectionProxy&& conn_proxy, QueryArg&& query) {
+  CHECK_THROW(conn_proxy.get(), InvalidConnectionException);
+  CHECK_THROW(conn_proxy.get()->ok(), InvalidConnectionException);
+  conn_proxy.get()->checkOperationInProgress();
   auto ret = std::make_shared<QueryType>(
-      std::move(conn_ptr),
+      std::move(conn_proxy),
       std::move(query));
   Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {
@@ -466,7 +466,7 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
 template <>
 DbQueryResult Connection::query(Query&& query) {
   auto op = beginAnyQuery<QueryOperation>(
-      folly::make_unique<Operation::ReferencedConnection>(this),
+      Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(query));
   folly::ScopeGuard guard =
       folly::makeGuard([&] { sync_operation_in_progress_ = false; });
@@ -495,7 +495,7 @@ DbQueryResult Connection::query(Query&& query) {
 template <>
 DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   auto op = beginAnyQuery<MultiQueryOperation>(
-      folly::make_unique<Operation::ReferencedConnection>(this),
+      Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(queries));
   folly::ScopeGuard guard =
       folly::makeGuard([&] { sync_operation_in_progress_ = false; });
@@ -536,7 +536,7 @@ std::unique_ptr<MultiQueryStreamHandler> Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
     std::vector<Query> queries) {
   auto op = beginAnyQuery<MultiQueryStreamOperation>(
-      folly::make_unique<Operation::OwnedConnection>(std::move(conn)),
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
 
   // MultiQueryStreamHandler needs to be alive while the operation is running.
