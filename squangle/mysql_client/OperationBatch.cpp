@@ -45,7 +45,7 @@ void OperationBatch::drain() {
     return;
   }
 
-  CHECK_EQ(std::this_thread::get_id(), creator_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), creator_thread_id_);
 
   std::unique_lock<std::mutex> lock(*mutex_);
 

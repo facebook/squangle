@@ -251,7 +251,7 @@ void AsyncConnectionPool::recycleMysqlConnection(
 void AsyncConnectionPool::registerForConnection(
     ConnectPoolOperation* raw_pool_op) {
   // Runs only in main thread by run() in the ConnectPoolOperation
-  CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   {
     std::unique_lock<std::mutex> lock(shutdown_mutex_);
     if (shutting_down_) {
@@ -291,7 +291,7 @@ void AsyncConnectionPool::registerForConnection(
 }
 
 bool AsyncConnectionPool::canCreateMoreConnections(const PoolKey& pool_key) {
-  CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   std::unique_lock<std::mutex> l(counter_mutex_);
   auto open_conns = open_connections_[pool_key];
   auto pending_conns = pending_connections_[pool_key];
@@ -374,7 +374,7 @@ void AsyncConnectionPool::connectionSpotFreed(const PoolKey& pool_key) {
 void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
   // Only called internally, this doesn't need to check if it's shutting
   // down
-  CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   {
     std::unique_lock<std::mutex> lock(shutdown_mutex_);
     if (shutting_down_) {
@@ -441,7 +441,7 @@ void AsyncConnectionPool::addConnection(
     std::unique_ptr<MysqlPooledHolder> mysql_conn, bool brand_new) {
   // Only called internally, this doesn't need to check if it's shutting
   // down
-  CHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   if (brand_new) {
     if (expiration_policy_ == ExpirationPolicy::Age) {
       // TODO add noise to expiration age
@@ -472,7 +472,7 @@ void AsyncConnectionPool::CleanUpTimer::timeoutExpired() noexcept {
 
 std::shared_ptr<ConnectPoolOperation>
 AsyncConnectionPool::ConnStorage::popOperation(const PoolKey& pool_key) {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   PoolOpList& list = waitList_[pool_key];
   while (!list.empty()) {
@@ -489,7 +489,7 @@ AsyncConnectionPool::ConnStorage::popOperation(const PoolKey& pool_key) {
 
 void AsyncConnectionPool::ConnStorage::queueOperation(
     const PoolKey& pool_key, std::shared_ptr<ConnectPoolOperation>& pool_op) {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   PoolOpList& list = waitList_[pool_key];
   std::weak_ptr<ConnectPoolOperation> weak_op = pool_op;
@@ -501,7 +501,7 @@ void AsyncConnectionPool::ConnStorage::failOperations(
     OperationResult op_result,
     int mysql_errno,
     const string& mysql_error) {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   PoolOpList& list = waitList_[pool_key];
   while (!list.empty()) {
@@ -516,7 +516,7 @@ void AsyncConnectionPool::ConnStorage::failOperations(
 
 std::unique_ptr<MysqlPooledHolder>
 AsyncConnectionPool::ConnStorage::popConnection(const PoolKey& pool_key) {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   auto iter = stock_.find(pool_key);
   if (iter == stock_.end() || iter->second.empty()) {
@@ -531,7 +531,7 @@ AsyncConnectionPool::ConnStorage::popConnection(const PoolKey& pool_key) {
 
 void AsyncConnectionPool::ConnStorage::queueConnection(
     std::unique_ptr<MysqlPooledHolder> newConn) {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   // If it doesn't have space, remove the oldest and add this
   MysqlConnectionList& list = stock_[newConn->getPoolKey()];
@@ -543,7 +543,7 @@ void AsyncConnectionPool::ConnStorage::queueConnection(
 }
 
 void AsyncConnectionPool::ConnStorage::cleanupConnections() {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   Timepoint now = std::chrono::high_resolution_clock::now();
   for (auto connListIt = stock_.begin(); connListIt != stock_.end();) {
@@ -572,7 +572,7 @@ void AsyncConnectionPool::ConnStorage::cleanupConnections() {
 }
 
 void AsyncConnectionPool::ConnStorage::cleanupOperations() {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   for (auto poolOpListIt = waitList_.begin();
        poolOpListIt != waitList_.end();) {
@@ -597,7 +597,7 @@ void AsyncConnectionPool::ConnStorage::cleanupOperations() {
 }
 
 void AsyncConnectionPool::ConnStorage::clearAll() {
-  CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   // Clearing all operations in the queue
   for (auto& poolOpListIt : waitList_) {
@@ -717,7 +717,7 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
 
 void ConnectPoolOperation::connectionCallback(
     std::unique_ptr<MysqlPooledHolder> mysql_conn) {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   if (!mysql_conn) {
     LOG(DFATAL) << "Unexpected error";
     completeOperation(OperationResult::Failed);
@@ -754,7 +754,7 @@ void ConnectPoolOperation::failureCallback(OperationResult failure,
 }
 
 void ConnectPoolOperation::socketActionable() {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
 
   LOG(DFATAL) << "Should not be called";
 }

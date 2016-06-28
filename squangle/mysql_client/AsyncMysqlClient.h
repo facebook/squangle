@@ -573,7 +573,7 @@ class Connection {
   }
 
   std::unique_ptr<MysqlConnectionHolder> stealMysqlConnectionHolder() {
-    CHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
     return std::move(mysql_connection_);
   }
 
@@ -618,7 +618,7 @@ class Connection {
   ConnectionSocketHandler* socketHandler() { return &socket_handler_; }
 
   MYSQL* mysql() const {
-    CHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
     if (mysql_connection_) {
       return mysql_connection_->mysql();
     } else {
@@ -627,7 +627,7 @@ class Connection {
   }
 
   MysqlConnectionHolder* mysqlConnection() const {
-    CHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
     return mysql_connection_.get();
   }
 

@@ -388,7 +388,7 @@ class AsyncConnectionPool
     void clearAll();
 
     size_t numQueuedOperations(const PoolKey& pool_key) {
-      CHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+      DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
       return waitList_[pool_key].size();
     }
 

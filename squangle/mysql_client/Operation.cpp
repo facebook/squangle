@@ -50,7 +50,7 @@ Operation::Operation(ConnectionProxy&& safe_conn)
 Operation::~Operation() {}
 
 void Operation::waitForSocketActionable() {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
 
   MYSQL* mysql = conn()->mysql();
   uint16_t event_mask = 0;
@@ -131,7 +131,7 @@ Operation* Operation::run() {
 }
 
 void Operation::completeOperation(OperationResult result) {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   if (state_ == OperationState::Completed) {
     return;
   }
@@ -213,7 +213,7 @@ void Operation::wait() {
 AsyncMysqlClient* Operation::async_client() { return async_client_; }
 
 std::shared_ptr<Operation> Operation::getSharedPointer() {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   return shared_from_this();
 }
 
@@ -423,7 +423,7 @@ ConnectOperation* ConnectOperation::specializedRun() {
 ConnectOperation::~ConnectOperation() { removeClientReference(); }
 
 void ConnectOperation::socketActionable() {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   int error;
   CHECK_THROW(conn()->mysql()->async_op_status == ASYNC_OP_CONNECT,
               InvalidConnectionException);
@@ -685,7 +685,7 @@ FetchOperation::RowStream* FetchOperation::rowStream() {
 }
 
 void FetchOperation::socketActionable() {
-  CHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
   // This loop runs the fetch actions required to successfully execute query,
@@ -862,7 +862,7 @@ void FetchOperation::socketActionable() {
 }
 
 void FetchOperation::pauseForConsumer() {
-  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   DCHECK(state() == OperationState::Pending);
 
   paused_action_ = active_fetch_action_;
@@ -983,7 +983,7 @@ MultiQueryStreamOperation::MultiQueryStreamOperation(
     : FetchOperation(std::move(conn)), queries_(std::move(queries)) {}
 
 folly::fbstring MultiQueryStreamOperation::renderedQuery() {
-  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   return Query::renderMultiQuery(conn()->mysql(), queries_);
 }
 
@@ -1025,7 +1025,7 @@ QueryOperation::QueryOperation(
       query_result_(folly::make_unique<QueryResult>(0)) {}
 
 folly::fbstring QueryOperation::renderedQuery() {
-  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   return query_.render(conn()->mysql());
 }
 
@@ -1101,7 +1101,7 @@ MultiQueryOperation::MultiQueryOperation(
       current_query_result_(folly::make_unique<QueryResult>(0)) {}
 
 folly::fbstring MultiQueryOperation::renderedQuery() {
-  CHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
   return Query::renderMultiQuery(conn()->mysql(), queries_);
 }
 
