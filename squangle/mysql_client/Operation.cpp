@@ -210,7 +210,8 @@ void Operation::setAsyncClientError(
 
 void Operation::wait() {
   CHECK_THROW(
-      std::this_thread::get_id() != async_client()->threadId(),
+      folly::fibers::onFiber() ||
+          std::this_thread::get_id() != async_client()->threadId(),
       std::runtime_error);
   return conn()->wait();
 }
