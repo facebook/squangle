@@ -37,6 +37,7 @@
 #ifndef COMMON_ASYNC_MYSQL_OPERATION_H
 #define COMMON_ASYNC_MYSQL_OPERATION_H
 
+#include <mysql.h>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -44,21 +45,20 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include <mysql.h>
 
-#include "squangle/mysql_client/Row.h"
-#include "squangle/mysql_client/Query.h"
-#include "squangle/mysql_client/DbResult.h"
-#include "squangle/mysql_client/Connection.h"
-#include "squangle/logger/DBEventLogger.h"
 #include <folly/Exception.h>
+#include <folly/Memory.h>
 #include <folly/String.h>
 #include <folly/dynamic.h>
-#include <folly/Memory.h>
-#include <folly/io/async/SSLContext.h>
-#include <folly/io/async/EventHandler.h>
 #include <folly/io/async/AsyncTimeout.h>
+#include <folly/io/async/EventHandler.h>
+#include <folly/io/async/SSLContext.h>
 #include <wangle/client/ssl/SSLSession.h>
+#include "squangle/logger/DBEventLogger.h"
+#include "squangle/mysql_client/Connection.h"
+#include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/Query.h"
+#include "squangle/mysql_client/Row.h"
 
 namespace facebook {
 namespace common {
@@ -110,11 +110,22 @@ using std::string;
 // Cancelling are not visible at times an outside caller might see
 // them (since, once run() has been called, wait() must be called
 // before inspecting other Operation attributes).
-enum class OperationState { Unstarted, Pending, Cancelling, Completed, };
+enum class OperationState {
+  Unstarted,
+  Pending,
+  Cancelling,
+  Completed,
+};
 
 // Once an operation is Completed, it has a result type, indicating
 // what ultimately occurred.  These are self-explanatory.
-enum class OperationResult { Unknown, Succeeded, Failed, Cancelled, TimedOut, };
+enum class OperationResult {
+  Unknown,
+  Succeeded,
+  Failed,
+  Cancelled,
+  TimedOut,
+};
 
 // For control flows in callbacks. This indicates the reason a callback was
 // fired. When a pack of rows if fetched it is used RowsFetched to
@@ -137,7 +148,9 @@ class ConnectionOptions {
     return *this;
   }
 
-  Duration getTimeout() const { return connection_timeout_; }
+  Duration getTimeout() const {
+    return connection_timeout_;
+  }
 
   ConnectionOptions& setQueryTimeout(Duration dur) {
     query_timeout_ = dur;
@@ -193,7 +206,9 @@ class ConnectionOptions {
     return *this;
   }
 
-  uint32_t getConnectAttempts() const { return max_attempts_; }
+  uint32_t getConnectAttempts() const {
+    return max_attempts_;
+  }
 
   // If this is not set, but regular timeout was, the TotalTimeout for the
   // operation will be the number of attempts times the primary timeout.
@@ -203,7 +218,9 @@ class ConnectionOptions {
     return *this;
   }
 
-  Duration getTotalTimeout() const { return total_timeout_; }
+  Duration getTotalTimeout() const {
+    return total_timeout_;
+  }
 
  private:
   Duration connection_timeout_;
@@ -232,13 +249,19 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return this;
   }
 
-  Duration getTimeout() { return timeout_; }
+  Duration getTimeout() {
+    return timeout_;
+  }
 
   // Did the operation succeed?
-  bool ok() const { return done() && result_ == OperationResult::Succeeded; }
+  bool ok() const {
+    return done() && result_ == OperationResult::Succeeded;
+  }
 
   // Is the operation complete (success or failure)?
-  bool done() const { return state_ == OperationState::Completed; }
+  bool done() const {
+    return state_ == OperationState::Completed;
+  }
 
   // host and port we are connected to (or will be connected to).
   const string& host() const;
@@ -257,16 +280,26 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual void mustSucceed() = 0;
 
   // Information about why this operation failed.
-  int mysql_errno() const { return mysql_errno_; }
-  const string& mysql_error() const { return mysql_error_; }
-  const string& mysql_normalize_error() const { return mysql_normalize_error_; }
+  int mysql_errno() const {
+    return mysql_errno_;
+  }
+  const string& mysql_error() const {
+    return mysql_error_;
+  }
+  const string& mysql_normalize_error() const {
+    return mysql_normalize_error_;
+  }
 
   // Get the state and result, as well as readable string versions.
-  OperationResult result() const { return result_; }
+  OperationResult result() const {
+    return result_;
+  }
 
   folly::StringPiece resultString() const;
 
-  OperationState state() const { return state_; }
+  OperationState state() const {
+    return state_;
+  }
 
   folly::StringPiece stateString() const;
 
@@ -285,16 +318,24 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return this;
   }
 
-  const folly::dynamic& userData() const { return user_data_; }
-  folly::dynamic&& stealUserData() { return std::move(user_data_); }
+  const folly::dynamic& userData() const {
+    return user_data_;
+  }
+  folly::dynamic&& stealUserData() {
+    return std::move(user_data_);
+  }
 
   // Connections are transferred across operations.  At any one time,
   // there is one unique owner of the connection.
   std::unique_ptr<Connection>&& releaseConnection();
-  Connection* connection() { return conn_proxy_.get(); }
+  Connection* connection() {
+    return conn_proxy_.get();
+  }
 
   // Various accessors for our Operation's start, end, and total elapsed time.
-  Timepoint startTime() const { return start_time_; }
+  Timepoint startTime() const {
+    return start_time_;
+  }
   Timepoint endTime() const {
     CHECK_THROW(state_ == OperationState::Completed, OperationStateException);
     return end_time_;
@@ -302,8 +343,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   Duration elapsed() const {
     CHECK_THROW(state_ == OperationState::Completed, OperationStateException);
-    return std::chrono::duration_cast<std::chrono::microseconds>(end_time_ -
-                                                                 start_time_);
+    return std::chrono::duration_cast<std::chrono::microseconds>(
+        end_time_ - start_time_);
   }
 
   void setObserverCallback(ObserverCallback obs_cb);
@@ -323,18 +364,22 @@ class Operation : public std::enable_shared_from_this<Operation> {
   class ConnectionProxy;
   explicit Operation(ConnectionProxy&& conn);
 
-
-  ConnectionProxy& conn() { return conn_proxy_; }
-  const ConnectionProxy& conn() const { return conn_proxy_; }
+  ConnectionProxy& conn() {
+    return conn_proxy_;
+  }
+  const ConnectionProxy& conn() const {
+    return conn_proxy_;
+  }
 
   // Save any mysql errors that occurred (since we may hand off the
   // Connection before the user wants this information).
   void snapshotMysqlErrors();
 
   // Same as above, but specify the error code.
-  void setAsyncClientError(int mysql_errno,
-                           StringPiece msg,
-                           StringPiece normalizeMsg = "");
+  void setAsyncClientError(
+      int mysql_errno,
+      StringPiece msg,
+      StringPiece normalizeMsg = "");
 
   // Called when an Operation needs to wait for the socket to become
   // readable or writable (aka actionable).
@@ -364,6 +409,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
     explicit OwnedConnection(std::unique_ptr<Connection>&& conn);
     Connection* get();
     std::unique_ptr<Connection>&& releaseConnection();
+
    private:
     std::unique_ptr<Connection> conn_;
   };
@@ -371,9 +417,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   class ReferencedConnection {
    public:
     ReferencedConnection() : conn_(nullptr) {}
-    explicit ReferencedConnection(Connection* conn)
-        : conn_(conn) {}
-    Connection* get() { return conn_; }
+    explicit ReferencedConnection(Connection* conn) : conn_(conn) {}
+    Connection* get() {
+      return conn_;
+    }
+
    private:
     Connection* conn_;
   };
@@ -397,14 +445,19 @@ class Operation : public std::enable_shared_from_this<Operation> {
       return const_cast<ConnectionProxy*>(this)->get();
     }
 
-    Connection* operator->() { return get(); }
-    const Connection* operator->() const { return get(); }
+    Connection* operator->() {
+      return get();
+    }
+    const Connection* operator->() const {
+      return get();
+    }
 
     ConnectionProxy(ConnectionProxy&&) = default;
     ConnectionProxy& operator=(ConnectionProxy&&) = default;
 
     ConnectionProxy(ConnectionProxy const&) = delete;
     ConnectionProxy& operator=(ConnectionProxy const&) = delete;
+
    private:
     OwnedConnection ownedConn_;
     ReferencedConnection referencedConn_;
@@ -456,18 +509,29 @@ class ConnectOperation : public Operation {
  public:
   virtual ~ConnectOperation();
 
-  void setCallback(ConnectCallback cb) { connect_callback_ = cb; }
+  void setCallback(ConnectCallback cb) {
+    connect_callback_ = cb;
+  }
 
-  const string& database() const { return conn_key_.db_name; }
-  const string& user() const { return conn_key_.user; }
+  const string& database() const {
+    return conn_key_.db_name;
+  }
+  const string& user() const {
+    return conn_key_.user;
+  }
 
-  const ConnectionKey& getConnectionKey() const { return conn_key_; }
+  const ConnectionKey& getConnectionKey() const {
+    return conn_key_;
+  }
   const ConnectionOptions& getConnectionOptions() const;
-  const ConnectionKey* getKey() const { return &conn_key_; }
+  const ConnectionKey* getKey() const {
+    return &conn_key_;
+  }
 
   // Get and set MySQL 5.6 connection attributes.
-  ConnectOperation* setConnectionAttribute(const string& attr,
-                                           const string& value);
+  ConnectOperation* setConnectionAttribute(
+      const string& attr,
+      const string& value);
 
   const std::unordered_map<string, string>& connectionAttributes() const {
     return conn_options_.getConnectionAttributes();
@@ -522,9 +586,13 @@ class ConnectOperation : public Operation {
   // connection.
   ConnectOperation* setConnectAttempts(uint32_t max_attempts);
 
-  uint32_t attemptsMade() const { return attempts_made_; }
+  uint32_t attemptsMade() const {
+    return attempts_made_;
+  }
 
-  Duration getAttemptTimeout() const { return conn_options_.getTimeout(); }
+  Duration getAttemptTimeout() const {
+    return conn_options_.getTimeout();
+  }
 
   ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_options);
 
@@ -810,7 +878,9 @@ class QueryOperation : public FetchOperation {
 
   // Steal all rows.  Only valid if there is no callback.  Inefficient
   // for large result sets.
-  vector<RowBlock>&& stealRows() { return query_result_->stealRows(); }
+  vector<RowBlock>&& stealRows() {
+    return query_result_->stealRows();
+  }
 
   const vector<RowBlock>& rows() const {
     return query_result_->rows();
@@ -822,7 +892,9 @@ class QueryOperation : public FetchOperation {
   }
 
   // Number of rows affected (aka mysql_affected_rows).
-  uint64_t numRowsAffected() const { return query_result_->numRowsAffected(); }
+  uint64_t numRowsAffected() const {
+    return query_result_->numRowsAffected();
+  }
 
   void setQueryResult(QueryResult query_result) {
     query_result_ = folly::make_unique<QueryResult>(std::move(query_result));
@@ -830,8 +902,7 @@ class QueryOperation : public FetchOperation {
 
   // Don't call this; it's public strictly for Connection to be able
   // to call make_shared.
-  QueryOperation(ConnectionProxy&& connection,
-                 Query&& query);
+  QueryOperation(ConnectionProxy&& connection, Query&& query);
 
   // Overriding to narrow the return type
   QueryOperation* setTimeout(Duration timeout) {

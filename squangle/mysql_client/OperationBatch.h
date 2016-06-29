@@ -27,15 +27,14 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "squangle/mysql_client/Operation.h"
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
 
 class OperationBatch {
-
  public:
   explicit OperationBatch()
       : mutex_(new std::mutex),
@@ -47,7 +46,9 @@ class OperationBatch {
   OperationBatch(OperationBatch&& other) = default;
   OperationBatch& operator=(OperationBatch&& other) = default;
 
-  ~OperationBatch() { drain(); }
+  ~OperationBatch() {
+    drain();
+  }
 
   void add(std::shared_ptr<Operation> op);
 

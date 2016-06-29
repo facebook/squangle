@@ -18,8 +18,8 @@
 #ifndef COMMON_ASYNC_MYSQL_FUTURE_ADAPTER_H
 #define COMMON_ASYNC_MYSQL_FUTURE_ADAPTER_H
 
-#include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/Operation.h"
 
 #include <folly/futures/Future.h>
 
@@ -40,10 +40,8 @@ folly::Future<DbQueryResult> toFuture(QueryOperation* query_op);
 folly::Future<DbQueryResult> toFuture(QueryOperation_ptr& query_op);
 
 // Future for MultiQueryOperation
-folly::Future<DbMultiQueryResult> toFuture(
-    MultiQueryOperation* mquery_op);
-folly::Future<DbMultiQueryResult> toFuture(
-    MultiQueryOperation_ptr& mquery_op);
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op);
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op);
 }
 }
 } // facebook::common::mysql_client

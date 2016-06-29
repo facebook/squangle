@@ -9,12 +9,12 @@
  */
 
 #include "squangle/mysql_client/Query.h"
-#include <folly/String.h>
 #include <folly/Format.h>
+#include <folly/String.h>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/variant/get.hpp>
 #include <boost/variant.hpp>
+#include <boost/variant/get.hpp>
 #include <algorithm>
 #include <vector>
 
@@ -60,13 +60,17 @@ bool QueryArgument::isString() const {
   return value_.type() == typeid(folly::fbstring);
 }
 
-bool QueryArgument::isQuery() const { return value_.type() == typeid(Query); }
+bool QueryArgument::isQuery() const {
+  return value_.type() == typeid(Query);
+}
 
 bool QueryArgument::isPairList() const {
   return value_.type() == typeid(std::vector<ArgPair>);
 }
 
-bool QueryArgument::isBool() const { return value_.type() == typeid(bool); }
+bool QueryArgument::isBool() const {
+  return value_.type() == typeid(bool);
+}
 
 bool QueryArgument::isNull() const {
   return value_.type() == typeid(std::nullptr_t);
@@ -76,18 +80,24 @@ bool QueryArgument::isList() const {
   return value_.type() == typeid(std::vector<QueryArgument>);
 }
 
-bool QueryArgument::isDouble() const { return value_.type() == typeid(double); }
+bool QueryArgument::isDouble() const {
+  return value_.type() == typeid(double);
+}
 
-bool QueryArgument::isInt() const { return value_.type() == typeid(int64_t); }
+bool QueryArgument::isInt() const {
+  return value_.type() == typeid(int64_t);
+}
 
-QueryArgument&& QueryArgument::operator()(const folly::fbstring& q1,
-                                          const QueryArgument& q2) {
+QueryArgument&& QueryArgument::operator()(
+    const folly::fbstring& q1,
+    const QueryArgument& q2) {
   getPairs().emplace_back(ArgPair(q1, q2));
   return std::move(*this);
 }
 
-QueryArgument&& QueryArgument::operator()(folly::fbstring&& q1,
-                                          QueryArgument&& q2) {
+QueryArgument&& QueryArgument::operator()(
+    folly::fbstring&& q1,
+    QueryArgument&& q2) {
   getPairs().emplace_back(ArgPair(std::move(q1), std::move(q2)));
   return std::move(*this);
 }
@@ -116,11 +126,17 @@ folly::fbstring QueryArgument::asString() const {
   return boost::apply_visitor(FbStringConverter(), value_);
 }
 
-double QueryArgument::getDouble() const { return boost::get<double>(value_); }
+double QueryArgument::getDouble() const {
+  return boost::get<double>(value_);
+}
 
-int64_t QueryArgument::getInt() const { return boost::get<int64_t>(value_); }
+int64_t QueryArgument::getInt() const {
+  return boost::get<int64_t>(value_);
+}
 
-bool QueryArgument::getBool() const { return boost::get<bool>(value_); }
+bool QueryArgument::getBool() const {
+  return boost::get<bool>(value_);
+}
 
 const folly::fbstring& QueryArgument::getString() const {
   return boost::get<fbstring>(value_);
@@ -145,8 +161,8 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
     for (const auto& key : keys) {
       QueryArgument q2(param[key]);
 
-      boost::get<std::vector<ArgPair>>(value_)
-          .emplace_back(ArgPair(key.asString(), q2));
+      boost::get<std::vector<ArgPair>>(value_).emplace_back(
+          ArgPair(key.asString(), q2));
     }
   } else if (param.isNull()) {
     value_ = nullptr;
@@ -211,7 +227,8 @@ void appendColumnTableName(folly::fbstring* s, const QueryArgument& d) {
 void parseError(const StringPiece s, size_t offset, const StringPiece message) {
   const std::string msg =
       folly::format(
-          "Parse error at offset {}: {}, query: {}", offset, message, s).str();
+          "Parse error at offset {}: {}, query: {}", offset, message, s)
+          .str();
   throw std::invalid_argument(msg);
 }
 
@@ -242,9 +259,10 @@ StringPiece advance(const StringPiece s, size_t* offset, size_t num) {
 
 // Escape a string (or copy it through unmodified if no connection is
 // available).
-void appendEscapedString(folly::fbstring* dest,
-                         const folly::fbstring& value,
-                         MYSQL* connection) {
+void appendEscapedString(
+    folly::fbstring* dest,
+    const folly::fbstring& value,
+    MYSQL* connection) {
   if (!connection) {
     VLOG(3) << "connectionless escape performed; this should only occur in "
             << "testing.";
@@ -279,11 +297,12 @@ void Query::append(Query&& query2) {
 // Append a dynamic to the query string we're building.  We ensure the
 // type matches the dynamic's type (or allow a magic 'v' type to be
 // any value, but this isn't exposed to the users of the library).
-void Query::appendValue(folly::fbstring* s,
-                        size_t offset,
-                        char type,
-                        const QueryArgument& d,
-                        MYSQL* connection) const {
+void Query::appendValue(
+    folly::fbstring* s,
+    size_t offset,
+    char type,
+    const QueryArgument& d,
+    MYSQL* connection) const {
   if (d.isString()) {
     if (type != 's' && type != 'v') {
       formatStringParseError(query_text_, offset, type, "string");
@@ -310,16 +329,19 @@ void Query::appendValue(folly::fbstring* s,
   }
 }
 
-void Query::appendValueClauses(folly::fbstring* ret,
-                               size_t* idx,
-                               const char* sep,
-                               const QueryArgument& param,
-                               MYSQL* connection) const {
+void Query::appendValueClauses(
+    folly::fbstring* ret,
+    size_t* idx,
+    const char* sep,
+    const QueryArgument& param,
+    MYSQL* connection) const {
   if (!param.isPairList()) {
-    parseError(query_text_,
-               *idx,
-               folly::format("object expected for %Lx but received {}",
-                             param.typeName()).str());
+    parseError(
+        query_text_,
+        *idx,
+        folly::format(
+            "object expected for %Lx but received {}", param.typeName())
+            .str());
   }
   // Sort these to get consistent query ordering (mainly for
   // testing, but also aesthetics of the final query).
@@ -339,8 +361,9 @@ void Query::appendValueClauses(folly::fbstring* ret,
   }
 }
 
-folly::fbstring Query::renderMultiQuery(MYSQL* connection,
-                                        const std::vector<Query>& queries) {
+folly::fbstring Query::renderMultiQuery(
+    MYSQL* connection,
+    const std::vector<Query>& queries) {
   auto reserve_size = 0;
   for (const Query& query : queries) {
     reserve_size += query.query_text_.size() + 8 * query.params_.size();
@@ -372,8 +395,9 @@ folly::fbstring Query::render(MYSQL* conn) const {
   return render(conn, params_);
 }
 
-folly::fbstring Query::render(MYSQL* conn,
-                              const std::vector<QueryArgument>& params) const {
+folly::fbstring Query::render(
+    MYSQL* conn,
+    const std::vector<QueryArgument>& params) const {
   if (unsafe_query_) {
     return query_text_;
   }

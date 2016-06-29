@@ -9,33 +9,38 @@
  */
 
 #include "squangle/mysql_client/DbResult.h"
-#include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "squangle/mysql_client/Operation.h"
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
 
-MysqlException::MysqlException(OperationResult failure_type,
-                               int mysql_errno,
-                               const std::string& mysql_error,
-                               const ConnectionKey conn_key,
-                               Duration elapsed_time)
-    : Exception(failure_type == OperationResult::Failed
-                    ? folly::format(
-                          "Mysql error {}. {}", mysql_errno, mysql_error).str()
-                    : Operation::toString(failure_type)),
+MysqlException::MysqlException(
+    OperationResult failure_type,
+    int mysql_errno,
+    const std::string& mysql_error,
+    const ConnectionKey conn_key,
+    Duration elapsed_time)
+    : Exception(
+          failure_type == OperationResult::Failed
+              ? folly::format("Mysql error {}. {}", mysql_errno, mysql_error)
+                    .str()
+              : Operation::toString(failure_type)),
       OperationResultBase(conn_key, elapsed_time),
       failure_type_(failure_type),
       mysql_errno_(mysql_errno),
       mysql_error_(mysql_error) {}
 
-bool DbResult::ok() const { return result_ == OperationResult::Succeeded; }
+bool DbResult::ok() const {
+  return result_ == OperationResult::Succeeded;
+}
 
-DbResult::DbResult(std::unique_ptr<Connection>&& conn,
-                   OperationResult result,
-                   const ConnectionKey conn_key,
-                   Duration elapsed)
+DbResult::DbResult(
+    std::unique_ptr<Connection>&& conn,
+    OperationResult result,
+    const ConnectionKey conn_key,
+    Duration elapsed)
     : OperationResultBase(conn_key, elapsed),
       conn_(std::move(conn)),
       result_(result) {}
@@ -61,7 +66,6 @@ QueryResult::QueryResult(QueryResult&& other) noexcept
       last_insert_id_(other.last_insert_id_),
       operation_result_(other.operation_result_),
       row_blocks_(std::move(other.row_blocks_)) {
-
   other.row_blocks_.clear();
   other.num_rows_ = 0;
 }
@@ -85,7 +89,7 @@ QueryResult& QueryResult::operator=(QueryResult&& other) {
 
 bool QueryResult::ok() const {
   return (partial_ && operation_result_ == OperationResult::Unknown) ||
-         operation_result_ == OperationResult::Succeeded;
+      operation_result_ == OperationResult::Succeeded;
 }
 
 bool QueryResult::succeeded() const {
@@ -264,8 +268,8 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow() {
     handleQueryFailed();
   } else {
     LOG(DFATAL) << "Bad state transition. Only ReadRows, ReadResult and "
-                << "OperationFailed are allowed. Received "
-                << toString(state_) << ".";
+                << "OperationFailed are allowed. Received " << toString(state_)
+                << ".";
     handleBadState();
   }
   return folly::Optional<EphemeralRow>();

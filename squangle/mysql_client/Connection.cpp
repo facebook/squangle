@@ -9,17 +9,18 @@
  */
 
 #include "squangle/mysql_client/Connection.h"
-#include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/AsyncConnectionPool.h"
+#include "squangle/mysql_client/AsyncMysqlClient.h"
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
 
-MysqlConnectionHolder::MysqlConnectionHolder(AsyncMysqlClient* client,
-                                             MYSQL* mysql,
-                                             const ConnectionKey conn_key,
-                                             bool already_open)
+MysqlConnectionHolder::MysqlConnectionHolder(
+    AsyncMysqlClient* client,
+    MYSQL* mysql,
+    const ConnectionKey conn_key,
+    bool already_open)
     : async_client_(client),
       mysql_(mysql),
       conn_key_(conn_key),
@@ -50,10 +51,10 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
     auto mysql = mysql_;
     auto client = async_client_;
     // Close our connection in the thread from which it was created.
-    if (!async_client_->runInThread([mysql, client]() {
-          mysql_close(mysql);
-        })) {
-      LOG(DFATAL) << "Mysql connection couldn't be closed: error in folly::EventBase";
+    if (!async_client_->runInThread(
+            [mysql, client]() { mysql_close(mysql); })) {
+      LOG(DFATAL)
+          << "Mysql connection couldn't be closed: error in folly::EventBase";
     }
     if (connection_opened_) {
       async_client_->stats()->incrClosedConnections();

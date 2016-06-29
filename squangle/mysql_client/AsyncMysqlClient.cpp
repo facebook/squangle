@@ -9,14 +9,14 @@
  */
 
 #include "squangle/mysql_client/AsyncMysqlClient.h"
-#include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/FutureAdapter.h"
+#include "squangle/mysql_client/Operation.h"
 
 #include <vector>
 
+#include <folly/Memory.h>
 #include <folly/Singleton.h>
 #include <folly/ThreadName.h>
-#include <folly/Memory.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
 
@@ -30,7 +30,9 @@ DECLARE_int64(async_mysql_timeout_micros);
 namespace {
 class InitMysqlLibrary {
  public:
-  InitMysqlLibrary() { mysql_library_init(-1, nullptr, nullptr); }
+  InitMysqlLibrary() {
+    mysql_library_init(-1, nullptr, nullptr);
+  }
 };
 }
 
@@ -76,17 +78,16 @@ void AsyncMysqlClient::init() {
   tevent_base_.waitUntilRunning();
 }
 
-
 bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
   auto scheduleTime = std::chrono::high_resolution_clock::now();
-  if (!tevent_base_.runInEventBaseThread(
-          [ fn, scheduleTime, this ]() {
-            auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::high_resolution_clock::now() -
-                             scheduleTime).count();
-            callbackDelayAvg_.addSample(delay);
-            fn();
-          })) {
+  if (!tevent_base_.runInEventBaseThread([fn, scheduleTime, this]() {
+        auto delay =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::high_resolution_clock::now() - scheduleTime)
+                .count();
+        callbackDelayAvg_.addSample(delay);
+        fn();
+      })) {
     LOG(DFATAL) << "folly::EventBase::runInEventBase failed";
     return false;
   }
@@ -275,7 +276,6 @@ folly::Future<ConnectResult> AsyncMysqlClient::connectFuture(
     const string& user,
     const string& password,
     const ConnectionOptions& conn_opts) {
-
   return toFuture(beginConnection(host, port, database_name, user, password)
                       ->setConnectionOptions(conn_opts));
 }
@@ -318,8 +318,8 @@ std::unique_ptr<Connection> AsyncMysqlClient::adoptConnection(
     const string& database_name,
     const string& user,
     const string& password) {
-  CHECK_THROW(raw_conn->async_op_status == ASYNC_OP_UNSET,
-              InvalidConnectionException);
+  CHECK_THROW(
+      raw_conn->async_op_status == ASYNC_OP_UNSET, InvalidConnectionException);
   auto conn = folly::make_unique<Connection>(
       this, ConnectionKey(host, port, database_name, user, password), raw_conn);
   conn->associateWithClientThread();
@@ -375,15 +375,17 @@ Connection::~Connection() {
 
 template <>
 std::shared_ptr<QueryOperation> Connection::beginQuery(
-    std::unique_ptr<Connection> conn, Query&& query) {
+    std::unique_ptr<Connection> conn,
+    Query&& query) {
   return beginAnyQuery<QueryOperation>(
-    Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
-    std::move(query));
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
+      std::move(query));
 }
 
 template <>
 std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
-    std::unique_ptr<Connection> conn, std::vector<Query>&& queries) {
+    std::unique_ptr<Connection> conn,
+    std::vector<Query>&& queries) {
   return beginAnyQuery<MultiQueryOperation>(
       Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
@@ -400,13 +402,13 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
 
 template <typename QueryType, typename QueryArg>
 std::shared_ptr<QueryType> Connection::beginAnyQuery(
-    Operation::ConnectionProxy&& conn_proxy, QueryArg&& query) {
+    Operation::ConnectionProxy&& conn_proxy,
+    QueryArg&& query) {
   CHECK_THROW(conn_proxy.get(), InvalidConnectionException);
   CHECK_THROW(conn_proxy.get()->ok(), InvalidConnectionException);
   conn_proxy.get()->checkOperationInProgress();
-  auto ret = std::make_shared<QueryType>(
-      std::move(conn_proxy),
-      std::move(query));
+  auto ret =
+      std::make_shared<QueryType>(std::move(conn_proxy), std::move(query));
   Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {
     ret->setTimeout(timeout);
@@ -421,9 +423,10 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
 // be a MultiQuery.  Or it might just be one query; that's okay, too.
 template <>
 std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
-    std::unique_ptr<Connection> conn, Query&& query) {
-  return Connection::beginMultiQuery(std::move(conn),
-                                     std::vector<Query>{std::move(query)});
+    std::unique_ptr<Connection> conn,
+    Query&& query) {
+  return Connection::beginMultiQuery(
+      std::move(conn), std::vector<Query>{std::move(query)});
 }
 
 template <>
@@ -444,21 +447,24 @@ folly::Future<DbQueryResult> Connection::queryFuture(
 
 template <typename... Args>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
-    std::unique_ptr<Connection> conn, Args&&... args) {
+    std::unique_ptr<Connection> conn,
+    Args&&... args) {
   auto op = beginMultiQuery(std::move(conn), std::forward<Args>(args)...);
   return toFuture(op);
 }
 
 template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
-    std::unique_ptr<Connection> conn, Query&& args) {
+    std::unique_ptr<Connection> conn,
+    Query&& args) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   return toFuture(op);
 }
 
 template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
-        std::unique_ptr<Connection> conn, vector<Query>&& args) {
+    std::unique_ptr<Connection> conn,
+    vector<Query>&& args) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   return toFuture(op);
 }
@@ -475,20 +481,22 @@ DbQueryResult Connection::query(Query&& query) {
   op->run()->wait();
 
   if (!op->ok()) {
-    throw QueryException(op->numQueriesExecuted(),
-                         op->result(),
-                         op->mysql_errno(),
-                         op->mysql_error(),
-                         *getKey(),
-                         op->elapsed());
+    throw QueryException(
+        op->numQueriesExecuted(),
+        op->result(),
+        op->mysql_errno(),
+        op->mysql_error(),
+        *getKey(),
+        op->elapsed());
   }
   auto conn_key = *op->connection()->getKey();
-  DbQueryResult result(std::move(op->stealQueryResult()),
-                       op->numQueriesExecuted(),
-                       nullptr,
-                       op->result(),
-                       conn_key,
-                       op->elapsed());
+  DbQueryResult result(
+      std::move(op->stealQueryResult()),
+      op->numQueriesExecuted(),
+      nullptr,
+      op->result(),
+      conn_key,
+      op->elapsed());
   return result;
 }
 
@@ -504,21 +512,23 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   op->run()->wait();
 
   if (!op->ok()) {
-    throw QueryException(op->numQueriesExecuted(),
-                         op->result(),
-                         op->mysql_errno(),
-                         op->mysql_error(),
-                         *getKey(),
-                         op->elapsed());
+    throw QueryException(
+        op->numQueriesExecuted(),
+        op->result(),
+        op->mysql_errno(),
+        op->mysql_error(),
+        *getKey(),
+        op->elapsed());
   }
 
   auto conn_key = *op->connection()->getKey();
-  DbMultiQueryResult result(std::move(op->stealQueryResults()),
-                            op->numQueriesExecuted(),
-                            nullptr,
-                            op->result(),
-                            conn_key,
-                            op->elapsed());
+  DbMultiQueryResult result(
+      std::move(op->stealQueryResults()),
+      op->numQueriesExecuted(),
+      nullptr,
+      op->result(),
+      conn_key,
+      op->elapsed());
   return result;
 }
 
@@ -592,9 +602,10 @@ void ConnectionSocketHandler::timeoutExpired() noexcept {
 
 void ConnectionSocketHandler::handlerReady(uint16_t events) noexcept {
   DCHECK_EQ(std::this_thread::get_id(), op_->async_client()->threadId());
-  CHECK_THROW(op_->state_ != OperationState::Completed &&
-                  op_->state_ != OperationState::Unstarted,
-              OperationStateException);
+  CHECK_THROW(
+      op_->state_ != OperationState::Completed &&
+          op_->state_ != OperationState::Unstarted,
+      OperationStateException);
 
   if (op_->state() == OperationState::Cancelling) {
     op_->cancel();

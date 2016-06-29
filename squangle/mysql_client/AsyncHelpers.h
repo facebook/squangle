@@ -24,10 +24,10 @@ namespace mysql_client {
 // The Appender callbacks will only be called for `Success` and `Failure`
 // and pass the whole result of the query or multi query.
 typedef std::function<void(QueryOperation&, QueryResult, QueryCallbackReason)>
-QueryAppenderCallback;
+    QueryAppenderCallback;
 typedef std::function<
     void(MultiQueryOperation&, vector<QueryResult>, QueryCallbackReason)>
-MultiQueryAppenderCallback;
+    MultiQueryAppenderCallback;
 
 QueryCallback resultAppender(const QueryAppenderCallback& callback);
 

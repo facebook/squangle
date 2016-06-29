@@ -10,9 +10,9 @@
 #ifndef COMMON_ASYNC_CONNECTION_H
 #define COMMON_ASYNC_CONNECTION_H
 
-#include <chrono>
 #include <folly/String.h>
 #include <mysql.h>
+#include <chrono>
 
 #include "squangle/base/ConnectionKey.h"
 
@@ -33,41 +33,66 @@ typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
 // Holds the mysql connection for easier re use
 class MysqlConnectionHolder {
  public:
-  MysqlConnectionHolder(AsyncMysqlClient* client,
-                        MYSQL* mysql,
-                        const ConnectionKey conn_key,
-                        bool connection_already_open = false);
+  MysqlConnectionHolder(
+      AsyncMysqlClient* client,
+      MYSQL* mysql,
+      const ConnectionKey conn_key,
+      bool connection_already_open = false);
 
   // Closes the connection in hold
   virtual ~MysqlConnectionHolder();
-  const string& host() const { return conn_key_.host; }
-  int port() const { return conn_key_.port; }
-  const string& user() const { return conn_key_.user; }
-  const string& database() const { return conn_key_.db_name; }
-  const string& password() const { return conn_key_.password; }
-  MYSQL* mysql() const { return mysql_; }
+  const string& host() const {
+    return conn_key_.host;
+  }
+  int port() const {
+    return conn_key_.port;
+  }
+  const string& user() const {
+    return conn_key_.user;
+  }
+  const string& database() const {
+    return conn_key_.db_name;
+  }
+  const string& password() const {
+    return conn_key_.password;
+  }
+  MYSQL* mysql() const {
+    return mysql_;
+  }
 
   void setCreationTime(Timepoint creation_time) {
     creation_time_ = creation_time;
   }
 
-  void setReusable(bool reusable) { can_reuse_ = reusable; }
+  void setReusable(bool reusable) {
+    can_reuse_ = reusable;
+  }
 
-  bool isReusable() { return can_reuse_; }
+  bool isReusable() {
+    return can_reuse_;
+  }
 
   // Returns whether or not the connection is in a transaction based on server
   // status
   bool inTransaction();
 
-  Timepoint getCreationTime() { return creation_time_; }
+  Timepoint getCreationTime() {
+    return creation_time_;
+  }
 
-  const ConnectionKey* getKey() { return &conn_key_; }
+  const ConnectionKey* getKey() {
+    return &conn_key_;
+  }
 
   void connectionOpened();
 
-  bool isConnectionOpened() { return connection_opened_; }
+  bool isConnectionOpened() {
+    return connection_opened_;
+  }
 
-  Timepoint getLastActivityTime() { return last_activity_time_; }
+  Timepoint getLastActivityTime() {
+    return last_activity_time_;
+  }
 
   void setLastActivityTime(Timepoint last_activity_time) {
     last_activity_time_ = last_activity_time;

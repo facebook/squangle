@@ -59,7 +59,9 @@ Row::Row(const RowBlock* row_block, size_t row_number)
   CHECK_LT(row_number, row_block->numRows());
 }
 
-size_t Row::size() const { return row_block_->numFields(); }
+size_t Row::size() const {
+  return row_block_->numFields();
+}
 
 StringPiece Row::operator[](size_t col) const {
   return row_block_->getField<StringPiece>(row_number_, col);
@@ -77,9 +79,13 @@ bool Row::isNull(StringPiece field) const {
   return row_block_->isNull(row_number_, field);
 }
 
-auto Row::begin() const -> Iterator { return Iterator(this, 0); }
+auto Row::begin() const -> Iterator {
+  return Iterator(this, 0);
+}
 
-auto Row::end() const -> Iterator { return Iterator(this, size()); }
+auto Row::end() const -> Iterator {
+  return Iterator(this, size());
+}
 
 template <>
 StringPiece RowBlock::getField(size_t row, size_t field_num) const {
@@ -103,14 +109,15 @@ StringPiece RowBlock::getField(size_t row, size_t field_num) const {
 
 template <>
 std::chrono::system_clock::time_point RowBlock::getField(
-    size_t row, size_t field_num) const {
+    size_t row,
+    size_t field_num) const {
   auto field_value = getField<StringPiece>(row, field_num);
   return parseDateTime(field_value, getFieldType(field_num));
 }
 
 template <>
-std::chrono::microseconds RowBlock::getField(size_t row,
-                                             size_t field_num) const {
+std::chrono::microseconds RowBlock::getField(size_t row, size_t field_num)
+    const {
   auto field_value = getField<StringPiece>(row, field_num);
   return parseTimeOnly(field_value, getFieldType(field_num));
 }
@@ -133,8 +140,9 @@ time_t RowBlock::getDateField(size_t row, size_t field_num) const {
   return field_timet;
 }
 
-std::chrono::microseconds parseTimeOnly(StringPiece mysql_time,
-                                        enum_field_types field_type) {
+std::chrono::microseconds parseTimeOnly(
+    StringPiece mysql_time,
+    enum_field_types field_type) {
   static re2::RE2 time_pattern(
       "([-]?\\d{1,3}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,6}))?");
   int hours = 0, minutes = 0, seconds = 0, microseconds = 0;
@@ -144,12 +152,13 @@ std::chrono::microseconds parseTimeOnly(StringPiece mysql_time,
   }
 
   re2::StringPiece re2_mysql_time(mysql_time.data(), mysql_time.size());
-  if (!re2::RE2::FullMatch(re2_mysql_time.data(),
-                           time_pattern,
-                           &hours,
-                           &minutes,
-                           &seconds,
-                           &microseconds_str)) {
+  if (!re2::RE2::FullMatch(
+          re2_mysql_time.data(),
+          time_pattern,
+          &hours,
+          &minutes,
+          &seconds,
+          &microseconds_str)) {
     throw std::range_error("Can't parse time");
   }
   if (!microseconds_str.empty()) {
@@ -157,13 +166,13 @@ std::chrono::microseconds parseTimeOnly(StringPiece mysql_time,
     microseconds = folly::to<int>(microseconds_str.c_str());
   }
   auto result = std::chrono::hours(hours) + std::chrono::minutes(minutes) +
-                std::chrono::seconds(seconds) +
-                std::chrono::microseconds(microseconds);
+      std::chrono::seconds(seconds) + std::chrono::microseconds(microseconds);
   return result;
 }
 
 std::chrono::system_clock::time_point parseDateTime(
-    StringPiece datetime, enum_field_types date_type) {
+    StringPiece datetime,
+    enum_field_types date_type) {
   const int TM_YEAR_BASE = 1900;
 
   // Clean struct and set daylight savings to information not available
@@ -176,31 +185,33 @@ std::chrono::system_clock::time_point parseDateTime(
   bool parse_succeeded = false;
   re2::StringPiece re2_datetime(datetime.data(), datetime.size());
   switch (date_type) {
-  case MYSQL_TYPE_TIMESTAMP:
-  case MYSQL_TYPE_DATETIME:
-    static re2::RE2 timestamp_pattern(
-        "(\\d{4})-(\\d{2})-(\\d{2}) "
-        "(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,6}))?");
-    parse_succeeded = re2::RE2::FullMatch(re2_datetime,
-                                          timestamp_pattern,
-                                          &time_tm.tm_year,
-                                          &time_tm.tm_mon,
-                                          &time_tm.tm_mday,
-                                          &time_tm.tm_hour,
-                                          &time_tm.tm_min,
-                                          &time_tm.tm_sec,
-                                          &microseconds_str);
-    break;
-  case MYSQL_TYPE_DATE:
-    static re2::RE2 date_pattern("(\\d{4})-(\\d{2})-(\\d{2})");
-    parse_succeeded = re2::RE2::FullMatch(re2_datetime,
-                                          date_pattern,
-                                          &time_tm.tm_year,
-                                          &time_tm.tm_mon,
-                                          &time_tm.tm_mday);
-    break;
-  default:
-    break;
+    case MYSQL_TYPE_TIMESTAMP:
+    case MYSQL_TYPE_DATETIME:
+      static re2::RE2 timestamp_pattern(
+          "(\\d{4})-(\\d{2})-(\\d{2}) "
+          "(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,6}))?");
+      parse_succeeded = re2::RE2::FullMatch(
+          re2_datetime,
+          timestamp_pattern,
+          &time_tm.tm_year,
+          &time_tm.tm_mon,
+          &time_tm.tm_mday,
+          &time_tm.tm_hour,
+          &time_tm.tm_min,
+          &time_tm.tm_sec,
+          &microseconds_str);
+      break;
+    case MYSQL_TYPE_DATE:
+      static re2::RE2 date_pattern("(\\d{4})-(\\d{2})-(\\d{2})");
+      parse_succeeded = re2::RE2::FullMatch(
+          re2_datetime,
+          date_pattern,
+          &time_tm.tm_year,
+          &time_tm.tm_mon,
+          &time_tm.tm_mday);
+      break;
+    default:
+      break;
   };
 
   if (!parse_succeeded) {
@@ -227,9 +238,7 @@ std::chrono::system_clock::time_point parseDateTime(
 
   auto chrono_time = std::chrono::system_clock::from_time_t(t);
 
-  chrono_time =
-      chrono_time +
-      std::chrono::microseconds(microseconds);
+  chrono_time = chrono_time + std::chrono::microseconds(microseconds);
   return chrono_time;
 }
 }

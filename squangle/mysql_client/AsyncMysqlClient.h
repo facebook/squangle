@@ -47,13 +47,13 @@
 #ifndef COMMON_ASYNC_MYSQL_CLIENT_H
 #define COMMON_ASYNC_MYSQL_CLIENT_H
 
-#include "squangle/mysql_client/Operation.h"
-#include "squangle/mysql_client/Row.h"
-#include "squangle/mysql_client/Query.h"
-#include "squangle/mysql_client/DbResult.h"
-#include "squangle/mysql_client/Connection.h"
 #include "squangle/logger/DBEventCounter.h"
 #include "squangle/logger/DBEventLogger.h"
+#include "squangle/mysql_client/Connection.h"
+#include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/Operation.h"
+#include "squangle/mysql_client/Query.h"
+#include "squangle/mysql_client/Row.h"
 
 #include <atomic>
 #include <chrono>
@@ -66,11 +66,11 @@
 #include <unordered_map>
 
 #include <folly/Exception.h>
+#include <folly/Portability.h>
+#include <folly/Singleton.h>
 #include <folly/fibers/Baton.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/EventBase.h>
-#include <folly/Portability.h>
-#include <folly/Singleton.h>
 #include <wangle/client/ssl/SSLSession.h>
 
 namespace facebook {
@@ -88,7 +88,7 @@ class ConnectionKey;
 class MysqlConnectionHolder;
 
 typedef std::function<void(std::unique_ptr<MysqlConnectionHolder>)>
-ConnectionDyingCallback;
+    ConnectionDyingCallback;
 
 // The client itself.  As mentioned above, in general, it isn't
 // necessary to create a client; instead, simply call defaultClient()
@@ -112,20 +112,22 @@ class AsyncMysqlClient {
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
   // Initiate a connection to a database.  This is the main entrypoint.
-  std::shared_ptr<ConnectOperation> beginConnection(const string& host,
-                                                    int port,
-                                                    const string& database_name,
-                                                    const string& user,
-                                                    const string& password);
+  std::shared_ptr<ConnectOperation> beginConnection(
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password);
 
   std::shared_ptr<ConnectOperation> beginConnection(ConnectionKey conn_key);
 
-  std::unique_ptr<Connection> adoptConnection(MYSQL* conn,
-                                              const string& host,
-                                              int port,
-                                              const string& database_name,
-                                              const string& user,
-                                              const string& password);
+  std::unique_ptr<Connection> adoptConnection(
+      MYSQL* conn,
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password);
 
   folly::Future<ConnectResult> connectFuture(
       const string& host,
@@ -161,9 +163,13 @@ class AsyncMysqlClient {
   // fail harshly.
   void drain(bool also_block_operations);
 
-  folly::EventBase* getEventBase() { return &tevent_base_; }
+  folly::EventBase* getEventBase() {
+    return &tevent_base_;
+  }
 
-  const std::thread::id threadId() const { return thread_.get_id(); }
+  const std::thread::id threadId() const {
+    return thread_.get_id();
+  }
 
   // For testing only; trigger a delicate connection failure to enable testing
   // of an error codepath.
@@ -200,8 +206,12 @@ class AsyncMysqlClient {
       MYSQL* mysql,
       const db::ConnectionContextBase* extra_logging_data);
 
-  db::SquangleLoggerBase* dbLogger() { return db_logger_.get(); }
-  db::DBCounterBase* stats() { return client_stats_.get(); }
+  db::SquangleLoggerBase* dbLogger() {
+    return db_logger_.get();
+  }
+  db::DBCounterBase* stats() {
+    return client_stats_.get();
+  }
 
   db::SquangleLoggingData makeSquangleLoggingData(
       const ConnectionKey* connKey,
@@ -227,8 +237,9 @@ class AsyncMysqlClient {
   }
 
  protected:
-  AsyncMysqlClient(std::unique_ptr<db::SquangleLoggerBase> db_logger,
-                   std::unique_ptr<db::DBCounterBase> db_stats);
+  AsyncMysqlClient(
+      std::unique_ptr<db::SquangleLoggerBase> db_logger,
+      std::unique_ptr<db::DBCounterBase> db_stats);
 
  private:
   // Private methods, primarily used by Operations and its subclasses.
@@ -305,7 +316,8 @@ class AsyncMysqlClient {
     // this pass through the event loop.
     if (operations_to_remove_.empty()) {
       if (!runInThread([this]() { cleanupCompletedOperations(); })) {
-        LOG(DFATAL) << "Operation could not be cleaned: error in folly::EventBase";
+        LOG(DFATAL)
+            << "Operation could not be cleaned: error in folly::EventBase";
       }
     }
     operations_to_remove_.push_back(op->getSharedPointer());
@@ -376,7 +388,9 @@ class ConnectionSocketHandler : public folly::EventHandler,
   explicit ConnectionSocketHandler(folly::EventBase* base);
   virtual void timeoutExpired() noexcept;
   void handlerReady(uint16_t events) noexcept;
-  void setOperation(Operation* op) { op_ = op; }
+  void setOperation(Operation* op) {
+    op_ = op;
+  }
 
  private:
   Operation* op_;
@@ -393,9 +407,10 @@ class ConnectionSocketHandler : public folly::EventHandler,
 // signal their completion.  Operation::wait blocks on this fd.
 class Connection {
  public:
-  Connection(AsyncMysqlClient* async_client,
-             ConnectionKey conn_key,
-             MYSQL* existing_connection);
+  Connection(
+      AsyncMysqlClient* async_client,
+      ConnectionKey conn_key,
+      MYSQL* existing_connection);
 
   ~Connection();
 
@@ -415,26 +430,31 @@ class Connection {
   // constructed via Query(args...) and that is used for the query.
   template <typename... Args>
   static std::shared_ptr<QueryOperation> beginQuery(
-      std::unique_ptr<Connection> conn, Args&&... args);
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
 
   template <typename... Args>
   static std::shared_ptr<MultiQueryOperation> beginMultiQuery(
-      std::unique_ptr<Connection> conn, Args&&... args);
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
 
   template <typename... Args>
   static folly::Future<DbQueryResult> queryFuture(
-      std::unique_ptr<Connection> conn, Args&&... args);
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
 
   template <typename... Args>
   static folly::Future<DbMultiQueryResult> multiQueryFuture(
-      std::unique_ptr<Connection> conn, Args&&... args);
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
 
   // An alternate interface that allows for easier re-use of an
   // existing query_op, moving the Connection from the old op and into
   // the new one.  See details above for what args... are.
   template <typename... Args>
   static std::shared_ptr<QueryOperation> beginQuery(
-      std::shared_ptr<QueryOperation>& op, Args&&... args) {
+      std::shared_ptr<QueryOperation>& op,
+      Args&&... args) {
     CHECK_THROW(op->done(), OperationStateException);
     auto conn = std::move(op->releaseConnection());
     op = beginQuery(std::move(conn), std::forward<Args>(args)...);
@@ -488,9 +508,13 @@ class Connection {
   void initMysqlOnly();
   void initialize();
 
-  bool hasInitialized() const { return initialized_; }
+  bool hasInitialized() const {
+    return initialized_;
+  }
 
-  bool ok() const { return mysql_connection_ != nullptr; }
+  bool ok() const {
+    return mysql_connection_ != nullptr;
+  }
 
   void close() {
     if (mysql_connection_) {
@@ -499,9 +523,13 @@ class Connection {
   }
 
   // Default timeout for queries created by this client.
-  void setDefaultQueryTimeout(Duration t) { conn_options_.setQueryTimeout(t); }
+  void setDefaultQueryTimeout(Duration t) {
+    conn_options_.setQueryTimeout(t);
+  }
   // TODO #9834064
-  void setQueryTimeout(Duration t) { conn_options_.setQueryTimeout(t); }
+  void setQueryTimeout(Duration t) {
+    conn_options_.setQueryTimeout(t);
+  }
 
   // set last successful query time to MysqlConnectionHolder
   void setLastActivityTime(Timepoint last_activity_time) {
@@ -550,13 +578,25 @@ class Connection {
     return mysql_warning_count(mysql_connection_->mysql());
   }
 
-  const string& host() const { return conn_key_.host; }
-  int port() const { return conn_key_.port; }
-  const string& user() const { return conn_key_.user; }
-  const string& database() const { return conn_key_.db_name; }
-  const string& password() const { return conn_key_.password; }
+  const string& host() const {
+    return conn_key_.host;
+  }
+  int port() const {
+    return conn_key_.port;
+  }
+  const string& user() const {
+    return conn_key_.user;
+  }
+  const string& database() const {
+    return conn_key_.db_name;
+  }
+  const string& password() const {
+    return conn_key_.password;
+  }
 
-  AsyncMysqlClient* client() const { return async_client_; }
+  AsyncMysqlClient* client() const {
+    return async_client_;
+  }
 
   MYSQL* stealMysql() {
     if (mysql_connection_) {
@@ -577,7 +617,9 @@ class Connection {
     return std::move(mysql_connection_);
   }
 
-  const ConnectionKey* getKey() const { return &conn_key_; }
+  const ConnectionKey* getKey() const {
+    return &conn_key_;
+  }
 
   void setReusable(bool reusable) {
     if (mysql_connection_) {
@@ -615,7 +657,9 @@ class Connection {
   friend class MultiQueryOperation;
   friend class MultiQueryStreamOperation;
 
-  ConnectionSocketHandler* socketHandler() { return &socket_handler_; }
+  ConnectionSocketHandler* socketHandler() {
+    return &socket_handler_;
+  }
 
   MYSQL* mysql() const {
     DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
@@ -634,8 +678,8 @@ class Connection {
   void setMysqlConnectionHolder(
       std::unique_ptr<MysqlConnectionHolder> mysql_connection) {
     CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
-    CHECK_THROW(conn_key_ == *mysql_connection->getKey(),
-                InvalidConnectionException);
+    CHECK_THROW(
+        conn_key_ == *mysql_connection->getKey(), InvalidConnectionException);
     mysql_connection_ = std::move(mysql_connection);
   }
 
@@ -662,7 +706,8 @@ class Connection {
   // that both need to do.
   template <typename QueryType, typename QueryArg>
   static std::shared_ptr<QueryType> beginAnyQuery(
-      Operation::ConnectionProxy&& conn_proxy, QueryArg&& query);
+      Operation::ConnectionProxy&& conn_proxy,
+      QueryArg&& query);
 
   void checkOperationInProgress() {
     if (sync_operation_in_progress_) {
@@ -721,26 +766,29 @@ DbQueryResult Connection::query(Args&&... args) {
 
 template <>
 std::shared_ptr<QueryOperation> Connection::beginQuery(
-    std::unique_ptr<Connection> conn, Query&& query);
+    std::unique_ptr<Connection> conn,
+    Query&& query);
 
 template <typename... Args>
 std::shared_ptr<QueryOperation> Connection::beginQuery(
-    std::unique_ptr<Connection> conn, Args&&... args) {
+    std::unique_ptr<Connection> conn,
+    Args&&... args) {
   Query query{std::forward<Args>(args)...};
   return beginQuery(std::move(conn), std::move(query));
 }
 
 template <>
 folly::Future<DbQueryResult> Connection::queryFuture(
-  std::unique_ptr<Connection> conn, Query&& query);
+    std::unique_ptr<Connection> conn,
+    Query&& query);
 
 template <typename... Args>
 folly::Future<DbQueryResult> Connection::queryFuture(
-    std::unique_ptr<Connection> conn, Args&&... args) {
+    std::unique_ptr<Connection> conn,
+    Args&&... args) {
   Query query{std::forward<Args>(args)...};
   return queryFuture(std::move(conn), std::move(query));
 }
-
 }
 }
 } // facebook::common::mysql_client

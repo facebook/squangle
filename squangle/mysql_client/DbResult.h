@@ -10,9 +10,9 @@
 #ifndef COMMON_ASYNC_MYSQL_RESULT_H
 #define COMMON_ASYNC_MYSQL_RESULT_H
 
-#include "squangle/mysql_client/Row.h"
-#include "squangle/mysql_client/Connection.h"
 #include "squangle/base/ExceptionUtil.h"
+#include "squangle/mysql_client/Connection.h"
+#include "squangle/mysql_client/Row.h"
 
 #include <folly/Exception.h>
 #include <folly/ExceptionWrapper.h>
@@ -35,9 +35,13 @@ class OperationResultBase {
   OperationResultBase(const ConnectionKey conn_key, Duration elapsed_time)
       : conn_key_(conn_key), elapsed_time_(elapsed_time) {}
 
-  const ConnectionKey* getConnectionKey() const { return &conn_key_; }
+  const ConnectionKey* getConnectionKey() const {
+    return &conn_key_;
+  }
 
-  Duration elapsed() const { return elapsed_time_; }
+  Duration elapsed() const {
+    return elapsed_time_;
+  }
 
  private:
   const ConnectionKey conn_key_;
@@ -47,24 +51,30 @@ class OperationResultBase {
 // This exception represents a basic mysql error, either during a connection
 // opening or querying, when it times out or a  mysql error happened
 // (invalid host or query, disconnected during query, etc)
-class MysqlException : public Exception,
-                       public OperationResultBase {
+class MysqlException : public Exception, public OperationResultBase {
  public:
-  MysqlException(OperationResult failure_type,
-                 int mysql_errno,
-                 const std::string& mysql_error,
-                 const ConnectionKey conn_key,
-                 Duration elapsed_time);
+  MysqlException(
+      OperationResult failure_type,
+      int mysql_errno,
+      const std::string& mysql_error,
+      const ConnectionKey conn_key,
+      Duration elapsed_time);
 
-  int mysql_errno() const { return mysql_errno_; }
-  const std::string& mysql_error() const { return mysql_error_; }
+  int mysql_errno() const {
+    return mysql_errno_;
+  }
+  const std::string& mysql_error() const {
+    return mysql_error_;
+  }
 
   // Returns the type of error occurred:
   // Cancelled: query it was cancelled by the client or user
   // Failed: generally a mysql error happened during the query,
   // more details will be in `mysql_errno`
   // Timeout: query timed out and the client timer was triggered
-  OperationResult failureType() const { return failure_type_; }
+  OperationResult failureType() const {
+    return failure_type_;
+  }
 
  private:
   OperationResult failure_type_;
@@ -77,18 +87,25 @@ class MysqlException : public Exception,
 // mysql error happened (invalid query, disconnected during query, etc)
 class QueryException : public MysqlException {
  public:
-  QueryException(int num_executed_queries,
-                 OperationResult failure_type,
-                 int mysql_errno,
-                 const std::string& mysql_error,
-                 const ConnectionKey conn_key,
-                 Duration elapsed_time)
+  QueryException(
+      int num_executed_queries,
+      OperationResult failure_type,
+      int mysql_errno,
+      const std::string& mysql_error,
+      const ConnectionKey conn_key,
+      Duration elapsed_time)
       : MysqlException(
-            failure_type, mysql_errno, mysql_error, conn_key, elapsed_time),
+            failure_type,
+            mysql_errno,
+            mysql_error,
+            conn_key,
+            elapsed_time),
         num_executed_queries_(num_executed_queries) {}
 
   // In case of MultiQuery was ran, some queries might have succeeded
-  int numExecutedQueries() const { return num_executed_queries_; }
+  int numExecutedQueries() const {
+    return num_executed_queries_;
+  }
 
  private:
   int num_executed_queries_;
@@ -98,10 +115,11 @@ class Connection;
 
 class DbResult : public OperationResultBase {
  public:
-  DbResult(std::unique_ptr<Connection>&& conn,
-           OperationResult result,
-           const ConnectionKey conn_key,
-           Duration elapsed_time);
+  DbResult(
+      std::unique_ptr<Connection>&& conn,
+      OperationResult result,
+      const ConnectionKey conn_key,
+      Duration elapsed_time);
 
   bool ok() const;
 
@@ -109,7 +127,9 @@ class DbResult : public OperationResultBase {
   // Call this only in the future interface.
   std::unique_ptr<Connection> releaseConnection();
 
-  OperationResult operationResult() const { return result_; }
+  OperationResult operationResult() const {
+    return result_;
+  }
 
  private:
   std::unique_ptr<Connection> conn_;
@@ -122,21 +142,28 @@ typedef DbResult ConnectResult;
 template <typename SingleMultiResult>
 class FetchResult : public DbResult {
  public:
-  FetchResult(SingleMultiResult query_result,
-              int num_queries_executed,
-              std::unique_ptr<Connection>&& conn,
-              OperationResult result,
-              const ConnectionKey conn_key,
-              Duration elapsed)
+  FetchResult(
+      SingleMultiResult query_result,
+      int num_queries_executed,
+      std::unique_ptr<Connection>&& conn,
+      OperationResult result,
+      const ConnectionKey conn_key,
+      Duration elapsed)
       : DbResult(std::move(conn), result, conn_key, elapsed),
         fetch_result_(std::move(query_result)),
         num_queries_executed_(num_queries_executed) {}
 
-  int numQueriesExecuted() const { return num_queries_executed_; }
+  int numQueriesExecuted() const {
+    return num_queries_executed_;
+  }
 
-  const SingleMultiResult& queryResult() const { return fetch_result_; }
+  const SingleMultiResult& queryResult() const {
+    return fetch_result_;
+  }
 
-  SingleMultiResult&& stealQueryResult() { return std::move(fetch_result_); }
+  SingleMultiResult&& stealQueryResult() {
+    return std::move(fetch_result_);
+  }
 
  private:
   SingleMultiResult fetch_result_;
@@ -171,14 +198,20 @@ class QueryResult {
   // Move assignment
   QueryResult& operator=(QueryResult&& other);
 
-  int queryNum() const { return query_num_; }
+  int queryNum() const {
+    return query_num_;
+  }
 
-  bool hasRows() const { return num_rows_ > 0; }
+  bool hasRows() const {
+    return num_rows_ > 0;
+  }
 
   // Partial is set true when this has part of the results, as in a callback.
   // When the QueryResult has all the data for a query this is false, typically
   // when the query is completely ran before user starts capturing results.
-  bool partial() const { return partial_; }
+  bool partial() const {
+    return partial_;
+  }
 
   // A QueryResult is ok when it is a partial result during the operation
   // given in callbacks or the query has succeeded.
@@ -187,7 +220,9 @@ class QueryResult {
   // TODO#4890524: Remove this call
   bool succeeded() const;
 
-  RowFields* getRowFields() const { return row_fields_info_.get(); }
+  RowFields* getRowFields() const {
+    return row_fields_info_.get();
+  }
   std::shared_ptr<RowFields> getSharedRowFields() const {
     return row_fields_info_;
   }
@@ -216,11 +251,15 @@ class QueryResult {
   // location of your preference and the RowBlocks are going to be moved to
   // the new location as well. If you want to iterate through rows just use the
   // iterator class here.
-  vector<RowBlock>&& stealRows() { return std::move(row_blocks_); }
+  vector<RowBlock>&& stealRows() {
+    return std::move(row_blocks_);
+  }
 
   // Only call this if the fetch operation has ended.
   // If you want to iterate through rows just use the iterator class here.
-  const vector<RowBlock>& rows() const { return row_blocks_; }
+  const vector<RowBlock>& rows() const {
+    return row_blocks_;
+  }
 
   void setRowBlocks(vector<RowBlock>&& row_blocks) {
     num_rows_ = 0;
@@ -233,14 +272,18 @@ class QueryResult {
   void setOperationResult(OperationResult op_result);
 
   // Last insert id (aka mysql_insert_id).
-  uint64_t lastInsertId() const { return last_insert_id_; }
+  uint64_t lastInsertId() const {
+    return last_insert_id_;
+  }
 
   void setLastInsertId(uint64_t last_insert_id) {
     last_insert_id_ = last_insert_id;
   }
 
   // Number of rows affected (aka mysql_affected_rows).
-  uint64_t numRowsAffected() const { return num_rows_affected_; }
+  uint64_t numRowsAffected() const {
+    return num_rows_affected_;
+  }
 
   void setNumRowsAffected(uint64_t num_rows_affected) {
     num_rows_affected_ = num_rows_affected;
@@ -248,9 +291,13 @@ class QueryResult {
 
   // This can be called for complete or partial results. It's going to return
   // the total of rows stored in the QueryResult.
-  size_t numRows() const { return num_rows_; }
+  size_t numRows() const {
+    return num_rows_;
+  }
 
-  size_t numBlocks() const { return row_blocks_.size(); }
+  size_t numBlocks() const {
+    return row_blocks_.size();
+  }
 
   // Function for easier lookup of single row result, in case the result has
   // more rows, it will throw exception
@@ -259,15 +306,16 @@ class QueryResult {
     return row_blocks_.at(0).getRow(0);
   }
 
-  class Iterator
-      : public boost::iterator_facade<Iterator,
-                                      const Row,
-                                      boost::single_pass_traversal_tag,
-                                      const Row> {
+  class Iterator : public boost::iterator_facade<
+                       Iterator,
+                       const Row,
+                       boost::single_pass_traversal_tag,
+                       const Row> {
    public:
-    Iterator(const vector<RowBlock>* row_block_vector,
-             size_t block_number,
-             size_t row_number_in_block)
+    Iterator(
+        const vector<RowBlock>* row_block_vector,
+        size_t block_number,
+        size_t row_number_in_block)
         : row_block_vector_(row_block_vector),
           current_block_number_(block_number),
           current_row_in_block_(row_number_in_block) {}
@@ -285,9 +333,10 @@ class QueryResult {
           .getRow(current_row_in_block_);
     }
     bool equal(const Iterator& other) const {
-      return (row_block_vector_ == other.row_block_vector_ &&
-              current_block_number_ == other.current_block_number_ &&
-              current_row_in_block_ == other.current_row_in_block_);
+      return (
+          row_block_vector_ == other.row_block_vector_ &&
+          current_block_number_ == other.current_block_number_ &&
+          current_row_in_block_ == other.current_row_in_block_);
     }
 
    private:
@@ -296,9 +345,13 @@ class QueryResult {
     size_t current_row_in_block_;
   };
 
-  Iterator begin() const { return Iterator(&row_blocks_, 0, 0); }
+  Iterator begin() const {
+    return Iterator(&row_blocks_, 0, 0);
+  }
 
-  Iterator end() const { return Iterator(&row_blocks_, row_blocks_.size(), 0); }
+  Iterator end() const {
+    return Iterator(&row_blocks_, row_blocks_.size(), 0);
+  }
 
   void setRowFields(std::shared_ptr<RowFields> row_fields_info) {
     row_fields_info_ = std::move(row_fields_info);
@@ -315,7 +368,9 @@ class QueryResult {
     row_blocks_.emplace_back(std::move(partial_row_blocks_));
   }
 
-  void setPartial(bool partial) { partial_ = partial; }
+  void setPartial(bool partial) {
+    partial_ = partial;
+  }
 
  private:
   void assertOnlyRow() const {

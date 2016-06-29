@@ -10,6 +10,12 @@
 #ifndef COMMON_DB_EXCEPTION_UTIL_H
 #define COMMON_DB_EXCEPTION_UTIL_H
 
+#include <folly/Conv.h>
+
+#include <chrono>
+#include <exception>
+#include <string>
+
 namespace facebook {
 namespace db {
 
@@ -29,7 +35,9 @@ class Exception : public std::exception {
   virtual ~Exception() throw() {}
 
   // std::exception methods
-  virtual const char* what() const throw() { return msg_.c_str(); }
+  virtual const char* what() const throw() {
+    return msg_.c_str();
+  }
 
  private:
   const std::string msg_;

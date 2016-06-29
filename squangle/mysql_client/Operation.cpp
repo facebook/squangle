@@ -9,20 +9,21 @@
  */
 
 #include "squangle/mysql_client/Operation.h"
-#include <openssl/ssl.h>
 #include <errmsg.h> // mysql
+#include <openssl/ssl.h>
 
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 #include <folly/portability/GFlags.h>
 
+#include <wangle/client/ssl/SSLSession.h>
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
-#include <wangle/client/ssl/SSLSession.h>
 
-DEFINE_int64(async_mysql_timeout_micros,
-             60 * 1000 * 1000,
-             "default timeout, in micros, for mysql operations");
+DEFINE_int64(
+    async_mysql_timeout_micros,
+    60 * 1000 * 1000,
+    "default timeout, in micros, for mysql operations");
 
 namespace facebook {
 namespace common {
@@ -55,16 +56,16 @@ void Operation::waitForSocketActionable() {
   MYSQL* mysql = conn()->mysql();
   uint16_t event_mask = 0;
   switch (mysql->net.async_blocking_state) {
-  case NET_NONBLOCKING_READ:
-    event_mask |= folly::EventHandler::READ;
-    break;
-  case NET_NONBLOCKING_WRITE:
-  case NET_NONBLOCKING_CONNECT:
-    event_mask |= folly::EventHandler::WRITE;
-    break;
-  default:
-    LOG(FATAL) << "Unknown nonblocking status "
-               << mysql->net.async_blocking_state;
+    case NET_NONBLOCKING_READ:
+      event_mask |= folly::EventHandler::READ;
+      break;
+    case NET_NONBLOCKING_WRITE:
+    case NET_NONBLOCKING_CONNECT:
+      event_mask |= folly::EventHandler::WRITE;
+      break;
+    default:
+      LOG(FATAL) << "Unknown nonblocking status "
+                 << mysql->net.async_blocking_state;
   }
 
   auto end = timeout_ + start_time_;
@@ -102,15 +103,16 @@ void Operation::cancel() {
   }
 
   state_ = OperationState::Cancelling;
-  if (!async_client()->runInThread([this]() {
-        completeOperation(OperationResult::Cancelled);
-      })) {
+  if (!async_client()->runInThread(
+          [this]() { completeOperation(OperationResult::Cancelled); })) {
     // if a strange error happen in EventBase , mark it cancelled now
     completeOperationInner(OperationResult::Cancelled);
   }
 }
 
-void Operation::timeoutTriggered() { specializedTimeoutTriggered(); }
+void Operation::timeoutTriggered() {
+  specializedTimeoutTriggered();
+}
 
 Operation* Operation::run() {
   {
@@ -118,9 +120,8 @@ Operation* Operation::run() {
     if (cancel_on_run_) {
       state_ = OperationState::Cancelling;
       cancel_on_run_ = false;
-      async_client()->runInThread([this]() {
-        completeOperation(OperationResult::Cancelled);
-      });
+      async_client()->runInThread(
+          [this]() { completeOperation(OperationResult::Cancelled); });
       return this;
     }
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
@@ -136,10 +137,11 @@ void Operation::completeOperation(OperationResult result) {
     return;
   }
 
-  CHECK_THROW(state_ == OperationState::Pending ||
-                  state_ == OperationState::Cancelling ||
-                  state_ == OperationState::Unstarted,
-              OperationStateException);
+  CHECK_THROW(
+      state_ == OperationState::Pending ||
+          state_ == OperationState::Cancelling ||
+          state_ == OperationState::Unstarted,
+      OperationStateException);
   completeOperationInner(result);
 }
 
@@ -172,9 +174,10 @@ void Operation::completeOperationInner(OperationResult result) {
 }
 
 std::unique_ptr<Connection>&& Operation::releaseConnection() {
-  CHECK_THROW(state_ == OperationState::Completed ||
-                  state_ == OperationState::Unstarted,
-              OperationStateException);
+  CHECK_THROW(
+      state_ == OperationState::Completed ||
+          state_ == OperationState::Unstarted,
+      OperationStateException);
   return std::move(conn_proxy_.releaseConnection());
 }
 
@@ -193,9 +196,10 @@ void Operation::setAsyncClientError(StringPiece msg, StringPiece normalizeMsg) {
   mysql_normalize_error_ = normalizeMsg.toString();
 }
 
-void Operation::setAsyncClientError(int mysql_errno,
-                                    StringPiece msg,
-                                    StringPiece normalizeMsg) {
+void Operation::setAsyncClientError(
+    int mysql_errno,
+    StringPiece msg,
+    StringPiece normalizeMsg) {
   if (normalizeMsg.empty()) {
     normalizeMsg = msg;
   }
@@ -205,20 +209,27 @@ void Operation::setAsyncClientError(int mysql_errno,
 }
 
 void Operation::wait() {
-  CHECK_THROW(std::this_thread::get_id() != async_client()->threadId(),
-              std::runtime_error);
+  CHECK_THROW(
+      std::this_thread::get_id() != async_client()->threadId(),
+      std::runtime_error);
   return conn()->wait();
 }
 
-AsyncMysqlClient* Operation::async_client() { return async_client_; }
+AsyncMysqlClient* Operation::async_client() {
+  return async_client_;
+}
 
 std::shared_ptr<Operation> Operation::getSharedPointer() {
   DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   return shared_from_this();
 }
 
-const string& Operation::host() const { return conn()->host(); }
-int Operation::port() const { return conn()->port(); }
+const string& Operation::host() const {
+  return conn()->host();
+}
+int Operation::port() const {
+  return conn()->port();
+}
 
 void Operation::setObserverCallback(ObserverCallback obs_cb) {
   CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
@@ -264,7 +275,8 @@ const ConnectionOptions& ConnectOperation::getConnectionOptions() const {
 }
 
 ConnectOperation* ConnectOperation::setConnectionAttribute(
-    const string& attr, const string& value) {
+    const string& attr,
+    const string& value) {
   CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
   conn_options_.setConnectionAttribute(attr, value);
   return this;
@@ -338,8 +350,7 @@ void ConnectOperation::attemptFailed(OperationResult result) {
 
   auto now = std::chrono::high_resolution_clock::now();
   // Adjust timeout
-  auto timeout_attempt_based =
-      conn_options_.getTimeout() +
+  auto timeout_attempt_based = conn_options_.getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
   timeout_ = min(timeout_attempt_based, conn_options_.getTotalTimeout());
 
@@ -396,15 +407,15 @@ ConnectOperation* ConnectOperation::specializedRun() {
           }
         }
 
-        bool res =
-            mysql_real_connect_nonblocking_init(conn()->mysql(),
-                                                conn_key_.host.c_str(),
-                                                conn_key_.user.c_str(),
-                                                conn_key_.password.c_str(),
-                                                conn_key_.db_name.c_str(),
-                                                conn_key_.port,
-                                                nullptr,
-                                                flags_);
+        bool res = mysql_real_connect_nonblocking_init(
+            conn()->mysql(),
+            conn_key_.host.c_str(),
+            conn_key_.user.c_str(),
+            conn_key_.password.c_str(),
+            conn_key_.db_name.c_str(),
+            conn_key_.port,
+            nullptr,
+            flags_);
         if (res == 0 || async_client()->delicate_connection_failure_) {
           setAsyncClientError("mysql_real_connect_nonblocking_init failed");
           attemptFailed(OperationResult::Failed);
@@ -420,13 +431,16 @@ ConnectOperation* ConnectOperation::specializedRun() {
   return this;
 }
 
-ConnectOperation::~ConnectOperation() { removeClientReference(); }
+ConnectOperation::~ConnectOperation() {
+  removeClientReference();
+}
 
 void ConnectOperation::socketActionable() {
   DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   int error;
-  CHECK_THROW(conn()->mysql()->async_op_status == ASYNC_OP_CONNECT,
-              InvalidConnectionException);
+  CHECK_THROW(
+      conn()->mysql()->async_op_status == ASYNC_OP_CONNECT,
+      InvalidConnectionException);
   net_async_status status =
       mysql_real_connect_nonblocking_run(conn()->mysql(), &error);
   auto fd = mysql_get_file_descriptor(conn()->mysql());
@@ -473,11 +487,11 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto delta = chrono::high_resolution_clock::now() - start_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
-  auto msg =
-      folly::stringPrintf("async connect to %s:%d timed out (took %.2fms)",
-                          host().c_str(),
-                          port(),
-                          delta_micros / 1000.0);
+  auto msg = folly::stringPrintf(
+      "async connect to %s:%d timed out (took %.2fms)",
+      host().c_str(),
+      port(),
+      delta_micros / 1000.0);
   setAsyncClientError(CR_SERVER_LOST, msg, "async connect to host timed out");
   attemptFailed(OperationResult::TimedOut);
 }
@@ -598,10 +612,10 @@ FetchOperation* FetchOperation::specializedRun() {
         try {
           rendered_multi_query_ = renderedQuery();
           socketActionable();
-        }
-        catch (std::invalid_argument& e) {
-          setAsyncClientError(string("Unable to parse Query: ") + e.what(),
-                              "Unable to parse Query");
+        } catch (std::invalid_argument& e) {
+          setAsyncClientError(
+              string("Unable to parse Query: ") + e.what(),
+              "Unable to parse Query");
           completeOperation(OperationResult::Failed);
         }
       })) {
@@ -697,7 +711,6 @@ void FetchOperation::socketActionable() {
   // Some actions may request an action above it (like CompleteQuery may request
   // StartQuery) this is why we use this loop.
   while (1) {
-
     // When the fetch action is StartQuery it means either we need to execute
     // the query or ask for new results.
     // Next Actions:
@@ -824,7 +837,7 @@ void FetchOperation::socketActionable() {
         current_affected_rows_ = mysql_affected_rows(conn()->mysql());
         more_results = mysql_more_results(conn()->mysql());
         active_fetch_action_ = more_results ? FetchAction::StartQuery
-                                     : FetchAction::CompleteOperation;
+                                            : FetchAction::CompleteOperation;
 
         // Call it after setting the active_fetch_action_ so the child class can
         // decide if it wants to change the state
@@ -925,9 +938,9 @@ void FetchOperation::specializedTimeoutTriggered() {
         rowStream()->numRowsSeen(),
         delta_micros / 1000.0);
   } else {
-    msg =
-        folly::stringPrintf("async query timed out (no rows seen, took %.2fms)",
-                            delta_micros / 1000.0);
+    msg = folly::stringPrintf(
+        "async query timed out (no rows seen, took %.2fms)",
+        delta_micros / 1000.0);
   }
   setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "async query timed out");
   completeOperation(OperationResult::TimedOut);
@@ -1017,9 +1030,7 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
   stream_callback_ = nullptr;
 }
 
-QueryOperation::QueryOperation(
-    ConnectionProxy&& conn,
-    Query&& query)
+QueryOperation::QueryOperation(ConnectionProxy&& conn, Query&& query)
     : FetchOperation(std::move(conn)),
       query_(std::move(query)),
       query_result_(folly::make_unique<QueryResult>(0)) {}
@@ -1274,11 +1285,12 @@ std::unique_ptr<Connection> blockingConnectHelper(
     std::shared_ptr<ConnectOperation>& conn_op) {
   conn_op->run()->wait();
   if (!conn_op->ok()) {
-    throw MysqlException(conn_op->result(),
-                         conn_op->mysql_errno(),
-                         conn_op->mysql_error(),
-                         *conn_op->getKey(),
-                         conn_op->elapsed());
+    throw MysqlException(
+        conn_op->result(),
+        conn_op->mysql_errno(),
+        conn_op->mysql_error(),
+        *conn_op->getKey(),
+        conn_op->elapsed());
   }
 
   return std::move(conn_op->releaseConnection());
@@ -1314,7 +1326,6 @@ std::unique_ptr<Connection>&& Operation::ConnectionProxy::releaseConnection() {
   }
   throw std::runtime_error("Releasing connection from referenced conn");
 }
-
 }
 }
 } // namespace facebook::common::mysql_client

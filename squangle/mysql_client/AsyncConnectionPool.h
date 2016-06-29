@@ -26,17 +26,17 @@
 #ifndef COMMON_ASYNC_CONNECTION_POOL_H
 #define COMMON_ASYNC_CONNECTION_POOL_H
 
-#include <chrono>
-#include <memory>
-#include <unordered_map>
-#include <list>
 #include <folly/String.h>
 #include <folly/futures/Future.h>
+#include <chrono>
+#include <list>
+#include <memory>
+#include <unordered_map>
 
+#include "squangle/logger/DBEventCounter.h"
+#include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/Operation.h"
-#include "squangle/mysql_client/AsyncMysqlClient.h"
-#include "squangle/logger/DBEventCounter.h"
 
 namespace facebook {
 namespace common {
@@ -71,7 +71,7 @@ class PoolOptions {
   static constexpr Duration kDefaultMaxAge = std::chrono::seconds(60);
   static constexpr Duration kDefaultMaxIdleTime = std::chrono::seconds(4);
   static constexpr std::chrono::milliseconds kCleanUpTimeout =
-    std::chrono::milliseconds(300);
+      std::chrono::milliseconds(300);
   static const int kDefaultMaxOpenConn = 50;
 
   PoolOptions()
@@ -102,11 +102,21 @@ class PoolOptions {
     return *this;
   }
 
-  uint64_t getPerKeyLimit() const { return per_key_limit_; }
-  uint64_t getPoolLimit() const { return pool_limit_; }
-  Duration getIdleTimeout() const { return idle_timeout_; }
-  Duration getAgeTimeout() const { return age_timeout_; }
-  ExpirationPolicy getExpPolicy() const { return exp_policy_; }
+  uint64_t getPerKeyLimit() const {
+    return per_key_limit_;
+  }
+  uint64_t getPoolLimit() const {
+    return pool_limit_;
+  }
+  Duration getIdleTimeout() const {
+    return idle_timeout_;
+  }
+  Duration getAgeTimeout() const {
+    return age_timeout_;
+  }
+  ExpirationPolicy getExpPolicy() const {
+    return exp_policy_;
+  }
 
  private:
   uint64_t per_key_limit_;
@@ -122,21 +132,23 @@ class PoolKey {
   // Connection info (ConnectionKey) and Connection Attributes.
   PoolKey(ConnectionKey conn_key, ConnectionOptions conn_opts)
       : connKey(std::move(conn_key)), connOptions(std::move(conn_opts)) {
-    options_hash_ =
-        folly::hash::hash_range(connOptions.getConnectionAttributes().begin(),
-                                connOptions.getConnectionAttributes().end());
+    options_hash_ = folly::hash::hash_range(
+        connOptions.getConnectionAttributes().begin(),
+        connOptions.getConnectionAttributes().end());
     hash_ = folly::hash::hash_combine(connKey.hash, options_hash_);
   }
 
   bool operator==(const PoolKey& rhs) const {
     return hash_ == rhs.hash_ && options_hash_ == rhs.options_hash_ &&
-           connKey == rhs.connKey;
+        connKey == rhs.connKey;
   }
 
   const ConnectionKey connKey;
   const ConnectionOptions connOptions;
 
-  size_t getHash() const { return hash_; }
+  size_t getHash() const {
+    return hash_;
+  }
 
  private:
   size_t options_hash_;
@@ -144,28 +156,36 @@ class PoolKey {
 };
 
 class PoolKeyHash {
-
  public:
-  size_t operator()(const PoolKey& k) const { return k.getHash(); }
+  size_t operator()(const PoolKey& k) const {
+    return k.getHash();
+  }
 };
 
 class MysqlPooledHolder : public MysqlConnectionHolder {
  public:
   // Constructed based on an already existing MysqlConnectionHolder, the values
   // are going to be copied and the old holder will be destroyed.
-  MysqlPooledHolder(std::unique_ptr<MysqlConnectionHolder> holder_base,
-                    std::weak_ptr<AsyncConnectionPool> weak_pool,
-                    const PoolKey& pool_key);
+  MysqlPooledHolder(
+      std::unique_ptr<MysqlConnectionHolder> holder_base,
+      std::weak_ptr<AsyncConnectionPool> weak_pool,
+      const PoolKey& pool_key);
 
   ~MysqlPooledHolder();
 
-  void setLifeDuration(Duration dur) { good_for_ = dur; }
+  void setLifeDuration(Duration dur) {
+    good_for_ = dur;
+  }
 
-  Duration getLifeDuration() { return good_for_; }
+  Duration getLifeDuration() {
+    return good_for_;
+  }
 
   void setOwnerPool(std::weak_ptr<AsyncConnectionPool> pool);
 
-  const PoolKey& getPoolKey() const { return pool_key_; }
+  const PoolKey& getPoolKey() const {
+    return pool_key_;
+  }
 
  private:
   void removeFromPool();
@@ -202,8 +222,8 @@ class AsyncConnectionPool
  public:
   // Don't use std::chrono::duration::MAX to avoid overflows
   static std::shared_ptr<AsyncConnectionPool> makePool(
-          std::shared_ptr<AsyncMysqlClient> mysql_client,
-          const PoolOptions& pool_options = PoolOptions());
+      std::shared_ptr<AsyncMysqlClient> mysql_client,
+      const PoolOptions& pool_options = PoolOptions());
 
   // The destructor will start the shutdown phase
   ~AsyncConnectionPool();
@@ -246,7 +266,9 @@ class AsyncConnectionPool
       const string& special_tag = "");
 
   // Returns the client that this pool is using
-  std::shared_ptr<AsyncMysqlClient> getMysqlClient() { return mysql_client_; }
+  std::shared_ptr<AsyncMysqlClient> getMysqlClient() {
+    return mysql_client_;
+  }
 
   // It will clean the pool and block any new connections or operations
   // Shutting down phase:
@@ -260,11 +282,14 @@ class AsyncConnectionPool
   // and proceed without the pool.
   void shutdown();
 
-  PoolStats* stats() { return &pool_stats_; }
+  PoolStats* stats() {
+    return &pool_stats_;
+  }
 
   // Don't use the constructor directly, only public to use make_shared
-  AsyncConnectionPool(std::shared_ptr<AsyncMysqlClient> mysql_client,
-                      const PoolOptions& pool_options);
+  AsyncConnectionPool(
+      std::shared_ptr<AsyncMysqlClient> mysql_client,
+      const PoolOptions& pool_options);
 
  private:
   friend class Connection;
@@ -312,8 +337,9 @@ class AsyncConnectionPool
   // here. Otherwise it is added to the pool.
   // At this point, the connection should already have been cleaned.
   // Should only be used internally
-  void addConnection(std::unique_ptr<MysqlPooledHolder> mysqlConn,
-                     bool brand_new);
+  void addConnection(
+      std::unique_ptr<MysqlPooledHolder> mysqlConn,
+      bool brand_new);
 
   // Checks if the limits (global, connections open or being open by pool, or
   // limit per key) can fit one more connection. As a final check, checks if
@@ -341,9 +367,10 @@ class AsyncConnectionPool
   // MysqlPooledHolder containers.
   class ConnStorage {
    public:
-    explicit ConnStorage(std::thread::id allowed_threadid,
-                         size_t conn_limit,
-                         Duration max_idle_time)
+    explicit ConnStorage(
+        std::thread::id allowed_threadid,
+        size_t conn_limit,
+        Duration max_idle_time)
         : allowed_thread_id_(allowed_threadid),
           conn_limit_(conn_limit),
           max_idle_time_(max_idle_time) {}
@@ -357,15 +384,17 @@ class AsyncConnectionPool
     std::shared_ptr<ConnectPoolOperation> popOperation(const PoolKey& pool_key);
 
     // Puts the new operation in the end of the list
-    void queueOperation(const PoolKey& pool_key,
-                        std::shared_ptr<ConnectPoolOperation>& poolOp);
+    void queueOperation(
+        const PoolKey& pool_key,
+        std::shared_ptr<ConnectPoolOperation>& poolOp);
 
     // Calls failureCallback with the error description and removed all
     // the operations for conn_key from the queue.
-    void failOperations(const PoolKey& pool_key,
-                        OperationResult op_result,
-                        int mysql_errno,
-                        const string& mysql_error);
+    void failOperations(
+        const PoolKey& pool_key,
+        OperationResult op_result,
+        int mysql_errno,
+        const string& mysql_error);
 
     // Returns a connection for the given ConnectionKey. The connection will be
     // removed from the queue. Depending on the policy, it will give the oldest
@@ -462,9 +491,10 @@ class ConnectPoolOperation : public ConnectOperation {
 
   // Don't call this; it's public strictly for AsyncConnectionPool to be
   // able to call make_shared.
-  ConnectPoolOperation(std::weak_ptr<AsyncConnectionPool> pool,
-                       std::shared_ptr<AsyncMysqlClient> client,
-                       ConnectionKey conn_key)
+  ConnectPoolOperation(
+      std::weak_ptr<AsyncConnectionPool> pool,
+      std::shared_ptr<AsyncMysqlClient> client,
+      ConnectionKey conn_key)
       : ConnectOperation(client.get(), conn_key), pool_(pool) {}
 
   db::OperationType getOperationType() const override {
@@ -482,9 +512,10 @@ class ConnectPoolOperation : public ConnectOperation {
   // Called when the connection is matched by the pool client
   void connectionCallback(std::unique_ptr<MysqlPooledHolder> mysql_conn);
   // Called when the connection that the pool is trying to acquire failed
-  void failureCallback(OperationResult failure,
-                       int mysql_errno,
-                       const string& mysql_error);
+  void failureCallback(
+      OperationResult failure,
+      int mysql_errno,
+      const string& mysql_error);
 
   std::weak_ptr<AsyncConnectionPool> pool_;
 

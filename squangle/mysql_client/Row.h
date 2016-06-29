@@ -19,8 +19,8 @@
 #ifndef COMMON_ASYNC_MYSQL_ROW_H
 #define COMMON_ASYNC_MYSQL_ROW_H
 
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 #include <boost/iterator/iterator_facade.hpp>
 #include <mysql.h>
@@ -78,24 +78,26 @@ class Row {
 
   // Our very simple iterator.  Just barely enough to support
   // range-based for loops.
-  class Iterator
-      : public boost::iterator_facade<Iterator,
-                                      const StringPiece,
-                                      boost::single_pass_traversal_tag,
-                                      const StringPiece> {
-
+  class Iterator : public boost::iterator_facade<
+                       Iterator,
+                       const StringPiece,
+                       boost::single_pass_traversal_tag,
+                       const StringPiece> {
    public:
     Iterator(const Row* row, size_t column_number)
         : row_(row), current_column_number_(column_number) {}
 
-    void increment() { ++current_column_number_; }
+    void increment() {
+      ++current_column_number_;
+    }
     const StringPiece dereference() const {
       CHECK(current_column_number_ < row_->size());
       return row_->get<StringPiece>(current_column_number_);
     }
     bool equal(const Iterator& other) const {
-      return (row_ == other.row_ &&
-              current_column_number_ == other.current_column_number_);
+      return (
+          row_ == other.row_ &&
+          current_column_number_ == other.current_column_number_);
     }
 
    private:
@@ -114,10 +116,11 @@ class Row {
 // RowFields encapsulates the data about the fields (name, flags, types).
 class RowFields {
  public:
-  RowFields(folly::StringKeyedUnorderedMap<int>&& field_name_map,
-            std::vector<string>&& field_names,
-            std::vector<uint64_t>&& mysql_field_flags,
-            std::vector<enum_field_types>&& mysql_field_types)
+  RowFields(
+      folly::StringKeyedUnorderedMap<int>&& field_name_map,
+      std::vector<string>&& field_names,
+      std::vector<uint64_t>&& mysql_field_flags,
+      std::vector<enum_field_types>&& mysql_field_types)
       : num_fields_(field_names.size()),
         field_name_map_(std::move(field_name_map)),
         field_names_(std::move(field_names)),
@@ -149,10 +152,14 @@ class RowFields {
   }
 
   // What is the name of the i'th column in the result set?
-  StringPiece fieldName(size_t i) const { return field_names_[i]; }
+  StringPiece fieldName(size_t i) const {
+    return field_names_[i];
+  }
 
   // How many fields and rows do we have?
-  size_t numFields() const { return num_fields_; }
+  size_t numFields() const {
+    return num_fields_;
+  }
 
  private:
   size_t num_fields_;
@@ -174,11 +181,13 @@ class RowFields {
   friend class RowBlock;
 };
 
-std::chrono::system_clock::time_point parseDateTime(StringPiece datetime,
-                                                    enum_field_types date_type);
+std::chrono::system_clock::time_point parseDateTime(
+    StringPiece datetime,
+    enum_field_types date_type);
 
-std::chrono::microseconds parseTimeOnly(StringPiece mysql_time,
-                                        enum_field_types field_type);
+std::chrono::microseconds parseTimeOnly(
+    StringPiece mysql_time,
+    enum_field_types field_type);
 
 // A RowBlock holds the raw data from part of a MySQL result set.  It
 // corresponds roughly to one set of rows (out of potentially many).
@@ -246,19 +255,27 @@ class RowBlock {
   }
 
   // Access the Nth row of this row block as a Row object.
-  Row getRow(size_t n) const { return Row(this, n); }
+  Row getRow(size_t n) const {
+    return Row(this, n);
+  }
 
-  RowFields* getRowFields() { return row_fields_info_.get(); }
+  RowFields* getRowFields() {
+    return row_fields_info_.get();
+  }
   // What is the name of the i'th column in the result set?
   StringPiece fieldName(size_t i) const {
     return row_fields_info_->fieldName(i);
   }
 
   // Is our rowblock empty?
-  bool empty() const { return field_offsets_.empty(); }
+  bool empty() const {
+    return field_offsets_.empty();
+  }
 
   // How many fields and rows do we have?
-  size_t numFields() const { return row_fields_info_->numFields(); }
+  size_t numFields() const {
+    return row_fields_info_->numFields();
+  }
 
   // How many rows are in this RowBlock?
   size_t numRows() const {
@@ -269,23 +286,25 @@ class RowBlock {
   // Iterator support.  Allows iteration over the rows in this block.
   // Like Row::Iterator, this is mainly for simple range-based for
   // iteration.
-  class Iterator
-      : public boost::iterator_facade<Iterator,
-                                      const Row,
-                                      boost::single_pass_traversal_tag,
-                                      const Row> {
-
+  class Iterator : public boost::iterator_facade<
+                       Iterator,
+                       const Row,
+                       boost::single_pass_traversal_tag,
+                       const Row> {
    public:
     Iterator(const RowBlock* row_block, size_t row_number)
         : row_block_(row_block), current_row_number_(row_number) {}
 
-    void increment() { ++current_row_number_; }
+    void increment() {
+      ++current_row_number_;
+    }
     const Row dereference() const {
       return row_block_->getRow(current_row_number_);
     }
     bool equal(const Iterator& other) const {
-      return (row_block_ == other.row_block_ &&
-              current_row_number_ == other.current_row_number_);
+      return (
+          row_block_ == other.row_block_ &&
+          current_row_number_ == other.current_row_number_);
     }
 
    private:
@@ -293,9 +312,13 @@ class RowBlock {
     size_t current_row_number_;
   };
 
-  Iterator begin() const { return Iterator(this, 0); }
+  Iterator begin() const {
+    return Iterator(this, 0);
+  }
 
-  Iterator end() const { return Iterator(this, numRows()); }
+  Iterator end() const {
+    return Iterator(this, numRows());
+  }
 
   // Functions called when building a RowBlock.  Not for general use.
   void startRow() {
@@ -323,12 +346,12 @@ class RowBlock {
 
   bool isDate(size_t row, size_t field_num) const {
     switch (getFieldType(field_num)) {
-    case MYSQL_TYPE_TIMESTAMP:
-    case MYSQL_TYPE_DATETIME:
-    case MYSQL_TYPE_DATE:
-      return true;
-    default:
-      return false;
+      case MYSQL_TYPE_TIMESTAMP:
+      case MYSQL_TYPE_DATETIME:
+      case MYSQL_TYPE_DATE:
+        return true;
+      default:
+        return false;
     }
   }
 
@@ -409,11 +432,12 @@ time_t RowBlock::getField(size_t row, size_t field_num) const;
 
 template <>
 std::chrono::system_clock::time_point RowBlock::getField(
-    size_t row, size_t field_num) const;
+    size_t row,
+    size_t field_num) const;
 
 template <>
-std::chrono::microseconds RowBlock::getField(size_t row,
-                                             size_t field_num) const;
+std::chrono::microseconds RowBlock::getField(size_t row, size_t field_num)
+    const;
 
 template <typename T>
 T RowBlock::getField(size_t row, size_t field_num) const {

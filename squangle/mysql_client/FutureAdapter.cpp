@@ -36,11 +36,12 @@ folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
       promise->setValue(std::move(conn_res));
     } else {
       auto conn = op.releaseConnection();
-      MysqlException excep(op.result(),
-                           op.mysql_errno(),
-                           op.mysql_error(),
-                           *conn->getKey(),
-                           op.elapsed());
+      MysqlException excep(
+          op.result(),
+          op.mysql_errno(),
+          op.mysql_error(),
+          *conn->getKey(),
+          op.elapsed());
       promise->setException(excep);
     }
   });
@@ -63,21 +64,23 @@ folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
       QueryCallbackReason reason) mutable {
     if (reason == QueryCallbackReason::Success) {
       auto conn_key = *op.connection()->getKey();
-      DbQueryResult result(std::move(query_result),
-                           op.numQueriesExecuted(),
-                           op.releaseConnection(),
-                           op.result(),
-                           conn_key,
-                           op.elapsed());
+      DbQueryResult result(
+          std::move(query_result),
+          op.numQueriesExecuted(),
+          op.releaseConnection(),
+          op.result(),
+          conn_key,
+          op.elapsed());
       promise->setValue(std::move(result));
     } else {
       auto conn = op.releaseConnection();
-      QueryException excep(op.numQueriesExecuted(),
-                           op.result(),
-                           op.mysql_errno(),
-                           op.mysql_error(),
-                           *conn->getKey(),
-                           op.elapsed());
+      QueryException excep(
+          op.numQueriesExecuted(),
+          op.result(),
+          op.mysql_errno(),
+          op.mysql_error(),
+          *conn->getKey(),
+          op.elapsed());
       promise->setException(excep);
     }
   };
@@ -87,13 +90,11 @@ folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
   return future;
 }
 
-folly::Future<DbMultiQueryResult> toFuture(
-    MultiQueryOperation_ptr& mquery_op) {
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op) {
   return toFuture(mquery_op.get());
 }
 
-folly::Future<DbMultiQueryResult> toFuture(
-    MultiQueryOperation* mquery_op) {
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
   folly::MoveWrapper<folly::Promise<DbMultiQueryResult>> promise;
   auto future = promise->getFuture();
 
@@ -103,21 +104,23 @@ folly::Future<DbMultiQueryResult> toFuture(
       QueryCallbackReason reason) mutable {
     if (reason == QueryCallbackReason::Success) {
       auto conn_key = *op.connection()->getKey();
-      DbMultiQueryResult result(std::move(query_results),
-                                op.numQueriesExecuted(),
-                                op.releaseConnection(),
-                                op.result(),
-                                conn_key,
-                                op.elapsed());
+      DbMultiQueryResult result(
+          std::move(query_results),
+          op.numQueriesExecuted(),
+          op.releaseConnection(),
+          op.result(),
+          conn_key,
+          op.elapsed());
       promise->setValue(std::move(result));
     } else {
       auto conn = op.releaseConnection();
-      QueryException excep(op.numQueriesExecuted(),
-                           op.result(),
-                           op.mysql_errno(),
-                           op.mysql_error(),
-                           *conn->getKey(),
-                           op.elapsed());
+      QueryException excep(
+          op.numQueriesExecuted(),
+          op.result(),
+          op.mysql_errno(),
+          op.mysql_error(),
+          *conn->getKey(),
+          op.elapsed());
       promise->setException(excep);
     }
   };
