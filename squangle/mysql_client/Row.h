@@ -386,6 +386,9 @@ class EphemeralRowFields {
   EphemeralRowFields(EphemeralRowFields const&) = delete;
   EphemeralRowFields& operator=(EphemeralRowFields const&) = delete;
 
+  EphemeralRowFields(EphemeralRowFields&&) = default;
+  EphemeralRowFields& operator=(EphemeralRowFields&&) = default;
+
  private:
   MYSQL_FIELD* fields_;
   int num_fields_;

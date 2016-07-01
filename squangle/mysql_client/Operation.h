@@ -686,8 +686,6 @@ class FetchOperation : public Operation {
    public:
     explicit RowStream(MYSQL_RES* mysql_query_result);
 
-    ~RowStream();
-
     EphemeralRow consumeRow();
 
     bool hasNext();
@@ -695,6 +693,10 @@ class FetchOperation : public Operation {
     EphemeralRowFields* getEphemeralRowFields() {
       return &row_fields_;
     }
+
+    ~RowStream() = default;
+    RowStream(RowStream&&) = default;
+    RowStream& operator=(RowStream&&) = default;
 
    private:
     friend class FetchOperation;
@@ -710,9 +712,13 @@ class FetchOperation : public Operation {
     bool query_finished_ = false;
     uint64_t num_rows_seen_ = 0;
 
+    using MysqlResultDeleter =
+        folly::static_function_deleter<MYSQL_RES, mysql_free_result>;
+    using MysqlResultUniquePtr = std::unique_ptr<MYSQL_RES, MysqlResultDeleter>;
+
     // All memory lifetime is guaranteed by FetchOpeation.
-    MYSQL_RES* mysql_query_result_ = nullptr;
-    std::unique_ptr<EphemeralRow> current_row_;
+    MysqlResultUniquePtr mysql_query_result_ = nullptr;
+    folly::Optional<EphemeralRow> current_row_;
     EphemeralRowFields row_fields_;
   };
 
@@ -783,7 +789,7 @@ class FetchOperation : public Operation {
   bool isPaused();
 
   // Current query data
-  std::unique_ptr<RowStream> current_row_stream_;
+  folly::Optional<RowStream> current_row_stream_;
   bool query_executed_ = false;
   // TODO: Rename `executed` to `succeeded`
   int num_queries_executed_ = 0;

@@ -632,19 +632,12 @@ FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result)
           mysql_fetch_fields(mysql_query_result),
           mysql_num_fields(mysql_query_result)) {}
 
-FetchOperation::RowStream::~RowStream() {
-  if (mysql_query_result_) {
-    mysql_free_result(mysql_query_result_);
-    mysql_query_result_ = nullptr;
-  }
-}
-
 EphemeralRow FetchOperation::RowStream::consumeRow() {
-  if (!current_row_) {
+  if (!current_row_.hasValue()) {
     LOG(DFATAL) << "Illegal operation";
   }
   EphemeralRow eph_row(std::move(*current_row_));
-  current_row_.reset();
+  current_row_.clear();
   return eph_row;
 }
 
@@ -653,16 +646,16 @@ bool FetchOperation::RowStream::hasNext() {
   // Because it will move the buffer.
   slurp();
   // First iteration
-  return bool(current_row_);
+  return current_row_.hasValue();
 }
 
 bool FetchOperation::RowStream::slurp() {
   CHECK_THROW(mysql_query_result_ != nullptr, OperationStateException);
-  if (current_row_ || query_finished_) {
+  if (current_row_.hasValue() || query_finished_) {
     return true;
   }
   MYSQL_ROW row;
-  int status = mysql_fetch_row_nonblocking(mysql_query_result_, &row);
+  int status = mysql_fetch_row_nonblocking(mysql_query_result_.get(), &row);
   if (status != NET_ASYNC_COMPLETE) {
     return false;
   }
@@ -670,9 +663,8 @@ bool FetchOperation::RowStream::slurp() {
     query_finished_ = true;
     return true;
   }
-  unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_);
-  current_row_ =
-      folly::make_unique<EphemeralRow>(row, field_lengths, &row_fields_);
+  unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_.get());
+  current_row_.assign(EphemeralRow(row, field_lengths, &row_fields_));
   return true;
 }
 
@@ -696,7 +688,7 @@ uint64_t FetchOperation::currentAffectedRows() {
 
 FetchOperation::RowStream* FetchOperation::rowStream() {
   CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
-  return current_row_stream_.get();
+  return current_row_stream_.get_pointer();
 }
 
 void FetchOperation::socketActionable() {
@@ -768,9 +760,7 @@ void FetchOperation::socketActionable() {
         active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         if (num_fields > 0) {
-          current_row_stream_ =
-              folly::make_unique<RowStream>(mysql_query_result);
-
+          current_row_stream_.assign(RowStream(mysql_query_result));
           active_fetch_action_ = FetchAction::Fetch;
         } else {
           active_fetch_action_ = FetchAction::CompleteQuery;
@@ -791,9 +781,9 @@ void FetchOperation::socketActionable() {
     //  - CompleteQuery: an error occurred or rows finished to fetch
     //  - WaitForConsumer: in case `pause` is called during `notifyRowsReady`
     if (active_fetch_action_ == FetchAction::Fetch) {
-      DCHECK(current_row_stream_ != nullptr);
+      DCHECK(current_row_stream_.hasValue());
       // Try to catch when the user didn't pause or consumed the rows
-      if (current_row_stream_->current_row_) {
+      if (current_row_stream_->current_row_.hasValue()) {
         // This should help
         LOG(ERROR) << "Rows not consumed. Perhaps missing `pause`?";
         cancel_ = true;
@@ -846,8 +836,7 @@ void FetchOperation::socketActionable() {
         ++num_queries_executed_;
         notifyQuerySuccess(more_results);
       }
-
-      current_row_stream_ = nullptr;
+      current_row_stream_.clear();
     }
 
     // Once this action is set, the operation is going to be completed no matter
