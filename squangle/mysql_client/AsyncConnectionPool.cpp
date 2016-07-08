@@ -654,6 +654,10 @@ ConnectPoolOperation* ConnectPoolOperation::specializedRun() {
         }
         conn()->socketHandler()->setOperation(this);
 
+        if (conn_options_.getSSLOptionsProviderPtr() && connection_context_) {
+          connection_context_->isSslConnection = true;
+        }
+
         // Set timeout for waiting for connection
         auto end = timeout_ + start_time_;
         auto now = std::chrono::high_resolution_clock::now();

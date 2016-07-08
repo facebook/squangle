@@ -624,6 +624,9 @@ class ConnectOperation : public Operation {
 
   ConnectionOptions conn_options_;
 
+  // Context information for logging purposes.
+  std::unique_ptr<db::ConnectionContextBase> connection_context_;
+
  private:
   void logConnectCompleted(OperationResult result);
 
@@ -632,9 +635,6 @@ class ConnectOperation : public Operation {
   const ConnectionKey conn_key_;
 
   int flags_;
-
-  // Context information for logging purposes.
-  std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   ConnectCallback connect_callback_;
   bool active_in_client_;
