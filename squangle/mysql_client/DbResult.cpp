@@ -12,21 +12,28 @@
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/Operation.h"
 
+#include <ostream>
+
 namespace facebook {
 namespace common {
 namespace mysql_client {
 
-MysqlException::MysqlException(
-    OperationResult failure_type,
-    int mysql_errno,
-    const std::string& mysql_error,
-    const ConnectionKey conn_key,
-    Duration elapsed_time)
-    : Exception(
-          failure_type == OperationResult::Failed
-              ? folly::format("Mysql error {}. {}", mysql_errno, mysql_error)
-                    .str()
-              : Operation::toString(failure_type)),
+std::ostream& operator<<(
+    std::ostream& stream,
+    MultiQueryStreamHandler::State state) {
+  stream << MultiQueryStreamHandler::toString(state);
+  return stream;
+}
+
+MysqlException::MysqlException(OperationResult failure_type,
+                               int mysql_errno,
+                               const std::string& mysql_error,
+                               const ConnectionKey conn_key,
+                               Duration elapsed_time)
+    : Exception(failure_type == OperationResult::Failed
+                    ? folly::format(
+                          "Mysql error {}. {}", mysql_errno, mysql_error).str()
+                    : Operation::toString(failure_type)),
       OperationResultBase(conn_key, elapsed_time),
       failure_type_(failure_type),
       mysql_errno_(mysql_errno),
@@ -101,8 +108,9 @@ void QueryResult::setOperationResult(OperationResult op_result) {
 }
 
 StreamedQueryResult::StreamedQueryResult(
-    MultiQueryStreamHandler* stream_handler)
-    : stream_handler_(stream_handler) {}
+    MultiQueryStreamHandler* stream_handler,
+    size_t query_idx)
+    : stream_handler_(stream_handler), query_idx_(query_idx) {}
 
 StreamedQueryResult::~StreamedQueryResult() {
   // In case of premature deletion.
@@ -136,7 +144,7 @@ const EphemeralRow& StreamedQueryResult::Iterator::dereference() const {
 folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
   checkStoredException();
   // Blocks when the stream is over and we need to handle IO
-  auto current_row = stream_handler_->fetchOneRow();
+  auto current_row = stream_handler_->fetchOneRow(this);
   if (!current_row) {
     if (exception_wrapper_) {
       exception_wrapper_.throwException();
@@ -156,7 +164,7 @@ void StreamedQueryResult::checkStoredException() {
 void StreamedQueryResult::checkAccessToResult() {
   checkStoredException();
   if (stream_handler_) {
-    stream_handler_->fetchQueryEnd();
+    stream_handler_->fetchQueryEnd(this);
   }
 }
 
@@ -172,26 +180,29 @@ void StreamedQueryResult::setException(folly::exception_wrapper ex) {
 }
 
 void StreamedQueryResult::freeHandler() {
-  stream_handler_ = nullptr;
+  stream_handler_.reset();
 }
 
 MultiQueryStreamHandler::MultiQueryStreamHandler(
-    std::shared_ptr<FetchOperation> op)
-    : fetch_operation_(op) {}
+    std::shared_ptr<MultiQueryStreamOperation> op)
+    : operation_(op) {}
 
-std::unique_ptr<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
+folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
+  if (state_ == State::RunQuery) {
+    start();
+  }
+
   // Runs in User thread
   state_baton_.wait();
-  DCHECK(fetch_operation_->isPaused() || fetch_operation_->done());
+  DCHECK(operation_->isPaused() || operation_->done());
 
-  std::unique_ptr<StreamedQueryResult> res;
+  folly::Optional<StreamedQueryResult> res;
   // Accepted states: InitResult, OperationSucceeded or OperationFailed
   if (state_ == State::InitResult) {
-    res = folly::make_unique<StreamedQueryResult>(this);
-    current_result_ = res.get();
+    res.assign(StreamedQueryResult(this, ++curr_query_));
     resumeOperation();
   } else if (state_ == State::OperationFailed) {
-    handleQueryFailed();
+    handleQueryFailed(nullptr);
   } else if (state_ != State::OperationSucceeded) {
     LOG(DFATAL) << "Bad state transition. Perhaps reading next result without"
                 << " deleting or consuming current stream? Current state is "
@@ -205,7 +216,7 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
   // Runs in User thread
   state_baton_.wait();
   if (state_ == State::OperationSucceeded || state_ == State::OperationFailed) {
-    return fetch_operation_->releaseConnection();
+    return operation_->releaseConnection();
   }
 
   exception_wrapper_ = folly::make_exception_wrapper<OperationStateException>(
@@ -227,11 +238,9 @@ void MultiQueryStreamHandler::streamCallback(
     op->pauseForConsumer();
     state_ = State::InitResult;
   } else if (op_state == StreamState::RowsReady) {
-    DCHECK(current_result_);
     op->pauseForConsumer();
     state_ = State::ReadRows;
   } else if (op_state == StreamState::QueryEnded) {
-    DCHECK(current_result_);
     op->pauseForConsumer();
     state_ = State::ReadResult;
   } else if (op_state == StreamState::Success) {
@@ -249,23 +258,25 @@ void MultiQueryStreamHandler::streamCallback(
   state_baton_.post();
 }
 
-folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow() {
+folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
+    StreamedQueryResult* result) {
+  checkStreamedQueryResult(result);
   state_baton_.wait();
   // Accepted states: ReadRows, ReadResult, OperationFailed
   if (state_ == State::ReadRows) {
-    if (!fetch_operation_->rowStream()->hasNext()) {
-      this->resumeOperation();
+    if (!operation_->rowStream()->hasNext()) {
+      resumeOperation();
       // Recursion to get `wait` and double check the stream.
-      return fetchOneRow();
+      return fetchOneRow(result);
     }
     return folly::Optional<EphemeralRow>(
-        fetch_operation_->rowStream()->consumeRow());
+        operation_->rowStream()->consumeRow());
   }
 
   if (state_ == State::ReadResult) {
-    handleQueryEnded();
+    handleQueryEnded(result);
   } else if (state_ == State::OperationFailed) {
-    handleQueryFailed();
+    handleQueryFailed(result);
   } else {
     LOG(DFATAL) << "Bad state transition. Only ReadRows, ReadResult and "
                 << "OperationFailed are allowed. Received " << toString(state_)
@@ -275,13 +286,14 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow() {
   return folly::Optional<EphemeralRow>();
 }
 
-void MultiQueryStreamHandler::fetchQueryEnd() {
+void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
+  checkStreamedQueryResult(result);
   state_baton_.wait();
   // Accepted states: ReadResult, OperationFailed
   if (state_ == State::ReadResult) {
-    handleQueryEnded();
+    handleQueryEnded(result);
   } else if (state_ == State::OperationFailed) {
-    handleQueryFailed();
+    handleQueryFailed(result);
   } else {
     LOG(DFATAL) << "Expected end of query, but received " << toString(state_)
                 << ".";
@@ -291,29 +303,42 @@ void MultiQueryStreamHandler::fetchQueryEnd() {
 
 void MultiQueryStreamHandler::resumeOperation() {
   state_baton_.reset();
-  fetch_operation_->resume();
+  operation_->resume();
 }
 
-void MultiQueryStreamHandler::handleQueryEnded() {
-  current_result_->setResult(
-      fetch_operation_->currentAffectedRows(),
-      fetch_operation_->currentLastInsertId());
-  current_result_->freeHandler();
-  current_result_ = nullptr;
+void MultiQueryStreamHandler::handleQueryEnded(StreamedQueryResult* result) {
+  result->setResult(
+      operation_->currentAffectedRows(), operation_->currentLastInsertId());
+  result->freeHandler();
   resumeOperation();
 }
 
-void MultiQueryStreamHandler::handleQueryFailed() {
+void MultiQueryStreamHandler::handleQueryFailed(StreamedQueryResult* result) {
   DCHECK(exception_wrapper_);
-  if (current_result_) {
-    current_result_->setException(exception_wrapper_);
+  if (result) {
+    result->setException(exception_wrapper_);
   } else {
     exception_wrapper_.throwException();
   }
 }
+
 void MultiQueryStreamHandler::handleBadState() {
-  fetch_operation_->cancel();
+  operation_->cancel();
   resumeOperation();
+}
+
+void MultiQueryStreamHandler::start() {
+  CHECK_EQ(state_, State::RunQuery);
+  CHECK(operation_);
+  operation_->setCallback(this);
+  state_ = State::WaitForInitResult;
+  operation_->run();
+}
+
+void MultiQueryStreamHandler::checkStreamedQueryResult(
+    StreamedQueryResult* result) {
+  CHECK_EQ(result->stream_handler_.get(), this);
+  CHECK_EQ(result->query_idx_, curr_query_);
 }
 
 std::string MultiQueryStreamHandler::toString(State state) {
@@ -333,6 +358,22 @@ std::string MultiQueryStreamHandler::toString(State state) {
   }
   return "Unknown";
 }
+
+MultiQueryStreamHandler::MultiQueryStreamHandler(
+    MultiQueryStreamHandler&& other) noexcept {
+  // Its OK to move another object only if we haven't
+  // yet invoked nextQuery on it or if the operation
+  // is done()
+  CHECK(other.state_ == State::RunQuery || other.operation_->done());
+  operation_ =  std::move(other.operation_);
+}
+
+MultiQueryStreamHandler::~MultiQueryStreamHandler() {
+  CHECK(
+      state_ == State::OperationSucceeded || state_ == State::OperationFailed);
+  CHECK(operation_->done());
+}
+
 }
 }
 }

@@ -183,8 +183,10 @@ std::unique_ptr<Connection>&& Operation::releaseConnection() {
 
 void Operation::snapshotMysqlErrors() {
   mysql_errno_ = ::mysql_errno(conn()->mysql());
-  mysql_error_ = ::mysql_error(conn()->mysql());
-  mysql_normalize_error_ = mysql_error_;
+  if (mysql_errno_ != 0) {
+    mysql_error_ = ::mysql_error(conn()->mysql());
+    mysql_normalize_error_ = mysql_error_;
+  }
 }
 
 void Operation::setAsyncClientError(StringPiece msg, StringPiece normalizeMsg) {
@@ -990,12 +992,20 @@ folly::fbstring MultiQueryStreamOperation::renderedQuery() {
   return Query::renderMultiQuery(conn()->mysql(), queries_);
 }
 
+void MultiQueryStreamOperation::invokeCallback(StreamState reason) {
+  // Construct a CallbackVistor object and pass to apply_vistor. It will
+  // call the appropriate overaload of 'operator()' depending on the type
+  // of callback stored in stream_callback_ i.e. either MultiQueryStreamHandler
+  // or MultiQueryStreamOperation::Callback.
+  boost::apply_visitor(CallbackVisitor(this, reason), stream_callback_);
+}
+
 void MultiQueryStreamOperation::notifyInitQuery() {
-  stream_callback_(this, StreamState::InitQuery);
+  invokeCallback(StreamState::InitQuery);
 }
 
 void MultiQueryStreamOperation::notifyRowsReady() {
-  stream_callback_(this, StreamState::RowsReady);
+  invokeCallback(StreamState::RowsReady);
 }
 
 void MultiQueryStreamOperation::notifyQuerySuccess(bool) {
@@ -1003,7 +1013,7 @@ void MultiQueryStreamOperation::notifyQuerySuccess(bool) {
   // connection.
   // This will allow pause in the end of the query. End of operations don't
   // allow.
-  stream_callback_(this, StreamState::QueryEnded);
+  invokeCallback(StreamState::QueryEnded);
 }
 
 void MultiQueryStreamOperation::notifyFailure(OperationResult) {
@@ -1016,7 +1026,7 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
       (result == OperationResult::Succeeded ? StreamState::Success
                                             : StreamState::Failure);
 
-  stream_callback_(this, reason);
+  invokeCallback(reason);
   stream_callback_ = nullptr;
 }
 

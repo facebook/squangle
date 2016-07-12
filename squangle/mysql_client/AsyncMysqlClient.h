@@ -477,7 +477,7 @@ class Connection {
   // EXPERIMENTAL
 
   // StreamResultHandler
-  static std::unique_ptr<MultiQueryStreamHandler> streamMultiQuery(
+  static MultiQueryStreamHandler streamMultiQuery(
       std::unique_ptr<Connection> connection,
       std::vector<Query> queries);
 

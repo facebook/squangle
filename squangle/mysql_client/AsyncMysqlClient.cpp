@@ -542,7 +542,7 @@ DbMultiQueryResult Connection::multiQuery(Args&&... args) {
   return multiQuery(std::vector<Query>{std::forward<Args>(args)...});
 }
 
-std::unique_ptr<MultiQueryStreamHandler> Connection::streamMultiQuery(
+MultiQueryStreamHandler Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
     std::vector<Query> queries) {
   auto op = beginAnyQuery<MultiQueryStreamOperation>(
@@ -552,15 +552,7 @@ std::unique_ptr<MultiQueryStreamHandler> Connection::streamMultiQuery(
   // MultiQueryStreamHandler needs to be alive while the operation is running.
   // To accomplish that, ~MultiQueryStreamHandler waits until
   // `postOperationEnded` is called.
-  auto streamed_result = folly::make_unique<MultiQueryStreamHandler>(op);
-  op->setCallback([streamed_result = streamed_result.get()](
-      FetchOperation * op, StreamState reason) {
-    streamed_result->streamCallback(op, reason);
-  });
-
-  op->run();
-
-  return streamed_result;
+  return MultiQueryStreamHandler(op);
 }
 
 std::shared_ptr<QueryOperation> Connection::beginTransaction(

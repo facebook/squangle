@@ -390,10 +390,13 @@ class QueryResult {
 };
 
 class FetchOperation;
+class MultiQueryStreamOperation;
 class StreamedQueryResult;
 class MultiQueryStreamHandler;
 enum class StreamState;
 
+/// The StreamedQueryResult support move assignment and construction, but
+/// its unsafe to move assign in the middle of fetching results
 class StreamedQueryResult {
  public:
   uint64_t numAffectedRows() {
@@ -435,11 +438,22 @@ class StreamedQueryResult {
 
   Iterator end();
 
-  explicit StreamedQueryResult(MultiQueryStreamHandler* handler);
+  StreamedQueryResult(MultiQueryStreamHandler* handler, size_t query_id_);
   ~StreamedQueryResult();
 
   StreamedQueryResult(const StreamedQueryResult&) = delete;
   StreamedQueryResult& operator=(StreamedQueryResult const&) = delete;
+
+  // only move construction and assignment allowed
+  StreamedQueryResult(StreamedQueryResult&& other) = default;
+
+  StreamedQueryResult& operator=(StreamedQueryResult&& other) /* may throw */ {
+    if (this != &other) {
+      this->~StreamedQueryResult();
+      new (this) StreamedQueryResult(std::move(other));
+    }
+    return *this;
+  }
 
   folly::Optional<EphemeralRow> nextRow();
 
@@ -454,12 +468,15 @@ class StreamedQueryResult {
   void checkStoredException();
   void checkAccessToResult();
 
-  // This baton is notified by read_ready or query_finished
-  // It will always block in "increment"
-  folly::fibers::Baton stream_baton_;
+  struct MultiQueryStreamHandlerDeleter {
+    void operator()(void*) const {}
+  };
+  using MultiQueryStreamHandlerPtr =
+      std::unique_ptr<MultiQueryStreamHandler, MultiQueryStreamHandlerDeleter>;
 
-  MultiQueryStreamHandler* stream_handler_;
+  MultiQueryStreamHandlerPtr stream_handler_ = nullptr;
 
+  const size_t query_idx_;
   size_t num_rows_ = 0;
   int64_t num_affected_rows_ = -1;
   int64_t last_insert_id_ = 0;
@@ -469,43 +486,75 @@ class StreamedQueryResult {
 
 class MultiQueryStreamHandler {
  public:
-  explicit MultiQueryStreamHandler(std::shared_ptr<FetchOperation> op);
-
-  // Returns the next Query or nullptr if there are no more query results to be
-  // read.
-  std::unique_ptr<StreamedQueryResult> nextQuery();
-
-  std::unique_ptr<Connection> releaseConnection();
-
- private:
-  friend class Connection;
-  friend class StreamedQueryResult;
-
-  void streamCallback(FetchOperation* op, StreamState state);
   // This allows the User Thread to know what to read from `FetchOperation`.
   // The states `InitResult`, `ReadRows`, `ReadResult` are synchronization
   // points. So the FetchOperation is going to be paused and will require
   // `resume` to proceed.
   enum class State {
+    RunQuery,
+    WaitForInitResult,
     InitResult,
     ReadRows,
     ReadResult,
     OperationSucceeded,
     OperationFailed,
   };
-  State state_ = State::InitResult;
-
-  // Provider to StreamedQueryResult call
-  folly::Optional<EphemeralRow> fetchOneRow();
-
-  void fetchQueryEnd();
-
-  void resumeOperation();
-  void handleQueryEnded();
-  void handleQueryFailed();
-  void handleBadState();
 
   static std::string toString(State state);
+
+  explicit MultiQueryStreamHandler(
+      std::shared_ptr<MultiQueryStreamOperation> op);
+
+  ~MultiQueryStreamHandler();
+
+  MultiQueryStreamHandler(const MultiQueryStreamHandler&) = delete;
+  MultiQueryStreamHandler& operator=(const MultiQueryStreamHandler&) = delete;
+
+  // NOTE: Its unsafe to move MultiQueryStreamHandler after invoking nextQuery
+  // to retrieve the first query's result. Its safe to do this only before the
+  // first invocation of nextQuery or after all queries are done.
+  MultiQueryStreamHandler(MultiQueryStreamHandler&& other) noexcept;
+  MultiQueryStreamHandler& operator=(
+      MultiQueryStreamHandler&& other) {
+    if (this != &other) {
+      this->~MultiQueryStreamHandler();
+      new (this) MultiQueryStreamHandler(std::move(other));
+    }
+    return *this;
+  }
+
+  // Returns the next Query or nullptr if there are no more query results to be
+  // read.
+  folly::Optional<StreamedQueryResult> nextQuery();
+
+  std::unique_ptr<Connection> releaseConnection();
+
+ private:
+  friend class Connection;
+  friend class StreamedQueryResult;
+  friend class FetchOperation;
+  friend class MultiQueryStreamOperation;
+
+  // This schedules the operation to be run and starts the result retreival
+  // process
+  void start();
+
+  void streamCallback(FetchOperation* op, StreamState state);
+
+  std::atomic<State> state_{State::RunQuery};
+
+  // Provider to StreamedQueryResult call
+  folly::Optional<EphemeralRow> fetchOneRow(StreamedQueryResult* result);
+
+  void fetchQueryEnd(StreamedQueryResult* result);
+
+  void resumeOperation();
+  void handleQueryEnded(StreamedQueryResult* result);
+  void handleQueryFailed(StreamedQueryResult* result);
+  void handleBadState();
+
+  // sanity checks on StreamedQueryResult
+  void checkStreamedQueryResult(StreamedQueryResult* result);
 
   // Access protected by state_baton_ and pause;
   folly::fibers::Baton state_baton_;
@@ -519,7 +568,9 @@ class MultiQueryStreamHandler {
   // events.
   StreamedQueryResult* current_result_ = nullptr;
 
-  std::shared_ptr<FetchOperation> fetch_operation_;
+  size_t curr_query_ = 0; // the current query whose results we are fetching
+
+  std::shared_ptr<MultiQueryStreamOperation> operation_;
 };
 
 typedef FetchResult<std::vector<QueryResult>> DbMultiQueryResult;

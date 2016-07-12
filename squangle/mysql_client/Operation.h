@@ -819,9 +819,7 @@ class MultiQueryStreamOperation : public FetchOperation {
 
   typedef std::function<void(FetchOperation*, StreamState)> Callback;
 
-  void setCallback(Callback sc) {
-    stream_callback_ = sc;
-  }
+  using StreamCallback = boost::variant<MultiQueryStreamHandler*, Callback>;
 
   void notifyInitQuery() override;
   void notifyRowsReady() override;
@@ -845,10 +843,43 @@ class MultiQueryStreamOperation : public FetchOperation {
     return db::OperationType::MultiQueryStream;
   }
 
+  template<typename C>
+  void setCallback(C cb) {
+    stream_callback_ = cb;
+  }
+
  private:
   const std::vector<Query> queries_;
 
-  Callback stream_callback_;
+  // wrapper to construct CallbackVistor and invoke the
+  // right callback
+  void invokeCallback(StreamState state);
+
+  // Vistor to invoke the right callback depending on the type stored
+  // in the variant 'stream_callback_'
+  struct CallbackVisitor : public boost::static_visitor<> {
+    CallbackVisitor(MultiQueryStreamOperation* op, StreamState state)
+        : op_(op), state_(state) {}
+
+    void operator()(MultiQueryStreamHandler* handler) const {
+      DCHECK(op_ != nullptr);
+      if (handler != nullptr) {
+        handler->streamCallback(op_, state_);
+      }
+    }
+
+    void operator()(Callback cb) const {
+      DCHECK(op_ != nullptr);
+      if (cb != nullptr) {
+        cb(op_, state_);
+      }
+    }
+   private:
+    MultiQueryStreamOperation* op_;
+    StreamState state_;
+  };
+
+  StreamCallback stream_callback_;
 };
 
 // An operation representing a query.  If a callback is set, it
