@@ -231,8 +231,11 @@ class AsyncMysqlClient {
 
   db::ClientPerfStats collectPerfStats() {
     db::ClientPerfStats ret;
-    ret.callbackDelayMicrosAvg = callbackDelayAvg_.value();
+    ret.callbackDelayMicrosAvg = stats_tracker_->callbackDelayAvg.value();
     ret.ioEventLoopMicrosAvg = tevent_base_.getAvgLoopTime();
+    ret.notificationQueueSize = tevent_base_.getNotificationQueueSize();
+    ret.ioThreadBusyTime = stats_tracker_->ioThreadBusyTime.value();
+    ret.ioThreadIdleTime = stats_tracker_->ioThreadIdleTime.value();
     return ret;
   }
 
@@ -370,9 +373,25 @@ class AsyncMysqlClient {
   // This only works if you are using AsyncConnectionPool
   std::atomic<uint64_t> pools_conn_limit_;
 
-  // Average time between a callback being scheduled in the IO Thread and the
-  // time it runs
-  db::ExponentialMovingAverage callbackDelayAvg_{1.0 / 16.0};
+  class StatsTracker : public folly::EventBaseObserver {
+   public:
+    void loopSample(int64_t busy_time, int64_t idle_time) override {
+      ioThreadBusyTime.addSample(static_cast<double>(busy_time));
+      ioThreadIdleTime.addSample(static_cast<double>(idle_time));
+    }
+
+    uint32_t getSampleRate() const override {
+      // Avoids this being called every loop
+      return 16;
+    }
+
+    // Average time between a callback being scheduled in the IO Thread and the
+    // time it runs
+    db::ExponentialMovingAverage callbackDelayAvg{1.0 / 16.0};
+    db::ExponentialMovingAverage ioThreadBusyTime{1.0 / 16.0};
+    db::ExponentialMovingAverage ioThreadIdleTime{1.0 / 16.0};
+  };
+  std::shared_ptr<StatsTracker> stats_tracker_;
 
   AsyncMysqlClient(const AsyncMysqlClient&) = delete;
   AsyncMysqlClient& operator=(const AsyncMysqlClient&) = delete;

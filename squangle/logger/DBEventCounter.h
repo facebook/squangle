@@ -33,6 +33,9 @@ class ExponentialMovingAverage {
 struct ClientPerfStats {
   double callbackDelayMicrosAvg = 0;
   double ioEventLoopMicrosAvg = 0;
+  double ioThreadBusyTime = 0;
+  double ioThreadIdleTime = 0;
+  uint64_t notificationQueueSize = 0;
 };
 
 class DBCounterBase {

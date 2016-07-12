@@ -50,20 +50,18 @@ std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
   return folly::Singleton<AsyncMysqlClient>::try_get();
 }
 
-AsyncMysqlClient::AsyncMysqlClient()
-    : client_stats_(new db::SimpleDbCounter()),
-      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
-  init();
-}
-
 AsyncMysqlClient::AsyncMysqlClient(
     std::unique_ptr<db::SquangleLoggerBase> db_logger,
     std::unique_ptr<db::DBCounterBase> db_stats)
     : db_logger_(std::move(db_logger)),
       client_stats_(std::move(db_stats)),
-      pools_conn_limit_(std::numeric_limits<uint64_t>::max()) {
+      pools_conn_limit_(std::numeric_limits<uint64_t>::max()),
+      stats_tracker_(std::make_shared<StatsTracker>()) {
   init();
 }
+
+AsyncMysqlClient::AsyncMysqlClient()
+    : AsyncMysqlClient(nullptr, folly::make_unique<db::SimpleDbCounter>()) { }
 
 void AsyncMysqlClient::init() {
   static InitMysqlLibrary unused;
@@ -75,19 +73,20 @@ void AsyncMysqlClient::init() {
     tevent_base_.loopForever();
     mysql_thread_end();
   });
+  tevent_base_.setObserver(stats_tracker_);
   tevent_base_.waitUntilRunning();
 }
 
 bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
   auto scheduleTime = std::chrono::high_resolution_clock::now();
-  if (!tevent_base_.runInEventBaseThread([fn, scheduleTime, this]() {
-        auto delay =
-            std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::high_resolution_clock::now() - scheduleTime)
-                .count();
-        callbackDelayAvg_.addSample(delay);
-        fn();
-      })) {
+  if (!tevent_base_.runInEventBaseThread(
+          [ fn, scheduleTime, this ]() {
+            auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::high_resolution_clock::now() -
+                             scheduleTime).count();
+            stats_tracker_->callbackDelayAvg.addSample(delay);
+            fn();
+          })) {
     LOG(DFATAL) << "folly::EventBase::runInEventBase failed";
     return false;
   }
