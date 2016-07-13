@@ -665,7 +665,7 @@ class FetchOperation : public Operation {
   // combined).
   folly::fbstring getExecutedQuery() const {
     CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
-    return rendered_multi_query_;
+    return rendered_query_.toFbstring();
   }
 
   // Number of queries that succeed to execute
@@ -743,9 +743,11 @@ class FetchOperation : public Operation {
   void resume();
 
  protected:
+  MultiQuery queries_;
+
   FetchOperation* specializedRun() override;
 
-  explicit FetchOperation(ConnectionProxy&& conn);
+  FetchOperation(ConnectionProxy&& conn, std::vector<Query>&& queries);
 
   enum class FetchAction {
     StartQuery,
@@ -778,8 +780,6 @@ class FetchOperation : public Operation {
   virtual void notifyFailure(OperationResult result) = 0;
   virtual void notifyOperationCompleted(OperationResult result) = 0;
 
-  virtual folly::fbstring renderedQuery() = 0;
-
   bool cancel_ = false;
 
  private:
@@ -806,7 +806,7 @@ class FetchOperation : public Operation {
   FetchAction active_fetch_action_ = FetchAction::StartQuery;
   FetchAction paused_action_ = FetchAction::StartQuery;
 
-  folly::fbstring rendered_multi_query_;
+  folly::StringPiece rendered_query_;
 };
 
 // This operation only supports one mode: streaming callback. This is a
@@ -826,8 +826,6 @@ class MultiQueryStreamOperation : public FetchOperation {
   void notifyQuerySuccess(bool more_results) override;
   void notifyFailure(OperationResult result) override;
   void notifyOperationCompleted(OperationResult result) override;
-
-  folly::fbstring renderedQuery() override;
 
   // Overriding to narrow the return type
   MultiQueryStreamOperation* setTimeout(Duration timeout) {
@@ -849,7 +847,6 @@ class MultiQueryStreamOperation : public FetchOperation {
   }
 
  private:
-  const std::vector<Query> queries_;
 
   // wrapper to construct CallbackVistor and invoke the
   // right callback
@@ -910,7 +907,7 @@ class QueryOperation : public FetchOperation {
 
   // Returns the Query of this operation
   const Query& getQuery() const {
-    return query_;
+    return queries_.getQuery(0);
   }
 
   // Steal all rows.  Only valid if there is no callback.  Inefficient
@@ -957,7 +954,6 @@ class QueryOperation : public FetchOperation {
   }
 
  protected:
-  folly::fbstring renderedQuery() override;
 
   void notifyInitQuery() override;
   void notifyRowsReady() override;
@@ -966,11 +962,8 @@ class QueryOperation : public FetchOperation {
   void notifyOperationCompleted(OperationResult result) override;
 
  private:
-  Query query_;
   QueryCallback buffered_query_callback_;
-
   std::unique_ptr<QueryResult> query_result_;
-
   friend class Connection;
 };
 
@@ -1009,8 +1002,7 @@ class MultiQueryOperation : public FetchOperation {
 
   // Returns the Query for a query index.
   const Query& getQuery(int index) const {
-    CHECK_THROW(0 <= index || index < queries_.size(), std::invalid_argument);
-    return queries_[index];
+    return queries_.getQuery(index);
   }
 
   void setQueryResults(std::vector<QueryResult> query_results) {
@@ -1039,7 +1031,6 @@ class MultiQueryOperation : public FetchOperation {
   }
 
  protected:
-  folly::fbstring renderedQuery() override;
 
   void notifyInitQuery() override;
   void notifyRowsReady() override;
@@ -1051,7 +1042,6 @@ class MultiQueryOperation : public FetchOperation {
   // callbacks if needed
 
  private:
-  const std::vector<Query> queries_;
   MultiQueryCallback buffered_query_callback_;
 
   // Storage fields for every statement in the query

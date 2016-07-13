@@ -597,8 +597,10 @@ void ConnectOperation::removeClientReference() {
   }
 }
 
-FetchOperation::FetchOperation(ConnectionProxy&& conn)
-    : Operation(std::move(conn)) {}
+FetchOperation::FetchOperation(
+    ConnectionProxy&& conn,
+    std::vector<Query>&& queries)
+    : Operation(std::move(conn)), queries_(std::move(queries)) {}
 
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
@@ -613,7 +615,7 @@ bool FetchOperation::isPaused() {
 FetchOperation* FetchOperation::specializedRun() {
   if (!async_client()->runInThread([this]() {
         try {
-          rendered_multi_query_ = renderedQuery();
+          rendered_query_ = queries_.renderQuery(conn()->mysql());
           socketActionable();
         } catch (std::invalid_argument& e) {
           setAsyncClientError(
@@ -724,8 +726,8 @@ void FetchOperation::socketActionable() {
       } else {
         status = mysql_real_query_nonblocking(
             conn()->mysql(),
-            rendered_multi_query_.data(),
-            rendered_multi_query_.size(),
+            rendered_query_.begin(),
+            rendered_query_.size(),
             &error);
       }
 
@@ -947,7 +949,7 @@ void FetchOperation::specializedCompleteOperation() {
         getOperationType(),
         elapsed(),
         num_queries_executed_,
-        rendered_multi_query_,
+        rendered_query_,
         *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
@@ -961,7 +963,7 @@ void FetchOperation::specializedCompleteOperation() {
         reason,
         elapsed(),
         num_queries_executed_,
-        rendered_multi_query_,
+        rendered_query_,
         *conn().get());
   }
 
@@ -985,12 +987,7 @@ void FetchOperation::mustSucceed() {
 MultiQueryStreamOperation::MultiQueryStreamOperation(
     ConnectionProxy&& conn,
     std::vector<Query>&& queries)
-    : FetchOperation(std::move(conn)), queries_(std::move(queries)) {}
-
-folly::fbstring MultiQueryStreamOperation::renderedQuery() {
-  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
-  return Query::renderMultiQuery(conn()->mysql(), queries_);
-}
+    : FetchOperation(std::move(conn), std::move(queries)) {}
 
 void MultiQueryStreamOperation::invokeCallback(StreamState reason) {
   // Construct a CallbackVistor object and pass to apply_vistor. It will
@@ -1031,14 +1028,8 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
 }
 
 QueryOperation::QueryOperation(ConnectionProxy&& conn, Query&& query)
-    : FetchOperation(std::move(conn)),
-      query_(std::move(query)),
+    : FetchOperation(std::move(conn), std::vector<Query>{std::move(query)}),
       query_result_(folly::make_unique<QueryResult>(0)) {}
-
-folly::fbstring QueryOperation::renderedQuery() {
-  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
-  return query_.render(conn()->mysql());
-}
 
 void QueryOperation::notifyInitQuery() {
   auto* row_stream = rowStream();
@@ -1107,14 +1098,8 @@ void QueryOperation::notifyOperationCompleted(OperationResult result) {
 MultiQueryOperation::MultiQueryOperation(
     ConnectionProxy&& conn,
     std::vector<Query>&& queries)
-    : FetchOperation(std::move(conn)),
-      queries_(std::move(queries)),
+    : FetchOperation(std::move(conn), std::move(queries)),
       current_query_result_(folly::make_unique<QueryResult>(0)) {}
-
-folly::fbstring MultiQueryOperation::renderedQuery() {
-  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
-  return Query::renderMultiQuery(conn()->mysql(), queries_);
-}
 
 void MultiQueryOperation::notifyInitQuery() {
   auto* row_stream = rowStream();

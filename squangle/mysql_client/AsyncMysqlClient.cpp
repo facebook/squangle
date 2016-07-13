@@ -172,7 +172,7 @@ void AsyncMysqlClient::logQuerySuccess(
     db::OperationType type,
     Duration dur,
     int queries_executed,
-    const folly::fbstring& query,
+    const folly::StringPiece query,
     const Connection& conn) {
   DCHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrSucceededQueries();
@@ -181,7 +181,7 @@ void AsyncMysqlClient::logQuerySuccess(
         type,
         dur,
         queries_executed,
-        query.toStdString(),
+        query.toString(),
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
@@ -191,7 +191,7 @@ void AsyncMysqlClient::logQueryFailure(
     db::FailureReason reason,
     Duration duration,
     int queries_executed,
-    const folly::fbstring& query,
+    const folly::StringPiece query,
     const Connection& conn) {
   DCHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrFailedQueries();
@@ -201,7 +201,7 @@ void AsyncMysqlClient::logQueryFailure(
         reason,
         duration,
         queries_executed,
-        query.toStdString(),
+        query.toString(),
         conn.mysql(),
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }

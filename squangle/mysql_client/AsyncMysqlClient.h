@@ -181,7 +181,7 @@ class AsyncMysqlClient {
       db::OperationType operation_name,
       Duration dur,
       int queries_executed,
-      const folly::fbstring& query,
+      const folly::StringPiece query,
       const Connection& conn);
 
   void logQueryFailure(
@@ -189,7 +189,7 @@ class AsyncMysqlClient {
       db::FailureReason reason,
       Duration duration,
       int queries_executed,
-      const folly::fbstring& query,
+      const folly::StringPiece query,
       const Connection& conn);
 
   void logConnectionSuccess(

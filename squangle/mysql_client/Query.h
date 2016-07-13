@@ -62,10 +62,11 @@
 #ifndef COMMON_ASYNC_MYSQL_QUERY_H
 #define COMMON_ASYNC_MYSQL_QUERY_H
 
+#include <folly/dynamic.h>
 #include <folly/Memory.h>
+#include <folly/Optional.h>
 #include <folly/Range.h>
 #include <folly/String.h>
-#include <folly/dynamic.h>
 
 #include <boost/variant.hpp>
 
@@ -84,12 +85,15 @@ using folly::StringPiece;
 class QueryArgument;
 
 class Query {
+ struct QueryText;
  public:
   // Query can be constructed with or without params.
+  // By default we deep copy the query text
   explicit Query(const StringPiece query_text)
-      : query_text_(query_text.begin(), query_text.end()),
-        unsafe_query_(false),
-        params_{} {}
+      : query_text_(query_text) {}
+
+  explicit Query(QueryText&& query_text)
+      : query_text_(std::move(query_text)) {}
 
   ~Query();
 
@@ -125,11 +129,16 @@ class Query {
   }
 
   // If you need to construct a raw query, use this evil function.
-  template <typename... Args>
-  static Query unsafe(const StringPiece query_text) {
-    Query ret(query_text);
+  static Query unsafe(const StringPiece query_text,
+                      bool shallowCopy = false) {
+    Query ret{shallowCopy ? QueryText::makeShallow(query_text)
+                          : QueryText{query_text}};
     ret.allowUnsafeEvilQueries();
     return ret;
+  }
+
+  bool isUnsafe() const noexcept {
+    return unsafe_query_;
   }
 
   // Wrapper around mysql_real_escape_string() - please use placeholders
@@ -164,18 +173,120 @@ class Query {
   folly::fbstring renderInsecure(
       const std::vector<QueryArgument>& params) const;
 
-  folly::fbstring getQueryFormat() const {
-    return query_text_;
-  }
+  folly::StringPiece getQueryFormat() const { return query_text_.getQuery(); }
 
- protected:
+ private:
+
+  // QueryText is a container for query stmt used by the Query (see below).
+  // Its a union like structure that supports managing either a shallow copy
+  // or a deep copy of a query stmt. If QueryText holds a shallow reference
+  // and a modification is requested, it will automatically copy the data
+  // before modifying the data.
+  //
+  // Invariants:
+  // sp -> string piece field representing the query stmt
+  // sb -> string buffer that contains the query if deep copy
+  //
+  // if shallow copy, sb is empty and sp point to the query stmt
+  // if deep copy, sb has the query stmt and sp points to sb
+  struct QueryText {
+    // By default make a deep copy of the query
+    explicit QueryText(folly::StringPiece query) {
+      query_buffer_.assign(folly::fbstring(query.begin(), query.size()));
+      query_ = folly::StringPiece(*query_buffer_);
+      sanityChecks();
+    }
+
+    // Make a shallow copy of the query
+    static QueryText makeShallow(folly::StringPiece query) {
+      QueryText res{};
+      res.query_ = query;
+      res.sanityChecks();
+      return res;
+    }
+
+    // Copy constructor and copy assignment
+    QueryText(const QueryText& other) {
+      *this = other;
+    }
+    QueryText& operator=(const QueryText& other) {
+      if (this == &other) {
+        return *this;
+      }
+      if (!other.query_buffer_.hasValue()) {
+        /* shallow copy string */
+        query_buffer_.clear();
+        query_ = other.query_;
+      } else {
+        query_buffer_ = other.query_buffer_;
+        query_ = folly::StringPiece(*query_buffer_);
+      }
+      sanityChecks();
+      return *this;
+    }
+
+    /// Move constructor and move assignment
+    QueryText(QueryText&& other) noexcept {
+      *this = std::move(other);
+    }
+    QueryText& operator=(QueryText&& other) {
+      if (this == &other) {
+        return *this;
+      }
+      if (!other.query_buffer_.hasValue()) {
+        /* shallow copy */
+        query_buffer_.clear();
+        query_ = other.query_;
+      } else {
+        query_buffer_ = std::move(other.query_buffer_);
+        query_ = folly::StringPiece(*query_buffer_);
+        other.query_ = {};
+        other.query_buffer_.clear();
+      }
+      sanityChecks();
+      return *this;
+    }
+
+    QueryText& operator+=(const QueryText& other) {
+      if (!query_buffer_.hasValue()) {
+        // this was a shallow copy before; we need to copy now
+        query_buffer_.assign(folly::fbstring(query_.begin(), query_.size()));
+      }
+      DCHECK_EQ(query_, *query_buffer_);
+      *query_buffer_ += " ";
+      *query_buffer_ += other.getQuery().toFbstring();
+      query_ = folly::StringPiece(*query_buffer_);
+      sanityChecks();
+      return *this;
+    }
+
+    folly::StringPiece getQuery() const noexcept {
+      return query_;
+    }
+
+   private:
+    QueryText() {}
+
+    // ensures invariants are met
+    void sanityChecks() {
+      if (!query_buffer_.hasValue()) {
+        /* shallow copy */
+        return;
+      }
+      DCHECK_EQ((uintptr_t)query_.data(), (uintptr_t)query_buffer_->data());
+      DCHECK_EQ(query_.size(), query_buffer_->length());
+    }
+
+    folly::Optional<folly::fbstring> query_buffer_;
+    folly::StringPiece query_;
+  };  // end QueryText class
+
   // Allow queries that look evil (aka, raw queries).  Don't use this.
   // It's horrible.
   void allowUnsafeEvilQueries() {
     unsafe_query_ = true;
   }
 
- private:
   // append an int, float, or string to the specified buffer
   void appendValue(
       folly::fbstring* s,
@@ -197,9 +308,28 @@ class Query {
   void unpack(Arg&& arg, Args&&... args);
   void unpack() {}
 
-  folly::fbstring query_text_;
-  bool unsafe_query_;
-  std::vector<QueryArgument> params_;
+  QueryText query_text_;
+  bool unsafe_query_ = false;
+  std::vector<QueryArgument> params_{};
+};
+
+// Wraps many queries and holds a buffer that contains the rendered multi query
+// from all the subqueries.
+class MultiQuery {
+ public:
+  explicit MultiQuery(std::vector<Query>&& queries)
+      : queries_(std::move(queries)) {}
+
+  folly::StringPiece renderQuery(MYSQL* conn);
+
+  const Query& getQuery(int index) const {
+    CHECK_THROW(0 <= index || index < queries_.size(), std::invalid_argument);
+    return queries_[index];
+  }
+
+ private:
+  folly::fbstring rendered_multi_query_;
+  std::vector<Query> queries_;
 };
 
 class QueryArgument {
@@ -286,7 +416,7 @@ class QueryArgument {
 
 template <typename... Args>
 Query::Query(const StringPiece query_text, Args&&... args)
-    : query_text_(query_text.begin(), query_text.end()),
+    : query_text_(query_text),
       unsafe_query_(false),
       params_() {
   params_.reserve(sizeof...(args));
