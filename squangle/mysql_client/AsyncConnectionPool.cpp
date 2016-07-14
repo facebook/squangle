@@ -390,6 +390,8 @@ void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
 
     auto connOp = mysql_client_->beginConnection(pool_key.connKey);
     connOp->setConnectionOptions(pool_key.connOptions);
+    connOp->setConnectionContext(
+        folly::make_unique<db::ConnectionContextBase>());
     auto pool_ptr = getSelfWeakPointer();
 
     // ADRIANA The attribute part we can do later :D time to do it

@@ -48,7 +48,7 @@ typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
 class ConnectionContextBase {
  public:
   virtual ~ConnectionContextBase() {}
-  virtual void collectNormalValues(AddNormalValueFunction add) const = 0;
+  virtual void collectNormalValues(AddNormalValueFunction add) const;
   bool isSslConnection = false;
   bool sslSessionReused = false;
 };
