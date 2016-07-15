@@ -24,7 +24,7 @@ using folly::StringPiece;
 using std::string;
 using std::unordered_map;
 
-class AsyncMysqlClient;
+class MysqlClientBase;
 class AsyncConnectionPool;
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
@@ -34,7 +34,7 @@ typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
 class MysqlConnectionHolder {
  public:
   MysqlConnectionHolder(
-      AsyncMysqlClient* client,
+      MysqlClientBase* client,
       MYSQL* mysql,
       const ConnectionKey conn_key,
       bool connection_already_open = false);
@@ -113,7 +113,7 @@ class MysqlConnectionHolder {
   explicit MysqlConnectionHolder(
       std::unique_ptr<MysqlConnectionHolder> from_holder);
 
-  AsyncMysqlClient* async_client_;
+  MysqlClientBase* async_client_;
 
  private:
   // Our MYSQL handle as well as a file descriptor used for

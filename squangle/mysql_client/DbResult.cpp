@@ -193,7 +193,7 @@ folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
   }
 
   // Runs in User thread
-  state_baton_.wait();
+  operation_->connection()->wait();
   DCHECK(operation_->isPaused() || operation_->done());
 
   folly::Optional<StreamedQueryResult> res;
@@ -214,7 +214,7 @@ folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
 
 std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
   // Runs in User thread
-  state_baton_.wait();
+  operation_->connection()->wait();
   if (state_ == State::OperationSucceeded || state_ == State::OperationFailed) {
     return operation_->releaseConnection();
   }
@@ -255,13 +255,13 @@ void MultiQueryStreamHandler::streamCallback(
         op->elapsed());
     state_ = State::OperationFailed;
   }
-  state_baton_.post();
+  op->connection()->notify();
 }
 
 folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
     StreamedQueryResult* result) {
   checkStreamedQueryResult(result);
-  state_baton_.wait();
+  operation_->connection()->wait();
   // Accepted states: ReadRows, ReadResult, OperationFailed
   if (state_ == State::ReadRows) {
     if (!operation_->rowStream()->hasNext()) {
@@ -288,7 +288,7 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
 
 void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
   checkStreamedQueryResult(result);
-  state_baton_.wait();
+  operation_->connection()->wait();
   // Accepted states: ReadResult, OperationFailed
   if (state_ == State::ReadResult) {
     handleQueryEnded(result);
@@ -302,7 +302,7 @@ void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
 }
 
 void MultiQueryStreamHandler::resumeOperation() {
-  state_baton_.reset();
+  operation_->connection()->resetActionable();
   operation_->resume();
 }
 

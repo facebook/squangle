@@ -66,7 +66,7 @@ namespace mysql_client {
 
 using facebook::db::OperationStateException;
 
-class AsyncMysqlClient;
+class MysqlClientBase;
 class QueryResult;
 class ConnectOperation;
 class FetchOperation;
@@ -352,7 +352,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Retrieve the shared pointer that holds this instance.
   std::shared_ptr<Operation> getSharedPointer();
 
-  AsyncMysqlClient* async_client();
+  MysqlClientBase* client();
 
   // Flag internal async client errors; this always becomes a MySQL
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
@@ -463,6 +463,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
     ReferencedConnection referencedConn_;
   };
 
+  folly::EventBase* getEventBase();
   // Data members; subclasses freely interact with these.
   OperationState state_;
   OperationResult result_;
@@ -491,7 +492,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   ObserverCallback observer_callback_;
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
-  AsyncMysqlClient* async_client_;
+  MysqlClientBase* mysql_client_;
 
   bool cancel_on_run_ = false;
 
@@ -562,7 +563,7 @@ class ConnectOperation : public Operation {
 
   // Don't call this; it's public strictly for AsyncMysqlClient to be
   // able to call make_shared.
-  ConnectOperation(AsyncMysqlClient* async_client, ConnectionKey conn_key);
+  ConnectOperation(MysqlClientBase* mysql_client, ConnectionKey conn_key);
 
   void mustSucceed() override;
 
@@ -628,6 +629,8 @@ class ConnectOperation : public Operation {
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
  private:
+  void specializedRunImpl();
+
   void logConnectCompleted(OperationResult result);
 
   void maybeStoreSSLSession();
@@ -640,6 +643,7 @@ class ConnectOperation : public Operation {
   bool active_in_client_;
 
   friend class AsyncMysqlClient;
+  friend class MysqlClientBase;
 };
 
 // A fetching operation (query or multiple queries) use the same primary
@@ -657,7 +661,6 @@ class ConnectOperation : public Operation {
 class FetchOperation : public Operation {
  public:
   virtual ~FetchOperation() = default;
-
   void mustSucceed() override;
 
   // Return the query as it was sent to MySQL (i.e., for a single
@@ -784,6 +787,8 @@ class FetchOperation : public Operation {
 
  private:
   friend class MultiQueryStreamHandler;
+  void specializedRunImpl();
+  void resumeImpl();
   // Checks if the current thread has access to stream, or result data.
   bool isStreamAccessAllowed();
   bool isPaused();

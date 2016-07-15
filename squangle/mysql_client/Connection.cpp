@@ -17,7 +17,7 @@ namespace common {
 namespace mysql_client {
 
 MysqlConnectionHolder::MysqlConnectionHolder(
-    AsyncMysqlClient* client,
+    MysqlClientBase* client,
     MYSQL* mysql,
     const ConnectionKey conn_key,
     bool already_open)

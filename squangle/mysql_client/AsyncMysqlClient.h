@@ -90,13 +90,105 @@ class MysqlConnectionHolder;
 typedef std::function<void(std::unique_ptr<MysqlConnectionHolder>)>
     ConnectionDyingCallback;
 
+class MysqlClientBase {
+ public:
+  virtual ~MysqlClientBase() = default;
+
+  virtual std::unique_ptr<Connection> adoptConnection(
+      MYSQL* conn,
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password);
+
+  // Factory method
+  virtual std::unique_ptr<Connection> createConnection(
+      ConnectionKey conn_key,
+      MYSQL* mysql_conn) = 0;
+
+  folly::EventBase* getEventBase() {
+    return &event_base_;
+  }
+
+  void logQuerySuccess(
+      db::OperationType operation_name,
+      Duration dur,
+      int queries_executed,
+      const folly::StringPiece query,
+      const Connection& conn);
+
+  void logQueryFailure(
+      db::OperationType operation_name,
+      db::FailureReason reason,
+      Duration duration,
+      int queries_executed,
+      const folly::StringPiece query,
+      const Connection& conn);
+
+  void logConnectionSuccess(
+      db::OperationType operation_name,
+      Duration dur,
+      const ConnectionKey& conn_key,
+      const db::ConnectionContextBase* extra_logging_data);
+
+  void logConnectionFailure(
+      db::OperationType operation_name,
+      db::FailureReason reason,
+      Duration dur,
+      const ConnectionKey& conn_key,
+      MYSQL* mysql,
+      const db::ConnectionContextBase* extra_logging_data);
+
+  db::DBCounterBase* stats() {
+    return client_stats_.get();
+  }
+  db::SquangleLoggerBase* dbLogger() {
+    return db_logger_.get();
+  }
+
+  explicit MysqlClientBase(
+      std::unique_ptr<db::SquangleLoggerBase> db_logger = nullptr,
+      std::unique_ptr<db::DBCounterBase> db_stats =
+          folly::make_unique<db::SimpleDbCounter>());
+
+  virtual bool runInThread(const folly::Cob& fn) = 0;
+
+ protected:
+  friend class Connection;
+  friend class Operation;
+  friend class ConnectOperation;
+  friend class ConnectPoolOperation;
+  friend class FetchOperation;
+  friend class MysqlConnectionHolder;
+  friend class AsyncConnectionPool;
+  virtual db::SquangleLoggingData makeSquangleLoggingData(
+      const ConnectionKey* connKey,
+      const db::ConnectionContextBase* connContext) = 0;
+
+  virtual void activeConnectionAdded(const ConnectionKey* key) = 0;
+  virtual void activeConnectionRemoved(const ConnectionKey* key) = 0;
+  virtual void addOperation(std::shared_ptr<Operation> op) = 0;
+  virtual void deferRemoveOperation(Operation* op) = 0;
+
+  folly::EventBase event_base_;
+
+  // Using unique pointer due inheritance virtual calls
+  std::unique_ptr<db::SquangleLoggerBase> db_logger_;
+  std::unique_ptr<db::DBCounterBase> client_stats_;
+};
+
 // The client itself.  As mentioned above, in general, it isn't
 // necessary to create a client; instead, simply call defaultClient()
 // and use the client it returns, which is shared process-wide.
-class AsyncMysqlClient {
+class AsyncMysqlClient : public MysqlClientBase {
  public:
   AsyncMysqlClient();
   virtual ~AsyncMysqlClient();
+
+  std::unique_ptr<Connection> createConnection(
+      ConnectionKey conn_key,
+      MYSQL* mysql_conn) override;
 
   static void deleter(AsyncMysqlClient* client) {
     // If we are dying in the thread we own, spin up a new thread to
@@ -120,14 +212,6 @@ class AsyncMysqlClient {
       const string& password);
 
   std::shared_ptr<ConnectOperation> beginConnection(ConnectionKey conn_key);
-
-  std::unique_ptr<Connection> adoptConnection(
-      MYSQL* conn,
-      const string& host,
-      int port,
-      const string& database_name,
-      const string& user,
-      const string& password);
 
   folly::Future<ConnectResult> connectFuture(
       const string& host,
@@ -164,58 +248,12 @@ class AsyncMysqlClient {
   void drain(bool also_block_operations);
 
   folly::EventBase* getEventBase() {
-    return &tevent_base_;
+    return &event_base_;
   }
 
   const std::thread::id threadId() const {
     return thread_.get_id();
   }
-
-  // For testing only; trigger a delicate connection failure to enable testing
-  // of an error codepath.
-  void triggerDelicateConnectionFailures() {
-    delicate_connection_failure_ = true;
-  }
-
-  void logQuerySuccess(
-      db::OperationType operation_name,
-      Duration dur,
-      int queries_executed,
-      const folly::StringPiece query,
-      const Connection& conn);
-
-  void logQueryFailure(
-      db::OperationType operation_name,
-      db::FailureReason reason,
-      Duration duration,
-      int queries_executed,
-      const folly::StringPiece query,
-      const Connection& conn);
-
-  void logConnectionSuccess(
-      db::OperationType operation_name,
-      Duration dur,
-      const ConnectionKey& conn_key,
-      const db::ConnectionContextBase* extra_logging_data);
-
-  void logConnectionFailure(
-      db::OperationType operation_name,
-      db::FailureReason reason,
-      Duration dur,
-      const ConnectionKey& conn_key,
-      MYSQL* mysql,
-      const db::ConnectionContextBase* extra_logging_data);
-
-  db::SquangleLoggerBase* dbLogger() {
-    return db_logger_.get();
-  }
-  db::DBCounterBase* stats() {
-    return client_stats_.get();
-  }
-
-  db::SquangleLoggingData makeSquangleLoggingData(
-      const ConnectionKey* connKey,
-      const db::ConnectionContextBase* connContext);
 
   // For internal use only
   void setDBLoggerForTesting(std::unique_ptr<db::SquangleLoggerBase> dbLogger);
@@ -232,8 +270,8 @@ class AsyncMysqlClient {
   db::ClientPerfStats collectPerfStats() {
     db::ClientPerfStats ret;
     ret.callbackDelayMicrosAvg = stats_tracker_->callbackDelayAvg.value();
-    ret.ioEventLoopMicrosAvg = tevent_base_.getAvgLoopTime();
-    ret.notificationQueueSize = tevent_base_.getNotificationQueueSize();
+    ret.ioEventLoopMicrosAvg = getEventBase()->getAvgLoopTime();
+    ret.notificationQueueSize = getEventBase()->getNotificationQueueSize();
     ret.ioThreadBusyTime = stats_tracker_->ioThreadBusyTime.value();
     ret.ioThreadIdleTime = stats_tracker_->ioThreadIdleTime.value();
     return ret;
@@ -244,35 +282,13 @@ class AsyncMysqlClient {
       std::unique_ptr<db::SquangleLoggerBase> db_logger,
       std::unique_ptr<db::DBCounterBase> db_stats);
 
- private:
-  // Private methods, primarily used by Operations and its subclasses.
-  friend class Connection;
-  friend class Operation;
-  friend class ConnectOperation;
-  friend class ConnectPoolOperation;
-  friend class FetchOperation;
-  friend class MysqlConnectionHolder;
-  friend class AsyncConnectionPool;
+  bool runInThread(const folly::Cob& fn) override;
 
-  void init();
+  db::SquangleLoggingData makeSquangleLoggingData(
+      const ConnectionKey* connKey,
+      const db::ConnectionContextBase* connContext) override;
 
-  bool runInThread(const folly::Cob& fn);
-
-  // Gives the number of connections being created (started) and the ones that
-  // are already open for a ConnectionKey
-  uint32_t numStartedAndOpenConnections(const ConnectionKey* conn_key) {
-    std::unique_lock<std::mutex> l(counters_mutex_);
-    return connection_references_[*conn_key];
-  }
-
-  // Similar to the above function, but returns the total number of connections
-  // being and already opened.
-  uint32_t numStartedAndOpenConnections() {
-    std::unique_lock<std::mutex> l(counters_mutex_);
-    return active_connection_counter_;
-  }
-
-  void activeConnectionAdded(const ConnectionKey* key) {
+  void activeConnectionAdded(const ConnectionKey* key) override {
     std::unique_lock<std::mutex> l(counters_mutex_);
     ++active_connection_counter_;
     ++connection_references_[*key];
@@ -282,7 +298,7 @@ class AsyncMysqlClient {
   // be in incremented when a connection exists or is about to exist.
   // ConnectOperation decrements it when the connection is acquired.
   // MysqlConnectionHolder is counted during its lifetime.
-  void activeConnectionRemoved(const ConnectionKey* key) {
+  void activeConnectionRemoved(const ConnectionKey* key) override {
     std::unique_lock<std::mutex> l(counters_mutex_);
     // Sanity check, if the old value was 0, then the counter overflowed
     DCHECK(active_connection_counter_ != 0);
@@ -300,7 +316,7 @@ class AsyncMysqlClient {
   }
 
   // Add a pending operation to the client.
-  void addOperation(std::shared_ptr<Operation> op) {
+  void addOperation(std::shared_ptr<Operation> op) override {
     std::unique_lock<std::mutex> l(pending_operations_mutex_);
     if (block_operations_) {
       LOG(ERROR) << "Attempt to start operation when client is shutting down";
@@ -313,7 +329,7 @@ class AsyncMysqlClient {
   // of the event loop to ensure we don't delete an object that is
   // executing one of its methods (ie handling an event or cancel
   // call).
-  void deferRemoveOperation(Operation* op) {
+  void deferRemoveOperation(Operation* op) override {
     std::unique_lock<std::mutex> l(pending_operations_mutex_);
     // If the queue to remove is empty, schedule a cleanup to occur after
     // this pass through the event loop.
@@ -324,6 +340,26 @@ class AsyncMysqlClient {
       }
     }
     operations_to_remove_.push_back(op->getSharedPointer());
+  }
+
+ private:
+  // Private methods, primarily used by Operations and its subclasses.
+  friend class AsyncConnectionPool;
+
+  void init();
+
+  // Gives the number of connections being created (started) and the ones that
+  // are already open for a ConnectionKey
+  uint32_t numStartedAndOpenConnections(const ConnectionKey* conn_key) {
+    std::unique_lock<std::mutex> l(counters_mutex_);
+    return connection_references_[*conn_key];
+  }
+
+  // Similar to the above function, but returns the total number of connections
+  // being and already opened.
+  uint32_t numStartedAndOpenConnections() {
+    std::unique_lock<std::mutex> l(counters_mutex_);
+    return active_connection_counter_;
   }
 
   void cleanupCompletedOperations();
@@ -346,9 +382,6 @@ class AsyncMysqlClient {
   // See comment for deferRemoveOperation.
   std::vector<std::shared_ptr<Operation>> operations_to_remove_;
 
-  // Our event loop.
-  folly::EventBase tevent_base_;
-
   // Are we accepting new connections
   bool block_operations_ = false;
   // Used to guard thread destruction
@@ -366,9 +399,6 @@ class AsyncMysqlClient {
   // For testing purposes
   bool delicate_connection_failure_ = false;
 
-  // Using unique pointer due inheritance virtual calls
-  std::unique_ptr<db::SquangleLoggerBase> db_logger_;
-  std::unique_ptr<db::DBCounterBase> client_stats_;
 
   // This only works if you are using AsyncConnectionPool
   std::atomic<uint64_t> pools_conn_limit_;
@@ -427,11 +457,12 @@ class ConnectionSocketHandler : public folly::EventHandler,
 class Connection {
  public:
   Connection(
-      AsyncMysqlClient* async_client,
+      MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
-      MYSQL* existing_connection);
+      MYSQL* existing_connection,
+      folly::EventBase* event_base);
 
-  ~Connection();
+  virtual ~Connection();
 
   // Like beginConnection, this is how you start a query.  Note that
   // ownership of the Connection is passed into this function; the
@@ -519,13 +550,9 @@ class Connection {
   static std::shared_ptr<QueryOperation> commitTransaction(
       std::shared_ptr<QueryOperation>& op);
 
-  // It's going to make the association with the client thread to avoid mysql
-  // operations happening in a different thread.
-  void associateWithClientThread();
-
   // Called in the libevent thread to create the MYSQL* client.
   void initMysqlOnly();
-  void initialize();
+  void initialize(bool initMysql = true);
 
   bool hasInitialized() const {
     return initialized_;
@@ -613,8 +640,8 @@ class Connection {
     return conn_key_.password;
   }
 
-  AsyncMysqlClient* client() const {
-    return async_client_;
+  MysqlClientBase* client() const {
+    return mysql_client_;
   }
 
   MYSQL* stealMysql() {
@@ -632,7 +659,7 @@ class Connection {
   }
 
   std::unique_ptr<MysqlConnectionHolder> stealMysqlConnectionHolder() {
-    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK(getEventBase()->isInEventBaseThread());
     return std::move(mysql_connection_);
   }
 
@@ -665,9 +692,40 @@ class Connection {
     conn_dying_callback_ = callback;
   }
 
+  const folly::EventBase* getEventBase() const {
+    return event_base_;
+  }
+
+  folly::EventBase* getEventBase() {
+    return event_base_;
+  }
+
+  virtual bool runInThread(const folly::Cob& fn) {
+    return client()->runInThread(fn);
+  }
+
+  template <typename TOp, typename... F, typename... T>
+  bool runInThread(TOp* op, void (TOp::*f)(F...), T&&... v) {
+    // short circuit
+    if (getEventBase()->isInEventBaseThread()) {
+      (op->*f)(std::forward<T>(v)...);
+      return true;
+    } else {
+      return runInThread([op, f, v...]() { (op->*f)(v...); });
+    }
+  }
+
+  // Operations call these methods as the operation becomes unblocked, as
+  // callers want to wait for completion, etc.
+  virtual void notify() = 0;
+  virtual void wait() = 0;
+  // Called when a new operation is being started.
+  virtual void resetActionable() = 0;
+
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
+  friend class MysqlClientBase;
   friend class Operation;
   friend class ConnectOperation;
   friend class ConnectPoolOperation;
@@ -681,7 +739,7 @@ class Connection {
   }
 
   MYSQL* mysql() const {
-    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK(getEventBase()->isInEventBaseThread());
     if (mysql_connection_) {
       return mysql_connection_->mysql();
     } else {
@@ -690,7 +748,7 @@ class Connection {
   }
 
   MysqlConnectionHolder* mysqlConnection() const {
-    DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+    DCHECK(getEventBase()->isInEventBaseThread());
     return mysql_connection_.get();
   }
 
@@ -702,24 +760,6 @@ class Connection {
     mysql_connection_ = std::move(mysql_connection);
   }
 
-  // Operations call these methods as the operation becomes unblocked, as
-  // callers want to wait for completion, etc.
-  void notify() {
-    if (actionableBaton_.try_wait()) {
-      LOG(DFATAL) << "asked to notify already-actionable operation";
-    }
-    actionableBaton_.post();
-  }
-
-  void wait() {
-    actionableBaton_.wait();
-  }
-
-  // Called when a new operation is being started.
-  void resetActionable() {
-    actionableBaton_.reset();
-  }
-
   // Helper function that will begin multiqueries or single queries depending
   // on the specified in the templates. Being used to avoid duplicated code
   // that both need to do.
@@ -729,7 +769,7 @@ class Connection {
       QueryArg&& query);
 
   void checkOperationInProgress() {
-    if (sync_operation_in_progress_) {
+    if (operation_in_progress_) {
       throw InvalidConnectionException(
           "Attempting to run parallel queries in same connection");
     }
@@ -747,17 +787,15 @@ class Connection {
 
   ConnectionKey conn_key_;
   ConnectionOptions conn_options_;
-  std::thread::id mysql_operation_thread_id_;
 
   // Context information for logging purposes.
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   // Unowned pointer to the client we're from.
-  AsyncMysqlClient* async_client_;
+  MysqlClientBase* mysql_client_;
+  folly::EventBase* event_base_;
 
   ConnectionSocketHandler socket_handler_;
-
-  folly::fibers::Baton actionableBaton_;
 
   ConnectionDyingCallback conn_dying_callback_;
 
@@ -768,10 +806,49 @@ class Connection {
   // the same connection at the same time. So same logic goes here.
   // We don't track for async calls, for async calls the unique Connection
   // gets moved to the operation, so the protection is guaranteed.
-  bool sync_operation_in_progress_ = false;
+  bool operation_in_progress_ = false;
 
   Connection(const Connection&) = delete;
   Connection& operator=(const Connection&) = delete;
+};
+
+// Don't these directly. Used to separate the Connection synchronization
+// between AsyncMysqlClient or SyncMysqlClient.
+class AsyncConnection : public Connection {
+ public:
+  AsyncConnection(
+      MysqlClientBase* mysql_client,
+      ConnectionKey conn_key,
+      MYSQL* existing_connection)
+      : Connection(
+            mysql_client,
+            conn_key,
+            existing_connection,
+            mysql_client->getEventBase()) {}
+
+  // Operations call these methods as the operation becomes unblocked, as
+  // callers want to wait for completion, etc.
+  void notify() override {
+    if (actionableBaton_.try_wait()) {
+      LOG(DFATAL) << "asked to notify already-actionable operation";
+    }
+    actionableBaton_.post();
+  }
+
+  void wait() override {
+    CHECK_THROW(
+        folly::fibers::onFiber() || !getEventBase()->isInEventBaseThread(),
+        std::runtime_error);
+    actionableBaton_.wait();
+  }
+
+  // Called when a new operation is being started.
+  void resetActionable() override {
+    actionableBaton_.reset();
+  }
+
+ private:
+  folly::fibers::Baton actionableBaton_;
 };
 
 template <>

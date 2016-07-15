@@ -556,9 +556,6 @@ class MultiQueryStreamHandler {
   // sanity checks on StreamedQueryResult
   void checkStreamedQueryResult(StreamedQueryResult* result);
 
-  // Access protected by state_baton_ and pause;
-  folly::fibers::Baton state_baton_;
-
   folly::exception_wrapper exception_wrapper_;
 
   // Created in `NextQuery` and unique_ptr is returned to the user. The one

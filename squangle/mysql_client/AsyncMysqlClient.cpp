@@ -25,7 +25,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-DECLARE_int64(async_mysql_timeout_micros);
+DECLARE_int64(mysql_mysql_timeout_micros);
 
 namespace {
 class InitMysqlLibrary {
@@ -50,11 +50,17 @@ std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
   return folly::Singleton<AsyncMysqlClient>::try_get();
 }
 
+MysqlClientBase::MysqlClientBase(
+    std::unique_ptr<db::SquangleLoggerBase> db_logger,
+    std::unique_ptr<db::DBCounterBase> db_stats)
+    : db_logger_(std::move(db_logger)), client_stats_(std::move(db_stats)) {
+  static InitMysqlLibrary unused;
+}
+
 AsyncMysqlClient::AsyncMysqlClient(
     std::unique_ptr<db::SquangleLoggerBase> db_logger,
     std::unique_ptr<db::DBCounterBase> db_stats)
-    : db_logger_(std::move(db_logger)),
-      client_stats_(std::move(db_stats)),
+    : MysqlClientBase(std::move(db_logger), std::move(db_stats)),
       pools_conn_limit_(std::numeric_limits<uint64_t>::max()),
       stats_tracker_(std::make_shared<StatsTracker>()) {
   init();
@@ -64,23 +70,21 @@ AsyncMysqlClient::AsyncMysqlClient()
     : AsyncMysqlClient(nullptr, folly::make_unique<db::SimpleDbCounter>()) { }
 
 void AsyncMysqlClient::init() {
-  static InitMysqlLibrary unused;
   thread_ = std::thread([this]() {
 #ifdef __GLIBC__
     folly::setThreadName(pthread_self(), "async-mysql");
 #endif
     folly::EventBaseManager::get()->setEventBase(this->getEventBase(), false);
-    tevent_base_.loopForever();
+    getEventBase()->loopForever();
     mysql_thread_end();
   });
-  tevent_base_.setObserver(stats_tracker_);
-  tevent_base_.waitUntilRunning();
+  getEventBase()->setObserver(stats_tracker_);
+  getEventBase()->waitUntilRunning();
 }
 
 bool AsyncMysqlClient::runInThread(const folly::Cob& fn) {
   auto scheduleTime = std::chrono::high_resolution_clock::now();
-  if (!tevent_base_.runInEventBaseThread(
-          [ fn, scheduleTime, this ]() {
+  if (!getEventBase()->runInEventBaseThread([fn, scheduleTime, this]() {
             auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
                              std::chrono::high_resolution_clock::now() -
                              scheduleTime).count();
@@ -144,7 +148,7 @@ void AsyncMysqlClient::shutdownClient() {
   // TODO: Maybe add here a runInThread to cancel the AsyncTimeout
 
   // All operations are done.  Shut the thread down.
-  tevent_base_.terminateLoopSoon();
+  getEventBase()->terminateLoopSoon();
   if (std::this_thread::get_id() != threadId()) {
     thread_.join();
   } else {
@@ -168,13 +172,12 @@ void AsyncMysqlClient::setDBCounterForTesting(
   client_stats_ = std::move(dbCounter);
 }
 
-void AsyncMysqlClient::logQuerySuccess(
+void MysqlClientBase::logQuerySuccess(
     db::OperationType type,
     Duration dur,
     int queries_executed,
     const folly::StringPiece query,
     const Connection& conn) {
-  DCHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrSucceededQueries();
   if (db_logger_) {
     db_logger_->logQuerySuccess(
@@ -186,14 +189,13 @@ void AsyncMysqlClient::logQuerySuccess(
   }
 }
 
-void AsyncMysqlClient::logQueryFailure(
+void MysqlClientBase::logQueryFailure(
     db::OperationType type,
     db::FailureReason reason,
     Duration duration,
     int queries_executed,
     const folly::StringPiece query,
     const Connection& conn) {
-  DCHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrFailedQueries();
   if (db_logger_) {
     db_logger_->logQueryFailure(
@@ -207,12 +209,11 @@ void AsyncMysqlClient::logQueryFailure(
   }
 }
 
-void AsyncMysqlClient::logConnectionSuccess(
+void MysqlClientBase::logConnectionSuccess(
     db::OperationType type,
     Duration duration,
     const ConnectionKey& conn_key,
     const db::ConnectionContextBase* connection_context) {
-  DCHECK_EQ(threadId(), std::this_thread::get_id());
   if (connection_context && connection_context->isSslConnection) {
     stats()->incrSSLConnections();
   }
@@ -222,14 +223,13 @@ void AsyncMysqlClient::logConnectionSuccess(
   }
 }
 
-void AsyncMysqlClient::logConnectionFailure(
+void MysqlClientBase::logConnectionFailure(
     db::OperationType type,
     db::FailureReason reason,
     Duration duration,
     const ConnectionKey& conn_key,
     MYSQL* mysql,
     const db::ConnectionContextBase* connection_context) {
-  DCHECK_EQ(threadId(), std::this_thread::get_id());
   stats()->incrFailedConnections();
   if (db_logger_) {
     db_logger_->logConnectionFailure(
@@ -310,7 +310,13 @@ std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
   return ret;
 }
 
-std::unique_ptr<Connection> AsyncMysqlClient::adoptConnection(
+std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
+    ConnectionKey conn_key,
+    MYSQL* mysql_conn) {
+  return folly::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
+}
+
+std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     MYSQL* raw_conn,
     const string& host,
     int port,
@@ -319,24 +325,25 @@ std::unique_ptr<Connection> AsyncMysqlClient::adoptConnection(
     const string& password) {
   CHECK_THROW(
       raw_conn->async_op_status == ASYNC_OP_UNSET, InvalidConnectionException);
-  auto conn = folly::make_unique<Connection>(
-      this, ConnectionKey(host, port, database_name, user, password), raw_conn);
-  conn->associateWithClientThread();
+  auto conn = createConnection(
+      ConnectionKey(host, port, database_name, user, password), raw_conn);
   conn->socketHandler()->changeHandlerFD(mysql_get_file_descriptor(raw_conn));
   return conn;
 }
 
 Connection::Connection(
-    AsyncMysqlClient* async_client,
+    MysqlClientBase* mysql_client,
     ConnectionKey conn_key,
-    MYSQL* existing_connection)
+    MYSQL* existing_connection,
+    folly::EventBase* event_base)
     : conn_key_(conn_key),
-      async_client_(async_client),
-      socket_handler_(async_client_->getEventBase()),
+      mysql_client_(mysql_client),
+      event_base_(event_base),
+      socket_handler_(event_base),
       initialized_(false) {
   if (existing_connection) {
     mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
-        async_client_, existing_connection, conn_key);
+        mysql_client_, existing_connection, conn_key);
   }
 }
 
@@ -345,24 +352,21 @@ bool Connection::isSSL() const {
   return mysql_connection_->mysql()->client_flag & CLIENT_SSL;
 }
 
-void Connection::associateWithClientThread() {
-  DCHECK_EQ(mysql_operation_thread_id_, std::thread::id());
-  mysql_operation_thread_id_ = async_client_->threadId();
-  initialized_ = true;
-}
-
 void Connection::initMysqlOnly() {
   // Thread must be already associated
-  DCHECK_EQ(mysql_operation_thread_id_, std::this_thread::get_id());
+  DCHECK(event_base_ && getEventBase()->isInEventBaseThread());
+
   CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
   mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
-      async_client_, mysql_init(nullptr), conn_key_);
+      mysql_client_, mysql_init(nullptr), conn_key_);
   mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
 }
 
-void Connection::initialize() {
-  associateWithClientThread();
-  initMysqlOnly();
+void Connection::initialize(bool initMysql) {
+  if (initMysql) {
+    initMysqlOnly();
+  }
+  initialized_ = true;
 }
 
 Connection::~Connection() {
@@ -425,7 +429,7 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
     ret->setTimeout(timeout);
   }
 
-  ret->connection()->async_client_->addOperation(ret);
+  ret->connection()->mysql_client_->addOperation(ret);
   ret->connection()->socket_handler_.setOperation(ret.get());
   return ret;
 }
@@ -485,9 +489,10 @@ DbQueryResult Connection::query(Query&& query) {
   auto op = beginAnyQuery<QueryOperation>(
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(query));
-  folly::ScopeGuard guard =
-      folly::makeGuard([&] { sync_operation_in_progress_ = false; });
-  sync_operation_in_progress_ = true;
+  SCOPE_EXIT {
+    operation_in_progress_ = false;
+  };
+  operation_in_progress_ = true;
 
   op->run()->wait();
 
@@ -517,9 +522,9 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(queries));
   folly::ScopeGuard guard =
-      folly::makeGuard([&] { sync_operation_in_progress_ = false; });
+      folly::makeGuard([&] { operation_in_progress_ = false; });
 
-  sync_operation_in_progress_ = true;
+  operation_in_progress_ = true;
   op->run()->wait();
 
   if (!op->ok()) {
@@ -604,7 +609,7 @@ void ConnectionSocketHandler::timeoutExpired() noexcept {
 }
 
 void ConnectionSocketHandler::handlerReady(uint16_t events) noexcept {
-  DCHECK_EQ(std::this_thread::get_id(), op_->async_client()->threadId());
+  DCHECK(op_->client()->getEventBase()->isInEventBaseThread());
   CHECK_THROW(
       op_->state_ != OperationState::Completed &&
           op_->state_ != OperationState::Unstarted,

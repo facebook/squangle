@@ -646,13 +646,13 @@ void ConnectPoolOperation::attemptFailed(OperationResult result) {
 }
 
 ConnectPoolOperation* ConnectPoolOperation::specializedRun() {
-  if (!async_client()->runInThread([this]() {
+  if (!client()->runInThread([this]() {
         // There is a race condition that allows a cancelled operation
         // getting here, but checking inside the main thread again is fine.
 
         // Initialize all we need from our tevent handler
         if (attempts_made_ == 0) {
-          conn()->associateWithClientThread();
+          conn()->initialize(false);
         }
         conn()->socketHandler()->setOperation(this);
 
@@ -728,7 +728,7 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
 
 void ConnectPoolOperation::connectionCallback(
     std::unique_ptr<MysqlPooledHolder> mysql_conn) {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(client()->getEventBase()->isInEventBaseThread());
   if (!mysql_conn) {
     LOG(DFATAL) << "Unexpected error";
     completeOperation(OperationResult::Failed);
@@ -766,8 +766,7 @@ void ConnectPoolOperation::failureCallback(
 }
 
 void ConnectPoolOperation::socketActionable() {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
-
+  DCHECK(client()->getEventBase()->isInEventBaseThread());
   LOG(DFATAL) << "Should not be called";
 }
 }

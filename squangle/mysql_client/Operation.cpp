@@ -43,15 +43,19 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       mysql_errno_(0),
       user_data_(folly::dynamic::object()),
       observer_callback_(nullptr),
-      async_client_(conn()->async_client_) {
+      mysql_client_(conn()->mysql_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
   conn()->resetActionable();
+}
+
+folly::EventBase* Operation::getEventBase() {
+  return connection()->getEventBase();
 }
 
 Operation::~Operation() {}
 
 void Operation::waitForSocketActionable() {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(getEventBase()->isInEventBaseThread());
 
   MYSQL* mysql = conn()->mysql();
   uint16_t event_mask = 0;
@@ -103,8 +107,8 @@ void Operation::cancel() {
   }
 
   state_ = OperationState::Cancelling;
-  if (!async_client()->runInThread(
-          [this]() { completeOperation(OperationResult::Cancelled); })) {
+  if (!connection()->runInThread(
+          this, &Operation::completeOperation, OperationResult::Cancelled)) {
     // if a strange error happen in EventBase , mark it cancelled now
     completeOperationInner(OperationResult::Cancelled);
   }
@@ -120,8 +124,8 @@ Operation* Operation::run() {
     if (cancel_on_run_) {
       state_ = OperationState::Cancelling;
       cancel_on_run_ = false;
-      async_client()->runInThread(
-          [this]() { completeOperation(OperationResult::Cancelled); });
+      connection()->runInThread(
+          this, &Operation::completeOperation, OperationResult::Cancelled);
       return this;
     }
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
@@ -132,7 +136,7 @@ Operation* Operation::run() {
 }
 
 void Operation::completeOperation(OperationResult result) {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(getEventBase()->isInEventBaseThread());
   if (state_ == OperationState::Completed) {
     return;
   }
@@ -160,9 +164,6 @@ void Operation::completeOperationInner(OperationResult result) {
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
 
-  // Save async_client() before running specializedCompleteOperation
-  // as it may release conn().
-  auto client = async_client();
   specializedCompleteOperation();
 
   // call observer callback
@@ -170,7 +171,7 @@ void Operation::completeOperationInner(OperationResult result) {
     observer_callback_(*this);
   }
 
-  client->deferRemoveOperation(this);
+  client()->deferRemoveOperation(this);
 }
 
 std::unique_ptr<Connection>&& Operation::releaseConnection() {
@@ -211,19 +212,14 @@ void Operation::setAsyncClientError(
 }
 
 void Operation::wait() {
-  CHECK_THROW(
-      folly::fibers::onFiber() ||
-          std::this_thread::get_id() != async_client()->threadId(),
-      std::runtime_error);
   return conn()->wait();
 }
 
-AsyncMysqlClient* Operation::async_client() {
-  return async_client_;
+MysqlClientBase* Operation::client() {
+  return mysql_client_;
 }
 
 std::shared_ptr<Operation> Operation::getSharedPointer() {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
   return shared_from_this();
 }
 
@@ -249,14 +245,14 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
 }
 
 ConnectOperation::ConnectOperation(
-    AsyncMysqlClient* async_client,
+    MysqlClientBase* mysql_client,
     ConnectionKey conn_key)
     : Operation(Operation::ConnectionProxy(Operation::OwnedConnection(
-          folly::make_unique<Connection>(async_client, conn_key, nullptr)))),
+          mysql_client->createConnection(conn_key, nullptr)))),
       conn_key_(conn_key),
       flags_(CLIENT_MULTI_STATEMENTS),
       active_in_client_(true) {
-  async_client->activeConnectionAdded(&conn_key_);
+  mysql_client->activeConnectionAdded(&conn_key_);
 }
 
 ConnectOperation* ConnectOperation::setConnectionOptions(
@@ -365,70 +361,67 @@ void ConnectOperation::attemptSucceeded(OperationResult result) {
   completeOperation(result);
 }
 
+void ConnectOperation::specializedRunImpl() {
+  if (attempts_made_ == 0) {
+    conn()->initialize();
+  } else {
+    conn()->initMysqlOnly();
+  }
+  removeClientReference();
+  if (!conn()->mysql()) {
+    setAsyncClientError("connection initialization failed");
+    attemptFailed(OperationResult::Failed);
+    return;
+  }
+
+  mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
+  for (const auto& kv : conn_options_.getConnectionAttributes()) {
+    mysql_options4(
+        conn()->mysql(),
+        MYSQL_OPT_CONNECT_ATTR_ADD,
+        kv.first.c_str(),
+        kv.second.c_str());
+  }
+  auto provider = conn_options_.getSSLOptionsProviderPtr();
+  if (provider) {
+    auto ssl_context_ = provider->getSSLContext();
+    if (ssl_context_) {
+      if (connection_context_) {
+        connection_context_->isSslConnection = true;
+      }
+      mysql_options(
+          conn()->mysql(), MYSQL_OPT_SSL_CONTEXT, ssl_context_->getSSLCtx());
+
+      auto ssl_session_ = provider->getSSLSession();
+      if (ssl_session_) {
+        mysql_options4(
+            conn()->mysql(), MYSQL_OPT_SSL_SESSION, ssl_session_, nullptr);
+      }
+    }
+  }
+
+  bool res = mysql_real_connect_nonblocking_init(
+      conn()->mysql(),
+      conn_key_.host.c_str(),
+      conn_key_.user.c_str(),
+      conn_key_.password.c_str(),
+      conn_key_.db_name.c_str(),
+      conn_key_.port,
+      nullptr,
+      flags_);
+  if (res == 0) {
+    setAsyncClientError("mysql_real_connect_nonblocking_init failed");
+    attemptFailed(OperationResult::Failed);
+    return;
+  }
+  conn()->socketHandler()->setOperation(this);
+
+  // connect is immediately "ready" to do one loop
+  socketActionable();
+}
+
 ConnectOperation* ConnectOperation::specializedRun() {
-  if (!async_client()->runInThread([this]() {
-        if (attempts_made_ == 0) {
-          conn()->initialize();
-        } else {
-          conn()->initMysqlOnly();
-        }
-        removeClientReference();
-        if (!conn()->mysql()) {
-          setAsyncClientError("connection initialization failed");
-          attemptFailed(OperationResult::Failed);
-          return;
-        }
-
-        mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
-        for (const auto& kv : conn_options_.getConnectionAttributes()) {
-          mysql_options4(
-              conn()->mysql(),
-              MYSQL_OPT_CONNECT_ATTR_ADD,
-              kv.first.c_str(),
-              kv.second.c_str());
-        }
-        auto provider = conn_options_.getSSLOptionsProviderPtr();
-        if (provider) {
-          auto ssl_context_ = provider->getSSLContext();
-          if (ssl_context_) {
-            if (connection_context_) {
-              connection_context_->isSslConnection = true;
-            }
-            mysql_options(
-                conn()->mysql(),
-                MYSQL_OPT_SSL_CONTEXT,
-                ssl_context_->getSSLCtx());
-
-            auto ssl_session_ = provider->getSSLSession();
-            if (ssl_session_) {
-              mysql_options4(
-                  conn()->mysql(),
-                  MYSQL_OPT_SSL_SESSION,
-                  ssl_session_,
-                  nullptr);
-            }
-          }
-        }
-
-        bool res = mysql_real_connect_nonblocking_init(
-            conn()->mysql(),
-            conn_key_.host.c_str(),
-            conn_key_.user.c_str(),
-            conn_key_.password.c_str(),
-            conn_key_.db_name.c_str(),
-            conn_key_.port,
-            nullptr,
-            flags_);
-        if (res == 0 || async_client()->delicate_connection_failure_) {
-          setAsyncClientError("mysql_real_connect_nonblocking_init failed");
-          attemptFailed(OperationResult::Failed);
-          return;
-        }
-        conn()->socketHandler()->setOperation(this);
-
-        // connect is immediately "ready" to do one loop
-        socketActionable();
-      })) {
+  if (!connection()->runInThread(this, &ConnectOperation::specializedRunImpl)) {
     completeOperationInner(OperationResult::Failed);
   }
   return this;
@@ -439,7 +432,7 @@ ConnectOperation::~ConnectOperation() {
 }
 
 void ConnectOperation::socketActionable() {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(getEventBase()->isInEventBaseThread());
   int error;
   CHECK_THROW(
       conn()->mysql()->async_op_status == ASYNC_OP_CONNECT,
@@ -508,7 +501,7 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
   auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
       end_time_ - start_time_);
   if (result == OperationResult::Succeeded) {
-    async_client()->logConnectionSuccess(
+    client()->logConnectionSuccess(
         getOperationType(),
         elapsed,
         *conn()->getKey(),
@@ -520,7 +513,7 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
     } else if (result == OperationResult::Cancelled) {
       reason = db::FailureReason::CANCELLED;
     }
-    async_client()->logConnectionFailure(
+    client()->logConnectionFailure(
         getOperationType(),
         reason,
         elapsed,
@@ -552,7 +545,7 @@ void ConnectOperation::maybeStoreSSLSession() {
     if (connection_context_) {
       connection_context_->sslSessionReused = true;
     }
-    async_client()->stats()->incrReusedSSLSessions();
+    client()->stats()->incrReusedSSLSessions();
   }
 }
 
@@ -593,7 +586,7 @@ void ConnectOperation::removeClientReference() {
     // It's safe to call the client since we still have a ref counting
     // it won't die before it goes to 0
     active_in_client_ = false;
-    async_client()->activeConnectionRemoved(&conn_key_);
+    client()->activeConnectionRemoved(&conn_key_);
   }
 }
 
@@ -604,8 +597,7 @@ FetchOperation::FetchOperation(
 
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
-  return isPaused() !=
-      (async_client()->threadId() == std::this_thread::get_id());
+  return isPaused() || getEventBase()->isInEventBaseThread();
 }
 
 bool FetchOperation::isPaused() {
@@ -613,21 +605,22 @@ bool FetchOperation::isPaused() {
 }
 
 FetchOperation* FetchOperation::specializedRun() {
-  if (!async_client()->runInThread([this]() {
-        try {
-          rendered_query_ = queries_.renderQuery(conn()->mysql());
-          socketActionable();
-        } catch (std::invalid_argument& e) {
-          setAsyncClientError(
-              string("Unable to parse Query: ") + e.what(),
-              "Unable to parse Query");
-          completeOperation(OperationResult::Failed);
-        }
-      })) {
+  if (!connection()->runInThread(this, &FetchOperation::specializedRunImpl)) {
     completeOperationInner(OperationResult::Failed);
   }
 
   return this;
+}
+
+void FetchOperation::specializedRunImpl() {
+  try {
+    rendered_query_ = queries_.renderQuery(conn()->mysql());
+    socketActionable();
+  } catch (std::invalid_argument& e) {
+    setAsyncClientError(
+        string("Unable to parse Query: ") + e.what(), "Unable to parse Query");
+    completeOperation(OperationResult::Failed);
+  }
 }
 
 FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result)
@@ -696,7 +689,7 @@ FetchOperation::RowStream* FetchOperation::rowStream() {
 }
 
 void FetchOperation::socketActionable() {
-  DCHECK_EQ(std::this_thread::get_id(), async_client()->threadId());
+  DCHECK(getEventBase()->isInEventBaseThread());
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
   // This loop runs the fetch actions required to successfully execute query,
@@ -869,29 +862,31 @@ void FetchOperation::socketActionable() {
 }
 
 void FetchOperation::pauseForConsumer() {
-  DCHECK_EQ(async_client()->threadId(), std::this_thread::get_id());
+  DCHECK(getEventBase()->isInEventBaseThread());
   DCHECK(state() == OperationState::Pending);
 
   paused_action_ = active_fetch_action_;
   active_fetch_action_ = FetchAction::WaitForConsumer;
 }
 
+void FetchOperation::resumeImpl() {
+  CHECK_THROW(isPaused(), OperationStateException);
+
+  // We should only allow pauses during fetch or between queries.
+  // If we come back as RowsFetched and the stream has completed the query,
+  // `socketActionable` will change the `active_fetch_action_` and we will
+  // start the Query completion process.
+  // When we pause between queries, the value of `paused_action_` is already
+  // the value of the next states: StartQuery or CompleteOperation.
+  active_fetch_action_ = paused_action_;
+  // Leave timeout to be reset or checked when we hit
+  // `waitForSocketActionable`
+  socketActionable();
+}
+
 void FetchOperation::resume() {
   DCHECK(active_fetch_action_ == FetchAction::WaitForConsumer);
-  async_client()->runInThread([this]() {
-    CHECK_THROW(isPaused(), OperationStateException);
-
-    // We should only allow pauses during fetch or between queries.
-    // If we come back as RowsFetched and the stream has completed the query,
-    // `socketActionable` will change the `active_fetch_action_` and we will
-    // start the Query completion process.
-    // When we pause between queries, the value of `paused_action_` is already
-    // the value of the next states: StartQuery or CompleteOperation.
-    active_fetch_action_ = paused_action_;
-    // Leave timeout to be reset or checked when we hit
-    // `waitForSocketActionable`
-    socketActionable();
-  });
+  connection()->runInThread(this, &FetchOperation::resumeImpl);
 }
 
 namespace {
@@ -945,7 +940,7 @@ void FetchOperation::specializedCompleteOperation() {
   if (result_ == OperationResult::Succeeded) {
     // set last successful query time to MysqlConnectionHolder
     conn()->setLastActivityTime(chrono::high_resolution_clock::now());
-    async_client()->logQuerySuccess(
+    client()->logQuerySuccess(
         getOperationType(),
         elapsed(),
         num_queries_executed_,
@@ -958,7 +953,7 @@ void FetchOperation::specializedCompleteOperation() {
     } else if (result_ == OperationResult::TimedOut) {
       reason = db::FailureReason::TIMEOUT;
     }
-    async_client()->logQueryFailure(
+    client()->logQueryFailure(
         getOperationType(),
         reason,
         elapsed(),
