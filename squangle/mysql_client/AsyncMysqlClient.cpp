@@ -385,18 +385,30 @@ template <>
 std::shared_ptr<MultiQueryOperation> Connection::beginMultiQuery(
     std::unique_ptr<Connection> conn,
     std::vector<Query>&& queries) {
-  return beginAnyQuery<MultiQueryOperation>(
+  auto is_queries_empty = queries.empty();
+  auto operation = beginAnyQuery<MultiQueryOperation>(
       Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
+  if (is_queries_empty) {
+    operation->setAsyncClientError("Given vector of queries is empty");
+    operation->cancel();
+  }
+  return operation;
 }
 
 template <>
 std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
     std::unique_ptr<Connection> conn,
     std::vector<Query>&& queries) {
-  return beginAnyQuery<MultiQueryStreamOperation>(
+  auto is_queries_empty = queries.empty();
+  auto operation = beginAnyQuery<MultiQueryStreamOperation>(
       Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
+  if (is_queries_empty) {
+    operation->setAsyncClientError("Given vector of queries is empty");
+    operation->cancel();
+  }
+  return operation;
 }
 
 template <typename QueryType, typename QueryArg>
