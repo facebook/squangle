@@ -161,13 +161,6 @@ class RowFields {
     return num_fields_;
   }
 
- private:
-  size_t num_fields_;
-  const folly::StringKeyedUnorderedMap<int> field_name_map_;
-  const vector<string> field_names_;
-  const std::vector<uint64_t> mysql_field_flags_;
-  const std::vector<enum_field_types> mysql_field_types_;
-
   // Given a field_name, return the numeric column number, or die trying.
   size_t fieldIndex(StringPiece field_name) const {
     auto it = field_name_map_.find(field_name);
@@ -177,6 +170,13 @@ class RowFields {
     }
     return it->second;
   }
+
+ private:
+  size_t num_fields_;
+  const folly::StringKeyedUnorderedMap<int> field_name_map_;
+  const vector<string> field_names_;
+  const std::vector<uint64_t> mysql_field_flags_;
+  const std::vector<enum_field_types> mysql_field_types_;
 
   friend class RowBlock;
 };
