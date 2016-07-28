@@ -370,7 +370,7 @@ class QueryArgument {
 
   // Pair constructors
   QueryArgument();
-  QueryArgument(folly::fbstring param1, QueryArgument param2);
+  QueryArgument(folly::StringPiece param1, QueryArgument param2);
 
   // Since we already have callsites that use dynamic, we are keeping the
   // support, but internally we unpack them.
@@ -382,9 +382,7 @@ class QueryArgument {
     initFromDynamic(param);
   }
 
-  QueryArgument&& operator()(
-      const folly::fbstring& q1,
-      const QueryArgument& q2);
+  QueryArgument&& operator()(folly::StringPiece q1, const QueryArgument& q2);
   QueryArgument&& operator()(folly::fbstring&& q1, QueryArgument&& q2);
   folly::fbstring asString() const;
 

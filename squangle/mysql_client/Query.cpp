@@ -51,9 +51,9 @@ QueryArgument::QueryArgument(std::vector<QueryArgument> arg_list)
 
 QueryArgument::QueryArgument() : value_(std::vector<ArgPair>()) {}
 
-QueryArgument::QueryArgument(folly::fbstring param1, QueryArgument param2)
+QueryArgument::QueryArgument(StringPiece param1, QueryArgument param2)
     : value_(std::vector<ArgPair>()) {
-  getPairs().emplace_back(ArgPair(param1, param2));
+  getPairs().emplace_back(ArgPair(param1.str(), param2));
 }
 
 bool QueryArgument::isString() const {
@@ -89,9 +89,9 @@ bool QueryArgument::isInt() const {
 }
 
 QueryArgument&& QueryArgument::operator()(
-    const folly::fbstring& q1,
+    StringPiece q1,
     const QueryArgument& q2) {
-  getPairs().emplace_back(ArgPair(q1, q2));
+  getPairs().emplace_back(ArgPair(q1.str(), q2));
   return std::move(*this);
 }
 
