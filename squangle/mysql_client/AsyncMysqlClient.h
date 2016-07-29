@@ -147,6 +147,18 @@ class MysqlClientBase {
     return db_logger_.get();
   }
 
+  void setConnectionCallback(ObserverCallback connection_cb) {
+    if (connection_cb_) {
+      auto old_cb = connection_cb_;
+      connection_cb_ = [old_cb, connection_cb](Operation& op) {
+        old_cb(op);
+        connection_cb(op);
+      };
+    } else {
+      connection_cb_ = connection_cb;
+    }
+  }
+
   explicit MysqlClientBase(
       std::unique_ptr<db::SquangleLoggerBase> db_logger = nullptr,
       std::unique_ptr<db::DBCounterBase> db_stats =
@@ -176,6 +188,7 @@ class MysqlClientBase {
   // Using unique pointer due inheritance virtual calls
   std::unique_ptr<db::SquangleLoggerBase> db_logger_;
   std::unique_ptr<db::DBCounterBase> client_stats_;
+  ObserverCallback connection_cb_;
 };
 
 // The client itself.  As mentioned above, in general, it isn't

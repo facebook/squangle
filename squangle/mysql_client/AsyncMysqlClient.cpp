@@ -306,6 +306,9 @@ std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
 std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
     ConnectionKey conn_key) {
   auto ret = std::make_shared<ConnectOperation>(this, conn_key);
+  if (connection_cb_) {
+    ret->setObserverCallback(connection_cb_);
+  }
   addOperation(ret);
   return ret;
 }
