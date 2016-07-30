@@ -314,15 +314,15 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // integer.  Note, also, such information can be stored inside the
   // callback itself (via a lambda).
   Operation* setUserData(folly::dynamic val) {
-    user_data_ = std::move(val);
+    user_data_.assign(std::move(val));
     return this;
   }
 
   const folly::dynamic& userData() const {
-    return user_data_;
+    return *user_data_;
   }
   folly::dynamic&& stealUserData() {
-    return std::move(user_data_);
+    return std::move(*user_data_);
   }
 
   // Connections are transferred across operations.  At any one time,
@@ -488,7 +488,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   std::mutex run_state_mutex_;
 
  private:
-  folly::dynamic user_data_;
+  folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 

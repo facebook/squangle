@@ -41,7 +41,6 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       result_(OperationResult::Unknown),
       conn_proxy_(std::move(safe_conn)),
       mysql_errno_(0),
-      user_data_(folly::dynamic::object()),
       observer_callback_(nullptr),
       mysql_client_(conn()->mysql_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
