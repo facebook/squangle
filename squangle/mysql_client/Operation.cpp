@@ -920,6 +920,24 @@ void FetchOperation::specializedTimeoutTriggered() {
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
   std::string msg;
+
+  /*
+   * Calling mysql_free_result currently tries to flush the socket
+   * This is unnecessary as the socket will be cleaned up anyway and
+   * blocking calls are used to clean up. By removing the MYSQL
+   * handle here, we stop the socket from being flushed.
+   *
+   * The current problem with that flush is that it can cause
+   * underflow if the socket read returns an async response,
+   * which isn't correctly handled and results in buffer overrun
+   *
+   * We will move to mysql_free_result_nonblocking once it has
+   * been thoroughly tested
+   */
+  if (rowStream() && rowStream()->mysql_query_result_) {
+    rowStream()->mysql_query_result_->handle = nullptr;
+  }
+
   if (rowStream() && rowStream()->numRowsSeen()) {
     msg = folly::stringPrintf(
         "async query timed out (%lu rows, took %.2fms, ",
