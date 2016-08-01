@@ -293,7 +293,7 @@ std::unique_ptr<Connection> AsyncMysqlClient::connect(
   return conn;
 }
 
-std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
+std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
     const string& host,
     int port,
     const string& database_name,
@@ -303,7 +303,7 @@ std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
       ConnectionKey(host, port, database_name, user, password));
 }
 
-std::shared_ptr<ConnectOperation> AsyncMysqlClient::beginConnection(
+std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
     ConnectionKey conn_key) {
   auto ret = std::make_shared<ConnectOperation>(this, conn_key);
   if (connection_cb_) {

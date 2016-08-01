@@ -399,16 +399,8 @@ void ConnectOperation::specializedRunImpl() {
     }
   }
 
-  bool res = mysql_real_connect_nonblocking_init(
-      conn()->mysql(),
-      conn_key_.host.c_str(),
-      conn_key_.user.c_str(),
-      conn_key_.password.c_str(),
-      conn_key_.db_name.c_str(),
-      conn_key_.port,
-      nullptr,
-      flags_);
-  if (res == 0) {
+  if (!client()->getMysqlHandler().initConnect(
+          conn()->mysql(), conn_key_, flags_)) {
     setAsyncClientError("mysql_real_connect_nonblocking_init failed");
     attemptFailed(OperationResult::Failed);
     return;
@@ -433,13 +425,11 @@ ConnectOperation::~ConnectOperation() {
 void ConnectOperation::socketActionable() {
   DCHECK(getEventBase()->isInEventBaseThread());
   int error;
-  CHECK_THROW(
-      conn()->mysql()->async_op_status == ASYNC_OP_CONNECT,
-      InvalidConnectionException);
-  net_async_status status =
-      mysql_real_connect_nonblocking_run(conn()->mysql(), &error);
+  auto& handler = conn()->client()->getMysqlHandler();
+  auto status = handler.connect(
+      conn()->mysql(), error, conn_options_, conn_key_, flags_);
   auto fd = mysql_get_file_descriptor(conn()->mysql());
-  if (status == NET_ASYNC_COMPLETE) {
+  if (status == MysqlHandler::DONE) {
     if (error == 0) {
       if (fd <= 0) {
         LOG(ERROR) << "Unexpected invalid file descriptor on completed, "
@@ -622,11 +612,13 @@ void FetchOperation::specializedRunImpl() {
   }
 }
 
-FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result)
+FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result,
+                                     MysqlHandler* handler)
     : mysql_query_result_(mysql_query_result),
       row_fields_(
           mysql_fetch_fields(mysql_query_result),
-          mysql_num_fields(mysql_query_result)) {}
+          mysql_num_fields(mysql_query_result)),
+      handler_(handler) {}
 
 EphemeralRow FetchOperation::RowStream::consumeRow() {
   if (!current_row_.hasValue()) {
@@ -651,8 +643,8 @@ bool FetchOperation::RowStream::slurp() {
     return true;
   }
   MYSQL_ROW row;
-  int status = mysql_fetch_row_nonblocking(mysql_query_result_.get(), &row);
-  if (status != NET_ASYNC_COMPLETE) {
+  auto status = handler_->fetchRow(mysql_query_result_.get(), row);
+  if (status == MysqlHandler::PENDING) {
     return false;
   }
   if (row == nullptr) {
@@ -691,6 +683,8 @@ void FetchOperation::socketActionable() {
   DCHECK(getEventBase()->isInEventBaseThread());
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
+  auto& handler = conn()->client()->getMysqlHandler();
+
   // This loop runs the fetch actions required to successfully execute query,
   // request next results, fetch results, identify errors and complete operation
   // and queries.
@@ -710,20 +704,16 @@ void FetchOperation::socketActionable() {
     //  - InitFetch: no errors during results request, so we initiate fetch.
     if (active_fetch_action_ == FetchAction::StartQuery) {
       int error = 0;
-      int status = 0;
+      auto status = MysqlHandler::PENDING;
 
       if (query_executed_) {
         ++num_current_query_;
-        status = mysql_next_result_nonblocking(conn()->mysql(), &error);
+        status = handler.nextResult(conn()->mysql(), error);
       } else {
-        status = mysql_real_query_nonblocking(
-            conn()->mysql(),
-            rendered_query_.begin(),
-            rendered_query_.size(),
-            &error);
+        status = handler.runQuery(conn()->mysql(), rendered_query_, error);
       }
 
-      if (status != NET_ASYNC_COMPLETE) {
+      if (status == MysqlHandler::PENDING) {
         waitForSocketActionable();
         return;
       }
@@ -747,7 +737,7 @@ void FetchOperation::socketActionable() {
     //  - CompleteQuery: no rows to fetch (complete query will read rowsAffected
     //                   and lastInsertId to add to result
     if (active_fetch_action_ == FetchAction::InitFetch) {
-      auto* mysql_query_result = mysql_use_result(conn()->mysql());
+      auto* mysql_query_result = handler.getResult(conn()->mysql());
       auto num_fields = mysql_field_count(conn()->mysql());
 
       // Check to see if this an empty query or an error
@@ -756,7 +746,8 @@ void FetchOperation::socketActionable() {
         active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         if (num_fields > 0) {
-          current_row_stream_.assign(RowStream(mysql_query_result));
+          current_row_stream_.assign(
+              RowStream(mysql_query_result, &handler));
           active_fetch_action_ = FetchAction::Fetch;
         } else {
           active_fetch_action_ = FetchAction::CompleteQuery;

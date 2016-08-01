@@ -90,8 +90,35 @@ class MysqlConnectionHolder;
 typedef std::function<void(std::unique_ptr<MysqlConnectionHolder>)>
     ConnectionDyingCallback;
 
+// MysqlHandler interface that is impletemented by the sync and async
+// clients appropriately.
+class MysqlHandler {
+ public:
+  enum Status {
+    PENDING,
+    DONE,
+  };
+  virtual ~MysqlHandler() = default;
+  virtual bool initConnect(
+      MYSQL* mysql,
+      const ConnectionKey& key,
+      int flags) = 0;
+  virtual Status connect(
+      MYSQL* mysql,
+      int& error,
+      const ConnectionOptions& opts,
+      const ConnectionKey& key,
+      int flags) = 0;
+  virtual Status
+  runQuery(MYSQL* mysql, folly::StringPiece queryStmt, int& error) = 0;
+  virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
+  virtual Status nextResult(MYSQL* mysql, int& error) = 0;
+  virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
+};
+
 class MysqlClientBase {
  public:
+
   virtual ~MysqlClientBase() = default;
 
   virtual std::unique_ptr<Connection> adoptConnection(
@@ -101,6 +128,16 @@ class MysqlClientBase {
       const string& database_name,
       const string& user,
       const string& password);
+
+  // Initiate a connection to a database.  This is the main entrypoint.
+  std::shared_ptr<ConnectOperation> beginConnection(
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password);
+
+  std::shared_ptr<ConnectOperation> beginConnection(ConnectionKey conn_key);
 
   // Factory method
   virtual std::unique_ptr<Connection> createConnection(
@@ -183,6 +220,8 @@ class MysqlClientBase {
   virtual void addOperation(std::shared_ptr<Operation> op) = 0;
   virtual void deferRemoveOperation(Operation* op) = 0;
 
+  virtual MysqlHandler& getMysqlHandler() = 0;
+
   folly::EventBase event_base_;
 
   // Using unique pointer due inheritance virtual calls
@@ -215,16 +254,6 @@ class AsyncMysqlClient : public MysqlClientBase {
   }
 
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
-
-  // Initiate a connection to a database.  This is the main entrypoint.
-  std::shared_ptr<ConnectOperation> beginConnection(
-      const string& host,
-      int port,
-      const string& database_name,
-      const string& user,
-      const string& password);
-
-  std::shared_ptr<ConnectOperation> beginConnection(ConnectionKey conn_key);
 
   folly::Future<ConnectResult> connectFuture(
       const string& host,
@@ -356,6 +385,60 @@ class AsyncMysqlClient : public MysqlClientBase {
   }
 
  private:
+
+  MysqlHandler& getMysqlHandler() override {
+    return mysql_handler_;
+  }
+
+  // implementation of MysqlHandler interface
+  class AsyncMysqlHandler : public MysqlHandler {
+    bool initConnect(
+        MYSQL* mysql,
+        const ConnectionKey& conn_key,
+        int flags) override {
+      const bool res = mysql_real_connect_nonblocking_init(
+          mysql,
+          conn_key.host.c_str(),
+          conn_key.user.c_str(),
+          conn_key.password.c_str(),
+          conn_key.db_name.c_str(),
+          conn_key.port,
+          nullptr,
+          flags);
+      return res;
+    }
+    Status connect(
+        MYSQL* mysql,
+        int& error,
+        const ConnectionOptions&,
+        const ConnectionKey&,
+        int) override {
+      return toHandlerStatus(mysql_real_connect_nonblocking_run(mysql, &error));
+    }
+    Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt, int& error)
+        override {
+      return toHandlerStatus(mysql_real_query_nonblocking(
+          mysql, queryStmt.begin(), queryStmt.size(), &error));
+    }
+    Status nextResult(MYSQL* mysql, int& error) override {
+      return toHandlerStatus(mysql_next_result_nonblocking(mysql, &error));
+    }
+    Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override {
+      return toHandlerStatus(mysql_fetch_row_nonblocking(res, &row));
+    }
+    MYSQL_RES* getResult(MYSQL* mysql) override {
+      return mysql_use_result(mysql);
+    }
+   private:
+    Status toHandlerStatus(net_async_status status) {
+      if (status != NET_ASYNC_COMPLETE) {
+        return PENDING;
+      } else {
+        return DONE;
+      }
+    }
+  } mysql_handler_;
+
   // Private methods, primarily used by Operations and its subclasses.
   friend class AsyncConnectionPool;
 

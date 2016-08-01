@@ -66,6 +66,7 @@ namespace mysql_client {
 
 using facebook::db::OperationStateException;
 
+class MysqlHandler;
 class MysqlClientBase;
 class QueryResult;
 class ConnectOperation;
@@ -687,7 +688,9 @@ class FetchOperation : public Operation {
   // or not to go to next query.
   class RowStream {
    public:
-    explicit RowStream(MYSQL_RES* mysql_query_result);
+    RowStream(
+        MYSQL_RES* mysql_query_result,
+        MysqlHandler* handler);
 
     EphemeralRow consumeRow();
 
@@ -719,10 +722,11 @@ class FetchOperation : public Operation {
         folly::static_function_deleter<MYSQL_RES, mysql_free_result>;
     using MysqlResultUniquePtr = std::unique_ptr<MYSQL_RES, MysqlResultDeleter>;
 
-    // All memory lifetime is guaranteed by FetchOpeation.
+    // All memory lifetime is guaranteed by FetchOperation.
     MysqlResultUniquePtr mysql_query_result_ = nullptr;
     folly::Optional<EphemeralRow> current_row_;
     EphemeralRowFields row_fields_;
+    MysqlHandler* handler_ = nullptr;
   };
 
   // Streaming calls. Should only be called when using the StreamCallback.
