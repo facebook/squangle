@@ -113,7 +113,7 @@ class MysqlConnectionHolder {
   explicit MysqlConnectionHolder(
       std::unique_ptr<MysqlConnectionHolder> from_holder);
 
-  MysqlClientBase* async_client_;
+  MysqlClientBase* client_;
 
  private:
   // Our MYSQL handle as well as a file descriptor used for

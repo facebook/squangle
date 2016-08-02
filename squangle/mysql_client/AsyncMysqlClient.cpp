@@ -337,12 +337,10 @@ std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
 Connection::Connection(
     MysqlClientBase* mysql_client,
     ConnectionKey conn_key,
-    MYSQL* existing_connection,
-    folly::EventBase* event_base)
+    MYSQL* existing_connection)
     : conn_key_(conn_key),
       mysql_client_(mysql_client),
-      event_base_(event_base),
-      socket_handler_(event_base),
+      socket_handler_(mysql_client_->getEventBase()),
       initialized_(false) {
   if (existing_connection) {
     mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
@@ -356,9 +354,7 @@ bool Connection::isSSL() const {
 }
 
 void Connection::initMysqlOnly() {
-  // Thread must be already associated
-  DCHECK(event_base_ && getEventBase()->isInEventBaseThread());
-
+  DCHECK(isInEventBaseThread());
   CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
   mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
       mysql_client_, mysql_init(nullptr), conn_key_);
@@ -612,7 +608,7 @@ void ConnectionSocketHandler::timeoutExpired() noexcept {
 }
 
 void ConnectionSocketHandler::handlerReady(uint16_t events) noexcept {
-  DCHECK(op_->client()->getEventBase()->isInEventBaseThread());
+  DCHECK(op_->conn()->isInEventBaseThread());
   CHECK_THROW(
       op_->state_ != OperationState::Completed &&
           op_->state_ != OperationState::Unstarted,

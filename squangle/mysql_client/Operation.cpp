@@ -47,14 +47,14 @@ Operation::Operation(ConnectionProxy&& safe_conn)
   conn()->resetActionable();
 }
 
-folly::EventBase* Operation::getEventBase() {
-  return connection()->getEventBase();
+bool Operation::isInEventBaseThread() {
+  return connection()->isInEventBaseThread();
 }
 
 Operation::~Operation() {}
 
 void Operation::waitForSocketActionable() {
-  DCHECK(getEventBase()->isInEventBaseThread());
+  DCHECK(isInEventBaseThread());
 
   MYSQL* mysql = conn()->mysql();
   uint16_t event_mask = 0;
@@ -135,7 +135,7 @@ Operation* Operation::run() {
 }
 
 void Operation::completeOperation(OperationResult result) {
-  DCHECK(getEventBase()->isInEventBaseThread());
+  DCHECK(isInEventBaseThread());
   if (state_ == OperationState::Completed) {
     return;
   }
@@ -423,7 +423,7 @@ ConnectOperation::~ConnectOperation() {
 }
 
 void ConnectOperation::socketActionable() {
-  DCHECK(getEventBase()->isInEventBaseThread());
+  DCHECK(isInEventBaseThread());
   int error;
   auto& handler = conn()->client()->getMysqlHandler();
   auto status = handler.connect(
@@ -586,7 +586,7 @@ FetchOperation::FetchOperation(
 
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
-  return isPaused() || getEventBase()->isInEventBaseThread();
+  return isPaused() || isInEventBaseThread();
 }
 
 bool FetchOperation::isPaused() {
@@ -680,7 +680,7 @@ FetchOperation::RowStream* FetchOperation::rowStream() {
 }
 
 void FetchOperation::socketActionable() {
-  DCHECK(getEventBase()->isInEventBaseThread());
+  DCHECK(isInEventBaseThread());
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
   auto& handler = conn()->client()->getMysqlHandler();
@@ -852,7 +852,7 @@ void FetchOperation::socketActionable() {
 }
 
 void FetchOperation::pauseForConsumer() {
-  DCHECK(getEventBase()->isInEventBaseThread());
+  DCHECK(isInEventBaseThread());
   DCHECK(state() == OperationState::Pending);
 
   paused_action_ = active_fetch_action_;

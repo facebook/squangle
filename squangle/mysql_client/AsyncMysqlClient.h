@@ -144,8 +144,8 @@ class MysqlClientBase {
       ConnectionKey conn_key,
       MYSQL* mysql_conn) = 0;
 
-  folly::EventBase* getEventBase() {
-    return &event_base_;
+  virtual folly::EventBase* getEventBase() {
+    return nullptr;
   }
 
   void logQuerySuccess(
@@ -222,8 +222,6 @@ class MysqlClientBase {
 
   virtual MysqlHandler& getMysqlHandler() = 0;
 
-  folly::EventBase event_base_;
-
   // Using unique pointer due inheritance virtual calls
   std::unique_ptr<db::SquangleLoggerBase> db_logger_;
   std::unique_ptr<db::DBCounterBase> client_stats_;
@@ -289,7 +287,7 @@ class AsyncMysqlClient : public MysqlClientBase {
   // fail harshly.
   void drain(bool also_block_operations);
 
-  folly::EventBase* getEventBase() {
+  folly::EventBase* getEventBase() override {
     return &event_base_;
   }
 
@@ -460,6 +458,9 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   void cleanupCompletedOperations();
 
+  // event base running the event loop
+  folly::EventBase event_base_;
+
   // thread_ is where loop() runs and most of the class does its work.
   std::thread thread_;
 
@@ -555,8 +556,7 @@ class Connection {
   Connection(
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
-      MYSQL* existing_connection,
-      folly::EventBase* event_base);
+      MYSQL* existing_connection);
 
   virtual ~Connection();
 
@@ -755,7 +755,7 @@ class Connection {
   }
 
   std::unique_ptr<MysqlConnectionHolder> stealMysqlConnectionHolder() {
-    DCHECK(getEventBase()->isInEventBaseThread());
+    DCHECK(isInEventBaseThread());
     return std::move(mysql_connection_);
   }
 
@@ -789,11 +789,16 @@ class Connection {
   }
 
   const folly::EventBase* getEventBase() const {
-    return event_base_;
+    return client()->getEventBase();
   }
 
   folly::EventBase* getEventBase() {
-    return event_base_;
+    return client()->getEventBase();
+  }
+
+  bool isInEventBaseThread() const {
+    auto eb = getEventBase();
+    return eb == nullptr || eb->isInEventBaseThread();
   }
 
   virtual bool runInThread(const folly::Cob& fn) {
@@ -803,7 +808,7 @@ class Connection {
   template <typename TOp, typename... F, typename... T>
   bool runInThread(TOp* op, void (TOp::*f)(F...), T&&... v) {
     // short circuit
-    if (getEventBase()->isInEventBaseThread()) {
+    if (isInEventBaseThread()) {
       (op->*f)(std::forward<T>(v)...);
       return true;
     } else {
@@ -835,7 +840,7 @@ class Connection {
   }
 
   MYSQL* mysql() const {
-    DCHECK(getEventBase()->isInEventBaseThread());
+    DCHECK(isInEventBaseThread());
     if (mysql_connection_) {
       return mysql_connection_->mysql();
     } else {
@@ -844,7 +849,7 @@ class Connection {
   }
 
   MysqlConnectionHolder* mysqlConnection() const {
-    DCHECK(getEventBase()->isInEventBaseThread());
+    DCHECK(isInEventBaseThread());
     return mysql_connection_.get();
   }
 
@@ -889,7 +894,6 @@ class Connection {
 
   // Unowned pointer to the client we're from.
   MysqlClientBase* mysql_client_;
-  folly::EventBase* event_base_;
 
   ConnectionSocketHandler socket_handler_;
 
@@ -919,8 +923,7 @@ class AsyncConnection : public Connection {
       : Connection(
             mysql_client,
             conn_key,
-            existing_connection,
-            mysql_client->getEventBase()) {}
+            existing_connection) {}
 
   // Operations call these methods as the operation becomes unblocked, as
   // callers want to wait for completion, etc.
@@ -933,7 +936,7 @@ class AsyncConnection : public Connection {
 
   void wait() override {
     CHECK_THROW(
-        folly::fibers::onFiber() || !getEventBase()->isInEventBaseThread(),
+        folly::fibers::onFiber() || !isInEventBaseThread(),
         std::runtime_error);
     actionableBaton_.wait();
   }

@@ -464,7 +464,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
     ReferencedConnection referencedConn_;
   };
 
-  folly::EventBase* getEventBase();
+  bool isInEventBaseThread();
   // Data members; subclasses freely interact with these.
   OperationState state_;
   OperationResult result_;
