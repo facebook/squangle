@@ -608,6 +608,13 @@ class Connection {
   }
 
   // Experimental
+  virtual std::shared_ptr<MultiQueryStreamOperation> createOperation(
+      Operation::ConnectionProxy&& proxy,
+      std::vector<Query>&& queries) {
+    return std::make_shared<MultiQueryStreamOperation>(
+        std::move(proxy), std::move(queries));
+  }
+
   template <typename... Args>
   static std::shared_ptr<MultiQueryStreamOperation> beginMultiQueryStreaming(
       std::unique_ptr<Connection> conn,

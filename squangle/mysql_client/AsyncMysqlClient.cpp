@@ -560,14 +560,21 @@ DbMultiQueryResult Connection::multiQuery(Args&&... args) {
 MultiQueryStreamHandler Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
     std::vector<Query> queries) {
-  auto op = beginAnyQuery<MultiQueryStreamOperation>(
-      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
-      std::move(queries));
+  auto proxy =
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn)));
+  auto connP = proxy.get();
+  auto ret = connP->createOperation(std::move(proxy), std::move(queries));
+  Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
+  if (timeout.count() > 0) {
+    ret->setTimeout(timeout);
+  }
+  ret->connection()->mysql_client_->addOperation(ret);
+  ret->connection()->socket_handler_.setOperation(ret.get());
 
   // MultiQueryStreamHandler needs to be alive while the operation is running.
   // To accomplish that, ~MultiQueryStreamHandler waits until
   // `postOperationEnded` is called.
-  return MultiQueryStreamHandler(op);
+  return MultiQueryStreamHandler(ret);
 }
 
 std::shared_ptr<QueryOperation> Connection::beginTransaction(

@@ -80,6 +80,7 @@ class ConnectionKey;
 class ConnectionSocketHandler;
 class ConnectionOptions;
 class SSLOptionsProviderBase;
+class SyncConnection;
 class MultiQueryStreamHandler;
 
 enum class QueryCallbackReason;
@@ -502,6 +503,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   Operation& operator=(const Operation&) = delete;
 
   friend class Connection;
+  friend class SyncConnection;
   friend class ConnectionSocketHandler;
 };
 
