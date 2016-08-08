@@ -294,7 +294,7 @@ void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
     handleQueryEnded(result);
   } else if (state_ == State::OperationFailed) {
     handleQueryFailed(result);
-  } else {
+  } else if (state_ != State::ReadRows || fetchOneRow(result)) {
     LOG(DFATAL) << "Expected end of query, but received " << toString(state_)
                 << ".";
     handleBadState();
@@ -366,12 +366,16 @@ MultiQueryStreamHandler::MultiQueryStreamHandler(
   // is done()
   CHECK(other.state_ == State::RunQuery || other.operation_->done());
   operation_ =  std::move(other.operation_);
+  other.operation_ = nullptr;
 }
 
 MultiQueryStreamHandler::~MultiQueryStreamHandler() {
-  CHECK(
-      state_ == State::OperationSucceeded || state_ == State::OperationFailed);
-  CHECK(operation_->done());
+  if (operation_) {
+    CHECK(
+        state_ == State::OperationSucceeded ||
+        state_ == State::OperationFailed);
+    CHECK(operation_->done());
+  }
 }
 
 EphemeralRowFields* StreamedQueryResult::getRowFields() const {
