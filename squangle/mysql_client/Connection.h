@@ -72,6 +72,12 @@ class MysqlConnectionHolder {
     return can_reuse_;
   }
 
+  // Don't close the mysql fd in the destructor. Useful when connections
+  // are managed outside this library.
+  void disableCloseOnDestroy() {
+    close_fd_on_destroy_ = false;
+  }
+
   // Returns whether or not the connection is in a transaction based on server
   // status
   bool inTransaction();
@@ -123,6 +129,7 @@ class MysqlConnectionHolder {
   Timepoint creation_time_;
   Timepoint last_activity_time_;
   bool connection_opened_ = false;
+  bool close_fd_on_destroy_ = true;
 
   bool can_reuse_;
 

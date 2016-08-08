@@ -47,7 +47,7 @@ bool MysqlConnectionHolder::inTransaction() {
 }
 
 MysqlConnectionHolder::~MysqlConnectionHolder() {
-  if (mysql_) {
+  if (close_fd_on_destroy_ && mysql_) {
     auto mysql = mysql_;
     auto client = client_;
     // Close our connection in the thread from which it was created.

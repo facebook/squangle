@@ -82,6 +82,7 @@ using std::unordered_map;
 using facebook::db::InvalidConnectionException;
 
 class AsyncMysqlClient;
+class SyncMysqlClient;
 class Operation;
 class ConnectOperation;
 class ConnectionKey;
@@ -747,6 +748,12 @@ class Connection {
     return mysql_client_;
   }
 
+  void disableCloseOnDestroy() {
+    if (mysql_connection_) {
+      mysql_connection_->disableCloseOnDestroy();
+    }
+  }
+
   MYSQL* stealMysql() {
     if (mysql_connection_) {
       auto ret = mysql_connection_->stealMysql();
@@ -833,6 +840,7 @@ class Connection {
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
+  friend class SyncMysqlClient;
   friend class MysqlClientBase;
   friend class Operation;
   friend class ConnectOperation;
