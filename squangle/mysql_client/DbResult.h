@@ -455,6 +455,8 @@ class StreamedQueryResult {
     return *this;
   }
 
+  EphemeralRowFields* getRowFields() const;
+
   folly::Optional<EphemeralRow> nextRow();
 
  private:

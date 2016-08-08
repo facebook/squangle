@@ -381,6 +381,22 @@ class EphemeralRowFields {
     return num_fields_;
   }
 
+  size_t fieldIndex(folly::StringPiece field_name) const {
+    for (int i = 0; i < num_fields_; i++) {
+      auto nameSp = folly::StringPiece(fields_[i].name, fields_[i].name_length);
+      if (nameSp == field_name) {
+        return i;
+      }
+    }
+    throw std::out_of_range(
+        folly::format("Invalid field: {}", field_name).str());
+  }
+
+  enum_field_types fieldType(size_t index) const {
+    CHECK_LT(index, num_fields_);
+    return fields_[index].type;
+  }
+
   std::shared_ptr<RowFields> makeBufferedFields() const;
 
   EphemeralRowFields(EphemeralRowFields const&) = delete;
