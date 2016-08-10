@@ -826,7 +826,7 @@ class Connection {
       (op->*f)(std::forward<T>(v)...);
       return true;
     } else {
-      return runInThread([op, f, v...]() { (op->*f)(v...); });
+      return runInThread(std::bind(f, op, v...));
     }
   }
 
