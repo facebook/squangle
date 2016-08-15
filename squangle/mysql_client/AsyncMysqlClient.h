@@ -202,7 +202,7 @@ class MysqlClientBase {
       std::unique_ptr<db::DBCounterBase> db_stats =
           folly::make_unique<db::SimpleDbCounter>());
 
-  virtual bool runInThread(const folly::Cob& fn) = 0;
+  virtual bool runInThread(folly::Cob&& fn) = 0;
 
  protected:
   friend class Connection;
@@ -323,7 +323,7 @@ class AsyncMysqlClient : public MysqlClientBase {
       std::unique_ptr<db::SquangleLoggerBase> db_logger,
       std::unique_ptr<db::DBCounterBase> db_stats);
 
-  bool runInThread(const folly::Cob& fn) override;
+  bool runInThread(folly::Cob&& fn) override;
 
   db::SquangleLoggingData makeSquangleLoggingData(
       const ConnectionKey* connKey,
@@ -815,8 +815,8 @@ class Connection {
     return eb == nullptr || eb->isInEventBaseThread();
   }
 
-  virtual bool runInThread(const folly::Cob& fn) {
-    return client()->runInThread(fn);
+  virtual bool runInThread(folly::Cob&& fn) {
+    return client()->runInThread(std::move(fn));
   }
 
   template <typename TOp, typename... F, typename... T>
