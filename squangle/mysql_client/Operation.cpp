@@ -24,6 +24,11 @@ DEFINE_int64(
     async_mysql_timeout_micros,
     60 * 1000 * 1000,
     "default timeout, in micros, for mysql operations");
+DEFINE_bool(
+    async_mysql_kill_timedout_query,
+    false,
+    "kill timed out queries via a separate connection"
+);
 
 namespace facebook {
 namespace common {
@@ -426,8 +431,8 @@ void ConnectOperation::socketActionable() {
   DCHECK(isInEventBaseThread());
   int error;
   auto& handler = conn()->client()->getMysqlHandler();
-  auto status = handler.connect(
-      conn()->mysql(), error, conn_options_, conn_key_, flags_);
+  auto status =
+      handler.connect(conn()->mysql(), error, conn_options_, conn_key_, flags_);
   auto fd = mysql_get_file_descriptor(conn()->mysql());
   if (status == MysqlHandler::DONE) {
     if (error == 0) {
@@ -612,8 +617,9 @@ void FetchOperation::specializedRunImpl() {
   }
 }
 
-FetchOperation::RowStream::RowStream(MYSQL_RES* mysql_query_result,
-                                     MysqlHandler* handler)
+FetchOperation::RowStream::RowStream(
+    MYSQL_RES* mysql_query_result,
+    MysqlHandler* handler)
     : mysql_query_result_(mysql_query_result),
       row_fields_(
           mysql_fetch_fields(mysql_query_result),
@@ -746,8 +752,7 @@ void FetchOperation::socketActionable() {
         active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         if (num_fields > 0) {
-          current_row_stream_.assign(
-              RowStream(mysql_query_result, &handler));
+          current_row_stream_.assign(RowStream(mysql_query_result, &handler));
           active_fetch_action_ = FetchAction::Fetch;
         } else {
           active_fetch_action_ = FetchAction::CompleteQuery;
@@ -912,6 +917,10 @@ void FetchOperation::specializedTimeoutTriggered() {
       chrono::duration_cast<chrono::microseconds>(delta).count();
   std::string msg;
 
+  if (FLAGS_async_mysql_kill_timedout_query) {
+    killRunningQuery();
+  }
+
   /*
    * Calling mysql_free_result currently tries to flush the socket
    * This is unnecessary as the socket will be cleaned up anyway and
@@ -985,6 +994,49 @@ void FetchOperation::mustSucceed() {
   if (!ok()) {
     LOG(FATAL) << "Query failed: " << mysql_error_;
   }
+}
+
+void FetchOperation::killRunningQuery() {
+  /*
+   * Send kill command to terminate the current operation on the DB
+   * Note that we must use KILL QUERY <processlist_id> to avoid killing
+   * the entire connection in the event the DB is behind a proxy in which
+   * case we may accidentally kill the persistent connection the proxy
+   * is using.
+   *
+   * Note that there is a risk of a race condition in the event that a proxy
+   * is used and a query from this client times out, then the query completes
+   * almost immediately after the timeout and a proxy gives the persistent
+   * connection to another client which begins a query on that connection
+   * before this client is able to send the KILL query on a separate
+   * proxy->db connection which then terminates the OTHER client's query
+   */
+  auto thread_id = conn()->mysqlThreadId();
+  auto host = conn()->host();
+  auto port = conn()->port();
+  auto conn_op = client()
+                     ->beginConnection(*conn()->getKey())
+                     ->setConnectionOptions(conn()->getConnectionOptions());
+  conn_op->setCallback([thread_id, host, port](ConnectOperation& conn_op) {
+    if (conn_op.ok()) {
+      auto op = Connection::beginQuery(
+          conn_op.releaseConnection(), "KILL QUERY %d", thread_id);
+      op->setCallback([thread_id, host, port](
+          QueryOperation& /* unused */,
+          QueryResult* /* unused */,
+          QueryCallbackReason reason) {
+        if (reason == QueryCallbackReason::Failure) {
+          LOG(WARNING) << folly::format(
+              "Failed to kill query in thread {} on {}:{}",
+              thread_id,
+              host,
+              port);
+        }
+      });
+      op->run();
+    }
+  });
+  conn_op->run();
 }
 
 MultiQueryStreamOperation::MultiQueryStreamOperation(

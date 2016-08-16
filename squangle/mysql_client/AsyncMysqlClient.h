@@ -100,10 +100,8 @@ class MysqlHandler {
     DONE,
   };
   virtual ~MysqlHandler() = default;
-  virtual bool initConnect(
-      MYSQL* mysql,
-      const ConnectionKey& key,
-      int flags) = 0;
+  virtual bool
+  initConnect(MYSQL* mysql, const ConnectionKey& key, int flags) = 0;
   virtual Status connect(
       MYSQL* mysql,
       int& error,
@@ -119,7 +117,6 @@ class MysqlHandler {
 
 class MysqlClientBase {
  public:
-
   virtual ~MysqlClientBase() = default;
 
   virtual std::unique_ptr<Connection> adoptConnection(
@@ -384,17 +381,14 @@ class AsyncMysqlClient : public MysqlClientBase {
   }
 
  private:
-
   MysqlHandler& getMysqlHandler() override {
     return mysql_handler_;
   }
 
   // implementation of MysqlHandler interface
   class AsyncMysqlHandler : public MysqlHandler {
-    bool initConnect(
-        MYSQL* mysql,
-        const ConnectionKey& conn_key,
-        int flags) override {
+    bool initConnect(MYSQL* mysql, const ConnectionKey& conn_key, int flags)
+        override {
       const bool res = mysql_real_connect_nonblocking_init(
           mysql,
           conn_key.host.c_str(),
@@ -428,6 +422,7 @@ class AsyncMysqlClient : public MysqlClientBase {
     MYSQL_RES* getResult(MYSQL* mysql) override {
       return mysql_use_result(mysql);
     }
+
    private:
     Status toHandlerStatus(net_async_status status) {
       if (status != NET_ASYNC_COMPLETE) {
@@ -496,7 +491,6 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // For testing purposes
   bool delicate_connection_failure_ = false;
-
 
   // This only works if you are using AsyncConnectionPool
   std::atomic<uint64_t> pools_conn_limit_;
@@ -748,6 +742,10 @@ class Connection {
     return mysql_client_;
   }
 
+  long mysqlThreadId() const {
+    return mysql_thread_id(mysql_connection_->mysql());
+  }
+
   void disableCloseOnDestroy() {
     if (mysql_connection_) {
       mysql_connection_->disableCloseOnDestroy();
@@ -935,10 +933,7 @@ class AsyncConnection : public Connection {
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
       MYSQL* existing_connection)
-      : Connection(
-            mysql_client,
-            conn_key,
-            existing_connection) {}
+      : Connection(mysql_client, conn_key, existing_connection) {}
 
   // Operations call these methods as the operation becomes unblocked, as
   // callers want to wait for completion, etc.
@@ -951,8 +946,7 @@ class AsyncConnection : public Connection {
 
   void wait() override {
     CHECK_THROW(
-        folly::fibers::onFiber() || !isInEventBaseThread(),
-        std::runtime_error);
+        folly::fibers::onFiber() || !isInEventBaseThread(), std::runtime_error);
     actionableBaton_.wait();
   }
 

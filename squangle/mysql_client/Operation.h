@@ -799,6 +799,10 @@ class FetchOperation : public Operation {
   bool isStreamAccessAllowed();
   bool isPaused();
 
+  // Asynchronously kill a currently running query, returns
+  // before the query is killed
+  void killRunningQuery();
+
   // Current query data
   folly::Optional<RowStream> current_row_stream_;
   bool query_executed_ = false;
