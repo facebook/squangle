@@ -351,6 +351,7 @@ class QueryArgument {
   /* implicit */ QueryArgument(const std::string& string_value);
   /* implicit */ QueryArgument(const fbstring& val);
   /* implicit */ QueryArgument(fbstring&& val);
+  /* implicit */ QueryArgument(Query q);
 
   template <
       typename T,
@@ -389,6 +390,7 @@ class QueryArgument {
   double getDouble() const;
   int64_t getInt() const;
   bool getBool() const;
+  const Query& getQuery() const;
   const folly::fbstring& getString() const;
   const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
       const;

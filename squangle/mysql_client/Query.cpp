@@ -56,6 +56,8 @@ QueryArgument::QueryArgument(StringPiece param1, QueryArgument param2)
   getPairs().emplace_back(ArgPair(param1.str(), param2));
 }
 
+QueryArgument::QueryArgument(Query q) : value_(std::move(q)) {}
+
 bool QueryArgument::isString() const {
   return value_.type() == typeid(folly::fbstring);
 }
@@ -136,6 +138,10 @@ int64_t QueryArgument::getInt() const {
 
 bool QueryArgument::getBool() const {
   return boost::get<bool>(value_);
+}
+
+const Query& QueryArgument::getQuery() const {
+  return boost::get<Query>(value_);
 }
 
 const folly::fbstring& QueryArgument::getString() const {
@@ -530,7 +536,11 @@ folly::fbstring Query::render(MYSQL* conn,
         appendValueClauses(&ret, &idx, ", ", param, conn);
       }
     } else if (c == 'Q') {
-      ret.append((param).asString());
+      if (param.isQuery()) {
+        ret.append(param.getQuery().render(conn));
+      } else {
+        ret.append((param).asString());
+      }
     } else {
       parseError(querySp, idx, "unknown % code");
     }
