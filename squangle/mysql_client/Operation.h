@@ -757,6 +757,7 @@ class FetchOperation : public Operation {
   FetchOperation* specializedRun() override;
 
   FetchOperation(ConnectionProxy&& conn, std::vector<Query>&& queries);
+  FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query);
 
   enum class FetchAction {
     StartQuery,
@@ -847,6 +848,10 @@ class MultiQueryStreamOperation : public FetchOperation {
     Operation::setTimeout(timeout);
     return this;
   }
+
+  MultiQueryStreamOperation(
+      ConnectionProxy&& connection,
+      MultiQuery&& multi_query);
 
   MultiQueryStreamOperation(
       ConnectionProxy&& connection,

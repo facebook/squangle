@@ -589,6 +589,11 @@ FetchOperation::FetchOperation(
     std::vector<Query>&& queries)
     : Operation(std::move(conn)), queries_(std::move(queries)) {}
 
+FetchOperation::FetchOperation(
+    ConnectionProxy&& conn,
+    MultiQuery&& multi_query)
+    : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
+
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();
@@ -1038,6 +1043,11 @@ void FetchOperation::killRunningQuery() {
   });
   conn_op->run();
 }
+
+MultiQueryStreamOperation::MultiQueryStreamOperation(
+    ConnectionProxy&& conn,
+    MultiQuery&& multi_query)
+    : FetchOperation(std::move(conn), std::move(multi_query)) {}
 
 MultiQueryStreamOperation::MultiQueryStreamOperation(
     ConnectionProxy&& conn,

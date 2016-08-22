@@ -558,8 +558,8 @@ folly::fbstring Query::render(MYSQL* conn,
 }
 
 folly::StringPiece MultiQuery::renderQuery(MYSQL* conn) {
-  if (queries_.size() == 1 && queries_[0].isUnsafe()) {
-    return queries_[0].getQueryFormat();
+  if (!unsafe_multi_query_.empty()) {
+    return unsafe_multi_query_;
   }
   rendered_multi_query_ = Query::renderMultiQuery(conn, queries_);
   return folly::StringPiece(rendered_multi_query_);
