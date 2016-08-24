@@ -90,6 +90,16 @@ bool QueryArgument::isInt() const {
   return value_.type() == typeid(int64_t);
 }
 
+bool QueryArgument::isTwoTuple() const {
+  return value_.type() == typeid(std::tuple<folly::fbstring, folly::fbstring>);
+}
+
+bool QueryArgument::isThreeTuple() const {
+  return value_.type() == typeid(
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>
+  );
+}
+
 QueryArgument&& QueryArgument::operator()(
     StringPiece q1,
     const QueryArgument& q2) {
@@ -154,6 +164,17 @@ const std::vector<QueryArgument>& QueryArgument::getList() const {
 
 const std::vector<ArgPair>& QueryArgument::getPairs() const {
   return boost::get<std::vector<ArgPair>>(value_);
+}
+
+const std::tuple<folly::fbstring, folly::fbstring>&
+QueryArgument::getTwoTuple() const {
+  return boost::get<std::tuple<folly::fbstring, folly::fbstring>>(value_);
+}
+
+const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
+QueryArgument::getThreeTuple() const {
+  return boost::get<std::tuple<
+    folly::fbstring, folly::fbstring, folly::fbstring>>(value_);
 }
 
 void QueryArgument::initFromDynamic(const folly::dynamic& param) {
@@ -224,6 +245,21 @@ void appendColumnTableName(folly::fbstring* s, const QueryArgument& d) {
       s->push_back(c);
     }
     s->push_back('`');
+  } else if (d.isTwoTuple()) {
+    // If a two-tuple is provided we have a qualified column name
+    auto t = d.getTwoTuple();
+    appendColumnTableName(s, std::get<0>(t));
+    s->push_back('.');
+    appendColumnTableName(s, std::get<1>(t));
+  } else if (d.isThreeTuple()) {
+    // If a three-tuple is provided we have a qualified column name
+    // with an alias. This is helpful for constructing JOIN queries.
+    auto t = d.getThreeTuple();
+    appendColumnTableName(s, std::get<0>(t));
+    s->push_back('.');
+    appendColumnTableName(s, std::get<1>(t));
+    s->append(" AS ");
+    appendColumnTableName(s, std::get<2>(t));
   } else {
     s->append(d.asString());
   }

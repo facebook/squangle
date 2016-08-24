@@ -44,11 +44,18 @@
 // %=s, %=d, %=f - like the previous except suitable for comparison,
 //                 so "%s" becomes " = VALUE".  nulls become "IS NULL"
 // %T - a table name.  enclosed with ``.
-// %C - like %T, except for column names.
+// %C - like %T, except for column names. Optionally supply two-/three-tuple
+//      to define qualified column name or qualified column name with
+//      an alias. `QualifiedColumn{"table_name", "column_name"}` will become
+//      "`table_name`.`column_name`" and
+//      `AliasedQualifiedColumn{"table_name", "column_name", "alias"}`
+//      will become "`table_name`.`column_name` AS `alias`"
 // %V - VALUES style row list; expects a list of lists, each of the same
 //      length.
-// %LC, %Ls, %Ld, %Lf - list of column names or strings/ints/floats,
-//                      separated by commas
+// %Ls, %Ld, %Lf - strings/ints/floats separated by commas
+// %LC - list of column names separated by commas. Optionally supplied as
+//       a list of two-/three-tuples to define qualified column names or
+//       qualified column names with aliases. Similar to %C.
 // %LO, %LA - key/value pair rendered as key1=val1 OR/AND key2=val2 (similar
 //            to %W)
 // %U, %W - keys and values suitable for UPDATE and WHERE clauses,
@@ -73,6 +80,7 @@
 #include <mysql.h>
 
 #include <string>
+#include <tuple>
 
 namespace facebook {
 namespace common {
@@ -81,6 +89,10 @@ namespace mysql_client {
 using folly::dynamic;
 using folly::fbstring;
 using folly::StringPiece;
+
+using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
+using AliasedQualifiedColumn =
+  std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
 
 class QueryArgument;
 
@@ -353,7 +365,9 @@ class QueryArgument {
       std::nullptr_t,
       Query,
       std::vector<QueryArgument>,
-      std::vector<std::pair<folly::fbstring, QueryArgument>>>
+      std::vector<std::pair<folly::fbstring, QueryArgument>>,
+      std::tuple<folly::fbstring, folly::fbstring>,
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>>
       value_;
 
  public:
@@ -378,6 +392,12 @@ class QueryArgument {
 
   /* implicit */ QueryArgument(std::initializer_list<QueryArgument> list);
   /* implicit */ QueryArgument(std::vector<QueryArgument> arg_list);
+  /* implicit */ QueryArgument(std::tuple<folly::fbstring, folly::fbstring> tup)
+      : value_(tup) {}
+  /* implicit */ QueryArgument(
+        std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup
+      )
+      : value_(tup) {}
   /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
 
   // Pair constructors
@@ -406,6 +426,9 @@ class QueryArgument {
   const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
       const;
   const std::vector<QueryArgument>& getList() const;
+  const std::tuple<folly::fbstring, folly::fbstring>& getTwoTuple() const;
+  const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
+      getThreeTuple() const;
 
   bool isString() const;
   bool isQuery() const;
@@ -415,6 +438,8 @@ class QueryArgument {
   bool isList() const;
   bool isDouble() const;
   bool isInt() const;
+  bool isTwoTuple() const;
+  bool isThreeTuple() const;
 
   std::string typeName() const {
     return value_.type().name();
