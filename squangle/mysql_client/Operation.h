@@ -224,6 +224,18 @@ class ConnectionOptions {
     return total_timeout_;
   }
 
+  // If true, then when a query timesout, the client will open a new connection
+  // and kill the running query via KILL QUERY <mysqlThreadId>. This should
+  // usually not be used with a proxy since most proxies should handle timeouts.
+  ConnectionOptions& setKillOnQueryTimeout(bool killOnQueryTimeout) {
+    killOnQueryTimeout_ = killOnQueryTimeout;
+    return *this;
+  }
+
+  bool getKillOnQueryTimeout() const {
+    return killOnQueryTimeout_;
+  }
+
  private:
   Duration connection_timeout_;
   Duration total_timeout_;
@@ -231,6 +243,7 @@ class ConnectionOptions {
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> connection_attributes_;
   uint32_t max_attempts_ = 1;
+  bool killOnQueryTimeout_ = false;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -596,6 +609,14 @@ class ConnectOperation : public Operation {
 
   Duration getAttemptTimeout() const {
     return conn_options_.getTimeout();
+  }
+
+  // Set if we should open a new connection to kill a timed out query
+  // Should not be used when connecting through a proxy
+  ConnectOperation* setKillOnQueryTimeout(bool killOnQueryTimeout);
+
+  bool getKillOnQueryTimeout() const {
+      return conn_options_.getKillOnQueryTimeout();
   }
 
   ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_options);

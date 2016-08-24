@@ -24,11 +24,6 @@ DEFINE_int64(
     async_mysql_timeout_micros,
     60 * 1000 * 1000,
     "default timeout, in micros, for mysql operations");
-DEFINE_bool(
-    async_mysql_kill_timedout_query,
-    false,
-    "kill timed out queries via a separate connection"
-);
 
 namespace facebook {
 namespace common {
@@ -266,6 +261,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
+  setKillOnQueryTimeout(conn_opts.getKillOnQueryTimeout());
   auto provider = conn_opts.getSSLOptionsProvider();
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
@@ -309,7 +305,11 @@ ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
   conn_options_.setConnectAttempts(max_attempts);
   return this;
 }
-
+ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
+    bool killOnQueryTimeout) {
+  conn_options_.setKillOnQueryTimeout(killOnQueryTimeout);
+  return this;
+}
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
     std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider) {
   LOG(ERROR) << "Using deprecated function";
@@ -922,7 +922,7 @@ void FetchOperation::specializedTimeoutTriggered() {
       chrono::duration_cast<chrono::microseconds>(delta).count();
   std::string msg;
 
-  if (FLAGS_async_mysql_kill_timedout_query) {
+  if (conn()->getConnectionOptions().getKillOnQueryTimeout()) {
     killRunningQuery();
   }
 
@@ -1004,10 +1004,10 @@ void FetchOperation::mustSucceed() {
 void FetchOperation::killRunningQuery() {
   /*
    * Send kill command to terminate the current operation on the DB
-   * Note that we must use KILL QUERY <processlist_id> to avoid killing
-   * the entire connection in the event the DB is behind a proxy in which
-   * case we may accidentally kill the persistent connection the proxy
-   * is using.
+   * Note that we use KILL <processlist_id> to kill the entire connection
+   * In the event the DB is behind a proxy this will kill the persistent
+   * connection the proxy is using, so ConnectionOptions::killQueryOnTimeout_
+   * should always be false when accessing the DB through a proxy
    *
    * Note that there is a risk of a race condition in the event that a proxy
    * is used and a query from this client times out, then the query completes
@@ -1025,7 +1025,7 @@ void FetchOperation::killRunningQuery() {
   conn_op->setCallback([thread_id, host, port](ConnectOperation& conn_op) {
     if (conn_op.ok()) {
       auto op = Connection::beginQuery(
-          conn_op.releaseConnection(), "KILL QUERY %d", thread_id);
+          conn_op.releaseConnection(), "KILL %d", thread_id);
       op->setCallback([thread_id, host, port](
           QueryOperation& /* unused */,
           QueryResult* /* unused */,
