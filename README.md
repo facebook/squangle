@@ -12,18 +12,8 @@ all work fine.
 Current Status
 --------------
 
-**THIS IS AN EARLY PREVIEW RELEASE**
-
- - Expect the API to change
- - Documentation is not ready for release
- - Automated tests are not included - they exist, however they require Facebook
-   infrastructure to run, so releasing them seemed more confusing than useful
-
-In particular, we plan to move everything from the various namespaces to
-'squangle'.
-
-We have released it at this early stage as it is a dependency of other Facebook
-projects.
+SQuangLe is not supported as a standalone project; it is released as a
+dependency of HHVM's async mysql extension to the Hack language.
 
 Features
 --------

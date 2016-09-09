@@ -20,8 +20,9 @@ mirrored into Facebook's internal repository, then pushed to github, along
 with any other changes.
 
 ## Issues
-We use GitHub issues to track public bugs. Please ensure your description is
-clear and has sufficient instructions to be able to reproduce the issue.
+
+Squangle is currently only supported as a dependency of HHVM, not as a
+standalone project.
 
 Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
 disclosure of security bugs. In those cases, please go through the process
