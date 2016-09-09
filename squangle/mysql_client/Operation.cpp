@@ -262,6 +262,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
   setKillOnQueryTimeout(conn_opts.getKillOnQueryTimeout());
+  setUseCompression(conn_opts.useCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
@@ -386,6 +387,11 @@ void ConnectOperation::specializedRunImpl() {
         kv.first.c_str(),
         kv.second.c_str());
   }
+
+  if (useCompression()) {
+    mysql_options(conn()->mysql(), MYSQL_OPT_COMPRESS, nullptr);
+  }
+
   auto provider = conn_options_.getSSLOptionsProviderPtr();
   if (provider) {
     auto ssl_context_ = provider->getSSLContext();

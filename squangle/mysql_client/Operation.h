@@ -194,6 +194,15 @@ class ConnectionOptions {
     return *this;
   }
 
+  bool useCompression() const {
+    return use_compression_;
+  }
+
+  ConnectionOptions& setUseCompression(bool use_compression) {
+    use_compression_ = use_compression;
+    return *this;
+  }
+
   // MySQL 5.6 connection attributes.  Sent at time of connect.
   const std::unordered_map<string, string>& getConnectionAttributes() const {
     return connection_attributes_;
@@ -242,6 +251,7 @@ class ConnectionOptions {
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> connection_attributes_;
+  bool use_compression_ = false;
   uint32_t max_attempts_ = 1;
   bool killOnQueryTimeout_ = false;
 };
@@ -616,7 +626,16 @@ class ConnectOperation : public Operation {
   ConnectOperation* setKillOnQueryTimeout(bool killOnQueryTimeout);
 
   bool getKillOnQueryTimeout() const {
-      return conn_options_.getKillOnQueryTimeout();
+    return conn_options_.getKillOnQueryTimeout();
+  }
+
+  ConnectOperation* setUseCompression(bool use_compression) {
+    conn_options_.setUseCompression(use_compression);
+    return this;
+  }
+
+  bool useCompression() const {
+    return conn_options_.useCompression();
   }
 
   ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_options);
