@@ -9,10 +9,13 @@
  */
 
 #include "squangle/mysql_client/DbResult.h"
-#include "squangle/mysql_client/AsyncMysqlClient.h"
-#include "squangle/mysql_client/Operation.h"
 
 #include <ostream>
+
+#include <folly/ScopeGuard.h>
+
+#include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "squangle/mysql_client/Operation.h"
 
 namespace facebook {
 namespace common {
@@ -146,9 +149,7 @@ folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
   // Blocks when the stream is over and we need to handle IO
   auto current_row = stream_handler_->fetchOneRow(this);
   if (!current_row) {
-    if (exception_wrapper_) {
-      exception_wrapper_.throwException();
-    }
+    checkStoredException();
   } else {
     ++num_rows_;
   }
@@ -157,6 +158,7 @@ folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
 
 void StreamedQueryResult::checkStoredException() {
   if (exception_wrapper_) {
+    SCOPE_EXIT { exception_wrapper_ = {}; };
     exception_wrapper_.throwException();
   }
 }
