@@ -319,6 +319,7 @@ void MultiQueryStreamHandler::handleQueryFailed(StreamedQueryResult* result) {
   DCHECK(exception_wrapper_);
   if (result) {
     result->setException(exception_wrapper_);
+    result->freeHandler();
   } else {
     exception_wrapper_.throwException();
   }
