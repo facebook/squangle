@@ -386,6 +386,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual db::OperationType getOperationType() const = 0;
 
  protected:
+
+  // Threshold is 500ms, but because of smoothing, actual last loop delay
+  // needs to be roughly 2x this value to trigger detection
+  static constexpr double kAvgLoopTimeStallThresholdUs = 500 * 1000;
+
   class ConnectionProxy;
   explicit Operation(ConnectionProxy&& conn);
 

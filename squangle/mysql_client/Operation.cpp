@@ -483,12 +483,25 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto delta = chrono::high_resolution_clock::now() - start_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
-  auto msg = folly::stringPrintf(
-      "async connect to %s:%d timed out (took %.2fms)",
-      host().c_str(),
-      port(),
-      delta_micros / 1000.0);
-  setAsyncClientError(CR_SERVER_LOST, msg, "async connect to host timed out");
+
+  // Check for an overloaded EventBase
+  auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
+  if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
+    auto msg = folly::stringPrintf(
+        "async connect to %s:%d timed out (took %.2fms)",
+        host().c_str(),
+        port(),
+        delta_micros / 1000.0);
+    setAsyncClientError(CR_SERVER_LOST, msg, "async connect to host timed out");
+  } else {
+    auto msg = folly::stringPrintf(
+        "async connect to %s:%d timed out (loop stalled, avg loop time %.2fms)",
+        host().c_str(),
+        port(),
+        avgLoopTimeUs / 1000.0);
+    setAsyncClientError(
+        msg, "async connect to host timed out (loop stalled)");
+  }
   attemptFailed(OperationResult::TimedOut);
 }
 
@@ -949,17 +962,27 @@ void FetchOperation::specializedTimeoutTriggered() {
     rowStream()->mysql_query_result_->handle = nullptr;
   }
 
+  std::string rows;
   if (rowStream() && rowStream()->numRowsSeen()) {
+    rows = folly::sformat("%lu rows", rowStream()->numRowsSeen());
+  } else {
+    rows = "no rows seen";
+  }
+
+  auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
+  if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     msg = folly::stringPrintf(
-        "async query timed out (%lu rows, took %.2fms, ",
-        rowStream()->numRowsSeen(),
+        "async query timed out (%s, took %.2fms)",
+        rows.c_str(),
         delta_micros / 1000.0);
+    setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "async query timed out");
   } else {
     msg = folly::stringPrintf(
-        "async query timed out (no rows seen, took %.2fms)",
-        delta_micros / 1000.0);
+        "async query timed out (%s, loop stalled, avg loop time %.2fms)",
+        rows.c_str(),
+        avgLoopTimeUs / 1000.0);
+    setAsyncClientError(msg, "async query timed out (loop stalled)");
   }
-  setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "async query timed out");
   completeOperation(OperationResult::TimedOut);
 }
 
