@@ -405,7 +405,10 @@ void ConnectOperation::specializedRunImpl() {
       auto ssl_session_ = provider->getSSLSession();
       if (ssl_session_) {
         mysql_options4(
-            conn()->mysql(), MYSQL_OPT_SSL_SESSION, ssl_session_, nullptr);
+            conn()->mysql(),
+            MYSQL_OPT_SSL_SESSION,
+            ssl_session_,
+            (void*)1); /* takeOwnership=true */
       }
     }
   }
