@@ -79,7 +79,8 @@ class PoolOptions {
         pool_limit_(kDefaultMaxOpenConn * 100),
         idle_timeout_(kDefaultMaxIdleTime),
         age_timeout_(kDefaultMaxAge),
-        exp_policy_(ExpirationPolicy::Age) {}
+        exp_policy_(ExpirationPolicy::Age),
+        pool_per_instance_{false} {}
 
   PoolOptions& setPerKeyLimit(int conn_limit) {
     per_key_limit_ = conn_limit;
@@ -101,6 +102,14 @@ class PoolOptions {
     exp_policy_ = exp_policy;
     return *this;
   }
+  // If pooling per instance is chosen, then the db name will be ignored
+  // for the purposes of connection pooling. The user will be responsible
+  // for ensuring they are connected to the correct database. This is useful
+  // for instances with many databases
+  PoolOptions& setPoolPerMysqlInstance(bool poolPerInstance) {
+    pool_per_instance_ = poolPerInstance;
+    return *this;
+  }
 
   uint64_t getPerKeyLimit() const {
     return per_key_limit_;
@@ -117,6 +126,9 @@ class PoolOptions {
   ExpirationPolicy getExpPolicy() const {
     return exp_policy_;
   }
+  bool poolPerMysqlInstance() const {
+    return pool_per_instance_;
+  }
 
  private:
   uint64_t per_key_limit_;
@@ -124,6 +136,7 @@ class PoolOptions {
   Duration idle_timeout_;
   Duration age_timeout_;
   ExpirationPolicy exp_policy_;
+  bool pool_per_instance_;
 };
 
 class PoolKey {
@@ -300,6 +313,10 @@ class AsyncConnectionPool
 
   std::weak_ptr<AsyncConnectionPool> getSelfWeakPointer();
 
+  bool poolPerMysqlInstance() const {
+    return pool_per_instance_;
+  }
+
   // Caches the connection in case it's marked as reusable (default). If the
   // connection is in a transaction or the user marked as not reusable, then
   // we close it.
@@ -454,6 +471,7 @@ class AsyncConnectionPool
   const size_t pool_conn_limit_;
   Duration connection_age_timeout_;
   ExpirationPolicy expiration_policy_;
+  const bool pool_per_instance_;
 
   // Protects the read and writes of connection counters
   std::mutex counter_mutex_;

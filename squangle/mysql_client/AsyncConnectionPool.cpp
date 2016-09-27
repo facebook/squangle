@@ -90,6 +90,7 @@ AsyncConnectionPool::AsyncConnectionPool(
       pool_conn_limit_(pool_options.getPoolLimit()),
       connection_age_timeout_(pool_options.getAgeTimeout()),
       expiration_policy_(pool_options.getExpPolicy()),
+      pool_per_instance_(pool_options.poolPerMysqlInstance()),
       finished_shutdown_(false) {
   if (!mysql_client_->runInThread([this]() {
         cleanup_timer_.scheduleTimeout(PoolOptions::kCleanUpTimeout);
@@ -185,7 +186,14 @@ std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(
     ret = std::make_shared<ConnectPoolOperation>(
         getSelfWeakPointer(),
         mysql_client_,
-        ConnectionKey(host, port, database_name, user, password, special_tag));
+        ConnectionKey(
+            host,
+            port,
+            database_name,
+            user,
+            password,
+            special_tag,
+            poolPerMysqlInstance()));
     if (shutting_down_) {
       LOG(ERROR)
           << "Attempt to start pool operation while pool is shutting down";
