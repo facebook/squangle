@@ -393,23 +393,9 @@ void ConnectOperation::specializedRunImpl() {
   }
 
   auto provider = conn_options_.getSSLOptionsProviderPtr();
-  if (provider) {
-    auto ssl_context_ = provider->getSSLContext();
-    if (ssl_context_) {
-      if (connection_context_) {
-        connection_context_->isSslConnection = true;
-      }
-      mysql_options(
-          conn()->mysql(), MYSQL_OPT_SSL_CONTEXT, ssl_context_->getSSLCtx());
-
-      auto ssl_session_ = provider->getSSLSession();
-      if (ssl_session_) {
-        mysql_options4(
-            conn()->mysql(),
-            MYSQL_OPT_SSL_SESSION,
-            ssl_session_,
-            (void*)1); /* takeOwnership=true */
-      }
+  if (provider && provider->setMysqlSSLOptions(conn()->mysql())) {
+    if (connection_context_) {
+      connection_context_->isSslConnection = true;
     }
   }
 

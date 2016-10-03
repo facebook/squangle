@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <mysql.h>
 #include <wangle/client/ssl/SSLSession.h>
 
 namespace folly {
@@ -27,6 +28,8 @@ class SSLOptionsProviderBase {
 
   // this function is called when an SSL connection is successfully established
   virtual void storeSSLSession(wangle::SSLSessionPtr ssl_session) = 0;
+
+  bool setMysqlSSLOptions(MYSQL* mysql);
 };
 }
 }
