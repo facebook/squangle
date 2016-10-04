@@ -29,7 +29,13 @@ class SSLOptionsProviderBase {
   // this function is called when an SSL connection is successfully established
   virtual void storeSSLSession(wangle::SSLSessionPtr ssl_session) = 0;
 
+  // Set the SSL Options on the MYSQL object.
+  // Returns true if set was successful.
   bool setMysqlSSLOptions(MYSQL* mysql);
+
+  // Fetches the SSL Session from the MYSQL object and stores it.
+  // Returns if the SSL Session was reused for this connection.
+  bool storeMysqlSSLSession(MYSQL* mysql);
 };
 }
 }

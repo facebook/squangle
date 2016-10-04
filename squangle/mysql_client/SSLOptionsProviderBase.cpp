@@ -19,6 +19,17 @@ bool SSLOptionsProviderBase::setMysqlSSLOptions(MYSQL* mysql) {
   }
   return true;
 }
+
+bool SSLOptionsProviderBase::storeMysqlSSLSession(MYSQL* mysql) {
+  auto reused = mysql_get_ssl_session_reused(mysql);
+  if (!reused) {
+    wangle::SSLSessionPtr session((SSL_SESSION*)mysql_get_ssl_session(mysql));
+    if (session) {
+      storeSSLSession(std::move(session));
+    }
+  }
+  return reused;
+}
 }
 }
 }

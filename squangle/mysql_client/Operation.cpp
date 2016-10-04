@@ -537,13 +537,7 @@ void ConnectOperation::maybeStoreSSLSession() {
     return;
   }
 
-  if (!mysql_get_ssl_session_reused(conn()->mysql())) {
-    wangle::SSLSessionPtr session(
-        (SSL_SESSION*)mysql_get_ssl_session(conn()->mysql()));
-    if (session) {
-      provider->storeSSLSession(std::move(session));
-    }
-  } else {
+  if (provider->storeMysqlSSLSession(conn()->mysql())) {
     if (connection_context_) {
       connection_context_->sslSessionReused = true;
     }
