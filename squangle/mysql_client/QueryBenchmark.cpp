@@ -72,25 +72,15 @@ void numericQueryArgument(int numericCount) {
 }
 
 void stringDynamic(int count) {
-  folly::fbstring fb;
-  BENCHMARK_SUSPEND {
-    fb = folly::fbstring(fb);
-  }
   for (int i = 0; i < count; ++i) {
     folly::dynamic q(verylongstring);
-    folly::dynamic q2(fb);
     folly::dynamic q3("const char string");
   }
 }
 
 void stringQueryArgument(int count) {
-  folly::fbstring fb;
-  BENCHMARK_SUSPEND {
-    fb = folly::fbstring(fb);
-  }
   for (int i = 0; i < count; ++i) {
     QueryArgument q(verylongstring);
-    QueryArgument q2(fb);
     QueryArgument q3("const char string");
   }
 }
