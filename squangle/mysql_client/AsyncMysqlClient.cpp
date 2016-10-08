@@ -174,45 +174,32 @@ void AsyncMysqlClient::setDBCounterForTesting(
 }
 
 void MysqlClientBase::logQuerySuccess(
-    db::OperationType type,
-    Duration dur,
-    int queries_executed,
-    const folly::StringPiece query,
+    const db::QueryLoggingData& logging_data,
     const Connection& conn) {
   stats()->incrSucceededQueries();
   if (db_logger_) {
     db_logger_->logQuerySuccess(
-        type,
-        dur,
-        queries_executed,
-        query.toString(),
+        logging_data,
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
 
 void MysqlClientBase::logQueryFailure(
-    db::OperationType type,
+    const db::QueryLoggingData& logging_data,
     db::FailureReason reason,
-    Duration duration,
-    int queries_executed,
-    const folly::StringPiece query,
     const Connection& conn) {
   stats()->incrFailedQueries();
   if (db_logger_) {
     db_logger_->logQueryFailure(
-        type,
+        logging_data,
         reason,
-        duration,
-        queries_executed,
-        query.toString(),
         conn.mysql(),
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
 
 void MysqlClientBase::logConnectionSuccess(
-    db::OperationType type,
-    Duration duration,
+    const db::CommonLoggingData& logging_data,
     const ConnectionKey& conn_key,
     const db::ConnectionContextBase* connection_context) {
   if (connection_context && connection_context->isSslConnection) {
@@ -220,23 +207,21 @@ void MysqlClientBase::logConnectionSuccess(
   }
   if (db_logger_) {
     db_logger_->logConnectionSuccess(
-        type, duration, makeSquangleLoggingData(&conn_key, connection_context));
+        logging_data, makeSquangleLoggingData(&conn_key, connection_context));
   }
 }
 
 void MysqlClientBase::logConnectionFailure(
-    db::OperationType type,
+    const db::CommonLoggingData& logging_data,
     db::FailureReason reason,
-    Duration duration,
     const ConnectionKey& conn_key,
     MYSQL* mysql,
     const db::ConnectionContextBase* connection_context) {
   stats()->incrFailedConnections();
   if (db_logger_) {
     db_logger_->logConnectionFailure(
-        type,
+        logging_data,
         reason,
-        duration,
         mysql,
         makeSquangleLoggingData(&conn_key, connection_context));
   }

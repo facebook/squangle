@@ -21,39 +21,31 @@ void ConnectionContextBase::collectNormalValues(
 }
 
 void DBSimpleLogger::logQuerySuccess(
-    OperationType,
-    Duration,
-    int,
-    const std::string& query,
+    const QueryLoggingData& data,
     const SquangleLoggingData&) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " query (\"" << query << "\") succeeded.";
+          << " query (\"" << data.query << "\") succeeded.";
 }
 
 void DBSimpleLogger::logQueryFailure(
-    OperationType,
+    const QueryLoggingData& data,
     FailureReason,
-    Duration,
-    int,
-    const std::string& query,
     MYSQL*,
     const SquangleLoggingData&) {
   VLOG(2) << "[" << api_name_ << "]"
-          << " query (\"" << query << "\") failed.";
+          << " query (\"" << data.query << "\") failed.";
 }
 
 void DBSimpleLogger::logConnectionSuccess(
-    OperationType,
-    Duration,
+    const CommonLoggingData&,
     const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << connInfo.connKey->host << " succeeded";
 }
 
 void DBSimpleLogger::logConnectionFailure(
-    OperationType,
+    const CommonLoggingData&,
     FailureReason,
-    Duration,
     MYSQL*,
     const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"

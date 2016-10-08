@@ -796,6 +796,8 @@ class FetchOperation : public Operation {
   // Should only be called after pause.
   void resume();
 
+  int rows_received_ = 0;
+
  protected:
   MultiQuery queries_;
 

@@ -147,30 +147,22 @@ class MysqlClientBase {
   }
 
   void logQuerySuccess(
-      db::OperationType operation_name,
-      Duration dur,
-      int queries_executed,
-      const folly::StringPiece query,
+      const db::QueryLoggingData& logging_data,
       const Connection& conn);
 
   void logQueryFailure(
-      db::OperationType operation_name,
+      const db::QueryLoggingData& logging_data,
       db::FailureReason reason,
-      Duration duration,
-      int queries_executed,
-      const folly::StringPiece query,
       const Connection& conn);
 
   void logConnectionSuccess(
-      db::OperationType operation_name,
-      Duration dur,
+      const db::CommonLoggingData& logging_data,
       const ConnectionKey& conn_key,
       const db::ConnectionContextBase* extra_logging_data);
 
   void logConnectionFailure(
-      db::OperationType operation_name,
+      const db::CommonLoggingData& logging_data,
       db::FailureReason reason,
-      Duration dur,
       const ConnectionKey& conn_key,
       MYSQL* mysql,
       const db::ConnectionContextBase* extra_logging_data);

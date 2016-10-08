@@ -64,6 +64,29 @@ struct SquangleLoggingData {
   db::ClientPerfStats clientPerfStats;
 };
 
+struct CommonLoggingData {
+  CommonLoggingData(OperationType op, Duration duration)
+      : operation_type(op), operation_duration(duration) {}
+  OperationType operation_type;
+  Duration operation_duration;
+};
+
+struct QueryLoggingData : CommonLoggingData {
+  QueryLoggingData(
+      OperationType op,
+      Duration duration,
+      int queries,
+      const std::string& queryString,
+      int rows)
+      : CommonLoggingData(op, duration),
+        queries_executed(queries),
+        query(queryString),
+        rows_received(rows) {}
+  int queries_executed;
+  std::string query;
+  int rows_received;
+};
+
 // Base class for logging events of db client apis. This should be used as an
 // abstract and the children have specific ways to log.
 template <typename TConnectionInfo>
@@ -78,30 +101,22 @@ class DBLoggerBase {
 
   // Basic logging functions to be overloaded in children
   virtual void logQuerySuccess(
-      OperationType operation_type,
-      Duration query_time,
-      int queries_executed,
-      const std::string& query,
+      const QueryLoggingData& loggingData,
       const TConnectionInfo& connInfo) = 0;
 
   virtual void logQueryFailure(
-      OperationType operation_type,
+      const QueryLoggingData& logging_data,
       FailureReason reason,
-      Duration query_time,
-      int queries_executed,
-      const std::string& query,
       MYSQL* mysqlConn,
       const TConnectionInfo& connInfo) = 0;
 
   virtual void logConnectionSuccess(
-      OperationType operation_type,
-      Duration connect_time,
+      const CommonLoggingData& logging_data,
       const TConnectionInfo& connInfo) = 0;
 
   virtual void logConnectionFailure(
-      OperationType operation_type,
+      const CommonLoggingData& logging_data,
       FailureReason reason,
-      Duration connect_time,
       MYSQL* mysqlConn,
       const TConnectionInfo& connInfo) = 0;
 
@@ -153,30 +168,22 @@ class DBSimpleLogger : public SquangleLoggerBase {
   virtual ~DBSimpleLogger() {}
 
   void logQuerySuccess(
-      OperationType operation_type,
-      Duration query_time,
-      int queries_executed,
-      const std::string& query,
+      const QueryLoggingData& logging_data,
       const SquangleLoggingData& connInfo) override;
 
   void logQueryFailure(
-      OperationType operation_type,
+      const QueryLoggingData& logging_data,
       FailureReason reason,
-      Duration query_time,
-      int queries_executed,
-      const std::string& query,
       MYSQL* mysqlConn,
       const SquangleLoggingData& connInfo) override;
 
   void logConnectionSuccess(
-      OperationType operation_type,
-      Duration connect_time,
+      const CommonLoggingData& logging_data,
       const SquangleLoggingData& connInfo) override;
 
   void logConnectionFailure(
-      OperationType operation_type,
+      const CommonLoggingData& logging_data,
       FailureReason reason,
-      Duration connect_time,
       MYSQL* mysqlConn,
       const SquangleLoggingData& connInfo) override;
 };

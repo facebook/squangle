@@ -504,8 +504,7 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
       end_time_ - start_time_);
   if (result == OperationResult::Succeeded) {
     client()->logConnectionSuccess(
-        getOperationType(),
-        elapsed,
+        db::CommonLoggingData(getOperationType(), elapsed),
         *conn()->getKey(),
         connection_context_.get());
   } else {
@@ -516,9 +515,8 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
       reason = db::FailureReason::CANCELLED;
     }
     client()->logConnectionFailure(
-        getOperationType(),
+        db::CommonLoggingData(getOperationType(), elapsed),
         reason,
-        elapsed,
         *conn()->getKey(),
         conn()->mysql(),
         connection_context_.get());
@@ -832,6 +830,10 @@ void FetchOperation::socketActionable() {
         // Call it after setting the active_fetch_action_ so the child class can
         // decide if it wants to change the state
 
+        if (current_row_stream_ && current_row_stream_->mysql_query_result_) {
+          rows_received_ +=
+              mysql_num_rows(current_row_stream_->mysql_query_result_.get());
+        }
         ++num_queries_executed_;
         notifyQuerySuccess(more_results);
       }
@@ -974,12 +976,13 @@ void FetchOperation::specializedCompleteOperation() {
   if (result_ == OperationResult::Succeeded) {
     // set last successful query time to MysqlConnectionHolder
     conn()->setLastActivityTime(chrono::high_resolution_clock::now());
-    client()->logQuerySuccess(
+    db::QueryLoggingData logging_data(
         getOperationType(),
         elapsed(),
         num_queries_executed_,
-        rendered_query_,
-        *conn().get());
+        rendered_query_.toString(),
+        rows_received_);
+    client()->logQuerySuccess(logging_data, *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result_ == OperationResult::Cancelled) {
@@ -988,11 +991,13 @@ void FetchOperation::specializedCompleteOperation() {
       reason = db::FailureReason::TIMEOUT;
     }
     client()->logQueryFailure(
-        getOperationType(),
+        db::QueryLoggingData(
+            getOperationType(),
+            elapsed(),
+            num_queries_executed_,
+            rendered_query_.toString(),
+            rows_received_),
         reason,
-        elapsed(),
-        num_queries_executed_,
-        rendered_query_,
         *conn().get());
   }
 
