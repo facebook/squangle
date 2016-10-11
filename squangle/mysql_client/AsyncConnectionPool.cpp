@@ -125,7 +125,7 @@ void AsyncConnectionPool::shutdown() {
       cleanup_timer_.cancelTimeout();
       conn_storage_.clearAll();
       // Reacquire lock
-      std::unique_lock<std::mutex> lock(shutdown_mutex_);
+      std::unique_lock<std::mutex> shutdown_lock(shutdown_mutex_);
       finished_shutdown_.store(true, std::memory_order_relaxed);
       this->shutdown_condvar_.notify_one();
     });
@@ -238,7 +238,7 @@ void AsyncConnectionPool::recycleMysqlConnection(
   auto pool = getSelfWeakPointer();
   auto pmysql_conn = mysql_conn.release();
   bool scheduled = mysql_client_->runInThread([pool, pmysql_conn]() {
-    std::unique_ptr<MysqlPooledHolder> mysql_conn(
+    std::unique_ptr<MysqlPooledHolder> mysql_connection(
         static_cast<MysqlPooledHolder*>(pmysql_conn));
     auto shared_pool = pool.lock();
     if (!shared_pool) {
@@ -249,7 +249,7 @@ void AsyncConnectionPool::recycleMysqlConnection(
     // We don't have a nonblocking version for reset connection, so we
     // are going to delete the old one and the open connection being
     // removed procedure is going to check if it needs to open new one
-    shared_pool->addConnection(std::move(mysql_conn), false);
+    shared_pool->addConnection(std::move(mysql_connection), false);
   });
 
   if (!scheduled) {
