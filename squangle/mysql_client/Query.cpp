@@ -365,6 +365,8 @@ void Query::appendValue(folly::fbstring* s,
       formatStringParseError(querySp, offset, type, "double");
     }
     s->append(d.asString());
+  } else if (d.isQuery()) {
+    s->append(d.getQuery().render(connection));
   } else if (d.isNull()) {
     s->append("NULL");
   } else {
