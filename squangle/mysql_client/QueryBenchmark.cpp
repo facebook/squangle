@@ -87,14 +87,15 @@ void stringQueryArgument(int count) {
 
 void vectorDynamic(int count) {
   for (int i = 0; i < count; ++i) {
-    folly::dynamic q({"String value",
-                      10,
-                      2.0,
-                      "String value",
-                      10,
-                      2.0,
-                      dynamic::object("key", 10),
-                      dynamic::object("key", 10)});
+    folly::dynamic q((folly::dynamic::array(
+        "String value",
+        10,
+        2.0,
+        "String value",
+        10,
+        2.0,
+        dynamic::object("key", 10),
+        dynamic::object("key", 10))));
   }
 }
 
