@@ -5,6 +5,7 @@
 
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
+#include <folly/Hash.h>
 #include <folly/Random.h>
 
 namespace facebook {
@@ -41,10 +42,17 @@ class ClientPool {
     }
   }
 
-  // TODO: Allow sharding key to be passed
   std::shared_ptr<TClient> getClient() {
     auto idx = folly::Random::rand32() % client_pool_.size();
     return client_pool_[idx];
+  }
+
+  // Passing in a key will allow the use of a consistent AsyncConnectionPool
+  // object per key. This will greatly increase pool hits as currently
+  // the multiple pools do not share any resources. This also allows the
+  // MultiPool to respect limits
+  std::shared_ptr<TClient> getClient(const std::string& key) {
+    return client_pool_[folly::Hash()(key) % client_pool_.size()];
   }
 
   static std::shared_ptr<TClient> getClientFromDefault() {
@@ -55,6 +63,16 @@ class ClientPool {
           "MultiMysqlClientPool singleton has already been destroyed.");
     }
     return client_pool->getClient();
+  }
+
+  static std::shared_ptr<TClient> getClientFromDefault(const std::string& key) {
+    auto client_pool =
+        folly::Singleton<ClientPool<TClient, TClientFactory>>::try_get();
+    if (!client_pool) {
+      throw std::logic_error(
+          "MultiMysqlClientPool singleton has already been destroyed.");
+    }
+    return client_pool->getClient(key);
   }
 
  private:
