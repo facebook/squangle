@@ -28,7 +28,7 @@ class MysqlClientBase;
 class AsyncConnectionPool;
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
-typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
+typedef std::chrono::time_point<std::chrono::steady_clock> Timepoint;
 
 // Holds the mysql connection for easier re use
 class MysqlConnectionHolder {

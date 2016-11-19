@@ -72,7 +72,7 @@ void Operation::waitForSocketActionable() {
   }
 
   auto end = timeout_ + start_time_;
-  auto now = chrono::high_resolution_clock::now();
+  auto now = chrono::steady_clock::now();
   if (now >= end) {
     timeoutTriggered();
     return;
@@ -130,7 +130,7 @@ Operation* Operation::run() {
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
     state_ = OperationState::Pending;
   }
-  start_time_ = chrono::high_resolution_clock::now();
+  start_time_ = chrono::steady_clock::now();
   return specializedRun();
 }
 
@@ -151,7 +151,7 @@ void Operation::completeOperation(OperationResult result) {
 void Operation::completeOperationInner(OperationResult result) {
   state_ = OperationState::Completed;
   result_ = result;
-  end_time_ = chrono::high_resolution_clock::now();
+  end_time_ = chrono::steady_clock::now();
   if ((result == OperationResult::Cancelled ||
        result == OperationResult::TimedOut) &&
       conn()->hasInitialized()) {
@@ -331,7 +331,7 @@ bool ConnectOperation::shouldCompleteOperation(OperationResult result) {
   }
 
   auto now =
-      std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(1);
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(1);
   if (now > start_time_ + conn_options_.getTotalTimeout()) {
     return true;
   }
@@ -352,7 +352,7 @@ void ConnectOperation::attemptFailed(OperationResult result) {
   conn()->socketHandler()->cancelTimeout();
   conn()->close();
 
-  auto now = std::chrono::high_resolution_clock::now();
+  auto now = std::chrono::steady_clock::now();
   // Adjust timeout
   auto timeout_attempt_based = conn_options_.getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
@@ -469,7 +469,7 @@ void ConnectOperation::socketActionable() {
 }
 
 void ConnectOperation::specializedTimeoutTriggered() {
-  auto delta = chrono::high_resolution_clock::now() - start_time_;
+  auto delta = chrono::steady_clock::now() - start_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
 
@@ -921,7 +921,7 @@ RowBlock makeRowBlockFromStream(
 
 void FetchOperation::specializedTimeoutTriggered() {
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
-  auto delta = chrono::high_resolution_clock::now() - start_time_;
+  auto delta = chrono::steady_clock::now() - start_time_;
   int64_t delta_micros =
       chrono::duration_cast<chrono::microseconds>(delta).count();
   std::string msg;
@@ -975,7 +975,7 @@ void FetchOperation::specializedCompleteOperation() {
   // Stats for query
   if (result_ == OperationResult::Succeeded) {
     // set last successful query time to MysqlConnectionHolder
-    conn()->setLastActivityTime(chrono::high_resolution_clock::now());
+    conn()->setLastActivityTime(chrono::steady_clock::now());
     db::QueryLoggingData logging_data(
         getOperationType(),
         elapsed(),

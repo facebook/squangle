@@ -83,11 +83,11 @@ void AsyncMysqlClient::init() {
 }
 
 bool AsyncMysqlClient::runInThread(folly::Cob&& fn) {
-  auto scheduleTime = std::chrono::high_resolution_clock::now();
+  auto scheduleTime = std::chrono::steady_clock::now();
   if (!getEventBase()->runInEventBaseThread(
           [fn = std::move(fn), scheduleTime, this]() mutable {
             auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::high_resolution_clock::now() -
+                             std::chrono::steady_clock::now() -
                              scheduleTime).count();
             stats_tracker_->callbackDelayAvg.addSample(delay);
             fn();

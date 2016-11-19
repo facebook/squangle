@@ -88,7 +88,7 @@ enum class QueryCallbackReason;
 enum class StreamState;
 
 // Simplify some std::chrono types.
-typedef std::chrono::time_point<std::chrono::high_resolution_clock> Timepoint;
+typedef std::chrono::time_point<std::chrono::steady_clock> Timepoint;
 
 // Callbacks for connecting and querying, respectively.  A
 // ConnectCallback is invoked when a connection succeeds or fails.  A

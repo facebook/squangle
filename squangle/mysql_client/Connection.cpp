@@ -27,7 +27,7 @@ MysqlConnectionHolder::MysqlConnectionHolder(
       connection_opened_(already_open),
       can_reuse_(true) {
   client_->activeConnectionAdded(&conn_key_);
-  creation_time_ = std::chrono::high_resolution_clock::now();
+  creation_time_ = std::chrono::steady_clock::now();
 }
 
 MysqlConnectionHolder::MysqlConnectionHolder(
@@ -65,7 +65,7 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
 
 void MysqlConnectionHolder::connectionOpened() {
   connection_opened_ = true;
-  last_activity_time_ = std::chrono::high_resolution_clock::now();
+  last_activity_time_ = std::chrono::steady_clock::now();
   client_->stats()->incrOpenedConnections();
 }
 }

@@ -560,7 +560,7 @@ void AsyncConnectionPool::ConnStorage::queueConnection(
 void AsyncConnectionPool::ConnStorage::cleanupConnections() {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  Timepoint now = std::chrono::high_resolution_clock::now();
+  Timepoint now = std::chrono::steady_clock::now();
   for (auto connListIt = stock_.begin(); connListIt != stock_.end();) {
     auto& connList = connListIt->second;
     for (MysqlConnectionList::iterator it = connList.begin();
@@ -643,7 +643,7 @@ void ConnectPoolOperation::attemptFailed(OperationResult result) {
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
 
-  auto now = std::chrono::high_resolution_clock::now();
+  auto now = std::chrono::steady_clock::now();
   // Adjust timeout
   auto timeout_attempt_based = getConnectionOptions().getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
@@ -670,7 +670,7 @@ ConnectPoolOperation* ConnectPoolOperation::specializedRun() {
 
         // Set timeout for waiting for connection
         auto end = timeout_ + start_time_;
-        auto now = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::steady_clock::now();
         if (now >= end) {
           timeoutTriggered();
           return;
@@ -713,7 +713,7 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     // that the pool can't even try to open a connection.
     if (!(num_open == 0 && (num_opening > 0 ||
                             locked_pool->canCreateMoreConnections(pool_key)))) {
-      auto delta = std::chrono::high_resolution_clock::now() - start_time_;
+      auto delta = std::chrono::steady_clock::now() - start_time_;
       int64_t delta_micros =
           std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
       auto msg = folly::stringPrintf(
