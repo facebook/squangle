@@ -717,15 +717,17 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
       int64_t delta_micros =
           std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
       auto msg = folly::stringPrintf(
-          "connection to %s:%d timed out in pool(open %lu, opening %lu) (took "
-          "%.2fms)",
+          "[%d](%s)Connection to %s:%d timed out in pool"
+          "(open %lu, opening %lu) (took %.2fms)",
+          static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_POOL_CONN_TIMEOUT),
+          kErrorPrefix,
           host().c_str(),
           port(),
           num_open,
           num_opening,
           delta_micros / 1000.0);
       setAsyncClientError(
-          ER_OUT_OF_RESOURCES, msg, "connect to host timed out");
+          ER_OUT_OF_RESOURCES, msg, "Connection timed out in pool");
       attemptFailed(OperationResult::TimedOut);
       return;
     }

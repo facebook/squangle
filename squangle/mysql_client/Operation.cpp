@@ -477,19 +477,24 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "async connect to %s:%d timed out (took %.2fms)",
+        "[%d](%s) Connect to %s:%d timed out (took %.2fms)",
+        static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
+        kErrorPrefix,
         host().c_str(),
         port(),
         delta_micros / 1000.0);
-    setAsyncClientError(CR_SERVER_LOST, msg, "async connect to host timed out");
+    setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
-        "async connect to %s:%d timed out (loop stalled, avg loop time %.2fms)",
+        "[%d](%s) Connect to %s:%d timed out"
+        " (loop stalled, avg loop time %.2fms)",
+        static_cast<uint16_t>(
+            SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
+        kErrorPrefix,
         host().c_str(),
         port(),
         avgLoopTimeUs / 1000.0);
-    setAsyncClientError(
-        msg, "async connect to host timed out (loop stalled)");
+    setAsyncClientError(msg, "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
 }
@@ -957,16 +962,22 @@ void FetchOperation::specializedTimeoutTriggered() {
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     msg = folly::stringPrintf(
-        "async query timed out (%s, took %.2fms)",
+        "[%d](%s) Query timed out (%s, took %.2fms)",
+        static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
+        kErrorPrefix,
         rows.c_str(),
         delta_micros / 1000.0);
-    setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "async query timed out");
+    setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "Query timed out");
   } else {
     msg = folly::stringPrintf(
-        "async query timed out (%s, loop stalled, avg loop time %.2fms)",
+        "[%d](%s) Query timed out (%s, loop stalled,"
+        " avg loop time %.2fms)",
+        static_cast<uint16_t>(
+            SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED),
+        kErrorPrefix,
         rows.c_str(),
         avgLoopTimeUs / 1000.0);
-    setAsyncClientError(msg, "async query timed out (loop stalled)");
+    setAsyncClientError(msg, "Query timed out (loop stalled)");
   }
   completeOperation(OperationResult::TimedOut);
 }
