@@ -10,7 +10,6 @@
 //
 #include "squangle/mysql_client/OperationBatch.h"
 
-#include <chrono>
 #include <thread>
 
 namespace facebook {
