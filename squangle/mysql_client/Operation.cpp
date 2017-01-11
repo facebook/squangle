@@ -690,6 +690,11 @@ uint64_t FetchOperation::currentAffectedRows() {
   return current_affected_rows_;
 }
 
+const std::string& FetchOperation::currentRecvGtid() {
+  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  return current_recv_gtid_;
+}
+
 FetchOperation::RowStream* FetchOperation::rowStream() {
   CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
   return current_row_stream_.get_pointer();
@@ -736,6 +741,7 @@ void FetchOperation::socketActionable() {
 
       current_last_insert_id_ = 0;
       current_affected_rows_ = 0;
+      current_recv_gtid_ = std::string();
       query_executed_ = true;
       if (error) {
         active_fetch_action_ = FetchAction::CompleteQuery;
@@ -828,6 +834,9 @@ void FetchOperation::socketActionable() {
       } else {
         current_last_insert_id_ = mysql_insert_id(conn()->mysql());
         current_affected_rows_ = mysql_affected_rows(conn()->mysql());
+        if (conn()->mysql()->recv_gtid) {
+          current_recv_gtid_ = conn()->mysql()->recv_gtid;
+        }
         more_results = mysql_more_results(conn()->mysql());
         active_fetch_action_ = more_results ? FetchAction::StartQuery
                                             : FetchAction::CompleteOperation;
@@ -1162,6 +1171,7 @@ void QueryOperation::notifyQuerySuccess(bool more_results) {
   query_result_->setOperationResult(OperationResult::Succeeded);
   query_result_->setNumRowsAffected(FetchOperation::currentAffectedRows());
   query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
+  query_result_->setRecvGtid(FetchOperation::currentRecvGtid());
 
   query_result_->setPartial(false);
 
@@ -1233,6 +1243,7 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
   current_query_result_->setNumRowsAffected(
       FetchOperation::currentAffectedRows());
   current_query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
+  current_query_result_->setRecvGtid(FetchOperation::currentRecvGtid());
 
   if (buffered_query_callback_) {
     buffered_query_callback_(

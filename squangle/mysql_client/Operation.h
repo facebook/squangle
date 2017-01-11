@@ -793,6 +793,7 @@ class FetchOperation : public Operation {
   // mode. Leaking for tests.
   uint64_t currentLastInsertId();
   uint64_t currentAffectedRows();
+  const std::string& currentRecvGtid();
 
   int numCurrentQuery() const {
     return num_current_query_;
@@ -874,6 +875,7 @@ class FetchOperation : public Operation {
 
   uint64_t current_affected_rows_ = 0;
   uint64_t current_last_insert_id_ = 0;
+  std::string current_recv_gtid_;
 
   // When the Fetch gets paused, active fetch action moves to `WaitForConsumer`
   // and the action that got paused gets saved so tat `resume` can set it
@@ -1007,6 +1009,11 @@ class QueryOperation : public FetchOperation {
   // Number of rows affected (aka mysql_affected_rows).
   uint64_t numRowsAffected() const {
     return query_result_->numRowsAffected();
+  }
+
+  // Received gtid.
+  const std::string& recvGtid() const {
+    return query_result_->recvGtid();
   }
 
   void setQueryResult(QueryResult query_result) {

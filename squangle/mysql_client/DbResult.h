@@ -289,6 +289,15 @@ class QueryResult {
     num_rows_affected_ = num_rows_affected;
   }
 
+  // Current GTID
+  const std::string& recvGtid() const {
+    return recv_gtid_;
+  }
+
+  void setRecvGtid(const string& recv_gtid) {
+    recv_gtid_ = recv_gtid;
+  }
+
   // This can be called for complete or partial results. It's going to return
   // the total of rows stored in the QueryResult.
   size_t numRows() const {
@@ -383,6 +392,7 @@ class QueryResult {
   uint64_t num_rows_;
   uint64_t num_rows_affected_;
   uint64_t last_insert_id_;
+  std::string recv_gtid_;
 
   OperationResult operation_result_;
 
@@ -407,6 +417,12 @@ class StreamedQueryResult {
     // Will throw exception if there was an error
     checkAccessToResult();
     return last_insert_id_;
+  }
+
+  const string& recvGtid() {
+    // Will throw exception if there was an error
+    checkAccessToResult();
+    return recv_gtid_;
   }
 
   class Iterator;
@@ -463,7 +479,10 @@ class StreamedQueryResult {
   friend class Iterator;
   friend class MultiQueryStreamHandler;
 
-  void setResult(int64_t affected_rows, int64_t last_insert_id);
+  void setResult(
+      int64_t affected_rows,
+      int64_t last_insert_id,
+      const std::string& recv_gtid);
   void setException(folly::exception_wrapper ex);
   void freeHandler();
 
@@ -482,6 +501,7 @@ class StreamedQueryResult {
   size_t num_rows_ = 0;
   int64_t num_affected_rows_ = -1;
   int64_t last_insert_id_ = 0;
+  std::string recv_gtid_;
 
   folly::exception_wrapper exception_wrapper_;
 };

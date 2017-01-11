@@ -172,9 +172,11 @@ void StreamedQueryResult::checkAccessToResult() {
 
 void StreamedQueryResult::setResult(
     int64_t affected_rows,
-    int64_t last_insert_id) {
+    int64_t last_insert_id,
+    const string& recv_gtid) {
   num_affected_rows_ = affected_rows;
   last_insert_id_ = last_insert_id;
+  recv_gtid_ = recv_gtid;
 }
 
 void StreamedQueryResult::setException(folly::exception_wrapper ex) {
@@ -310,7 +312,9 @@ void MultiQueryStreamHandler::resumeOperation() {
 
 void MultiQueryStreamHandler::handleQueryEnded(StreamedQueryResult* result) {
   result->setResult(
-      operation_->currentAffectedRows(), operation_->currentLastInsertId());
+      operation_->currentAffectedRows(),
+      operation_->currentLastInsertId(),
+      operation_->currentRecvGtid());
   result->freeHandler();
   resumeOperation();
 }
