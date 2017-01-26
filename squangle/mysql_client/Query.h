@@ -41,6 +41,8 @@
 //
 // %s, %d, %f - strings, integers, or floats; NULL if a nullptr is
 //              passed in.
+// %m - folly::dynamic, gets converted to string/integer/float,
+//      throws otherwise
 // %=s, %=d, %=f - like the previous except suitable for comparison,
 //                 so "%s" becomes " = VALUE".  nulls become "IS NULL"
 // %T - a table name.  enclosed with ``.

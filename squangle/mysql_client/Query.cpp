@@ -347,7 +347,7 @@ void Query::appendValue(folly::fbstring* s,
   auto querySp = query_text_.getQuery();
 
   if (d.isString()) {
-    if (type != 's' && type != 'v') {
+    if (type != 's' && type != 'v' && type != 'm') {
       formatStringParseError(querySp, offset, type, "string");
     }
     auto value = d.asString();
@@ -356,12 +356,12 @@ void Query::appendValue(folly::fbstring* s,
     appendEscapedString(s, value, connection);
     s->push_back('"');
   } else if (d.isInt()) {
-    if (type != 'd' && type != 'v') {
+    if (type != 'd' && type != 'v' && type != 'm') {
       formatStringParseError(querySp, offset, type, "int");
     }
     s->append(d.asString());
   } else if (d.isDouble()) {
-    if (type != 'f' && type != 'v') {
+    if (type != 'f' && type != 'v' && type != 'm') {
       formatStringParseError(querySp, offset, type, "double");
     }
     s->append(d.asString());
@@ -487,6 +487,11 @@ folly::fbstring Query::render(MYSQL* conn,
 
     const auto& param = *current_param++;
     if (c == 'd' || c == 's' || c == 'f') {
+      appendValue(&ret, idx, c, param, conn);
+    } else if (c == 'm') {
+      if (!(param.isString() || param.isInt() || param.isDouble())) {
+        parseError(querySp, idx, "%m expects int/float/string");
+      }
       appendValue(&ret, idx, c, param, conn);
     } else if (c == 'K') {
       ret.append("/*");
