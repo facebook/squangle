@@ -21,8 +21,13 @@
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
 
 DEFINE_int64(
+    async_mysql_connect_timeout_micros,
+    1030 * 1000,
+    "default timeout, in micros, for mysql connect");
+
+DEFINE_int64(
     async_mysql_timeout_micros,
-    60 * 1000 * 1000,
+    10 * 1000 * 1000,
     "default timeout, in micros, for mysql operations");
 
 namespace facebook {
@@ -32,8 +37,8 @@ namespace mysql_client {
 namespace chrono = std::chrono;
 
 ConnectionOptions::ConnectionOptions()
-    : connection_timeout_(FLAGS_async_mysql_timeout_micros),
-      total_timeout_(FLAGS_async_mysql_timeout_micros),
+    : connection_timeout_(FLAGS_async_mysql_connect_timeout_micros),
+      total_timeout_(FLAGS_async_mysql_timeout_micros*2),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
 Operation::Operation(ConnectionProxy&& safe_conn)
