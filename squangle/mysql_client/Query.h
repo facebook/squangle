@@ -342,8 +342,8 @@ class MultiQuery {
 
   folly::StringPiece renderQuery(MYSQL* conn);
 
-  const Query& getQuery(int index) const {
-    CHECK_THROW(0 <= index || index < queries_.size(), std::invalid_argument);
+  const Query& getQuery(size_t index) const {
+    CHECK_THROW(index < queries_.size(), std::invalid_argument);
     return queries_[index];
   }
 
