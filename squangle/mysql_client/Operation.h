@@ -246,18 +246,6 @@ class ConnectionOptions {
     return total_timeout_;
   }
 
-  // If true, then when a query timesout, the client will open a new connection
-  // and kill the running query via KILL QUERY <mysqlThreadId>. This should
-  // usually not be used with a proxy since most proxies should handle timeouts.
-  ConnectionOptions& setKillOnQueryTimeout(bool killOnQueryTimeout) {
-    killOnQueryTimeout_ = killOnQueryTimeout;
-    return *this;
-  }
-
-  bool getKillOnQueryTimeout() const {
-    return killOnQueryTimeout_;
-  }
-
  private:
   Duration connection_timeout_;
   Duration total_timeout_;
@@ -266,7 +254,6 @@ class ConnectionOptions {
   std::unordered_map<string, string> connection_attributes_;
   bool use_compression_ = false;
   uint32_t max_attempts_ = 1;
-  bool killOnQueryTimeout_ = false;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -644,7 +631,7 @@ class ConnectOperation : public Operation {
   ConnectOperation* setKillOnQueryTimeout(bool killOnQueryTimeout);
 
   bool getKillOnQueryTimeout() const {
-    return conn_options_.getKillOnQueryTimeout();
+    return killOnQueryTimeout_;
   }
 
   ConnectOperation* setUseCompression(bool use_compression) {
@@ -683,7 +670,7 @@ class ConnectOperation : public Operation {
   wangle::SSLSessionPtr getSSLSession();
 
   uint32_t attempts_made_ = 0;
-
+  bool killOnQueryTimeout_ = false;
   ConnectionOptions conn_options_;
 
   // Context information for logging purposes.

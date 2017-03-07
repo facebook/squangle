@@ -792,6 +792,14 @@ class Connection {
     conn_options_ = conn_options;
   }
 
+  void setKillOnQueryTimeout(bool killOnQueryTimeout) {
+    killOnQueryTimeout_ = killOnQueryTimeout;
+  }
+
+  bool getKillOnQueryTimeout() {
+    return killOnQueryTimeout_;
+  }
+
   void setConnectionDyingCallback(ConnectionDyingCallback callback) {
     conn_dying_callback_ = callback;
   }
@@ -897,6 +905,8 @@ class Connection {
 
   ConnectionKey conn_key_;
   ConnectionOptions conn_options_;
+
+  bool killOnQueryTimeout_ = false;
 
   // Context information for logging purposes.
   std::unique_ptr<db::ConnectionContextBase> connection_context_;

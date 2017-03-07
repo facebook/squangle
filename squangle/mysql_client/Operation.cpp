@@ -266,7 +266,6 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
-  setKillOnQueryTimeout(conn_opts.getKillOnQueryTimeout());
   setUseCompression(conn_opts.useCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
   if (provider) {
@@ -313,7 +312,7 @@ ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
 }
 ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
     bool killOnQueryTimeout) {
-  conn_options_.setKillOnQueryTimeout(killOnQueryTimeout);
+  killOnQueryTimeout_ = killOnQueryTimeout;
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
@@ -563,6 +562,7 @@ void ConnectOperation::specializedCompleteOperation() {
   DCHECK(conn()->hasInitialized() || result_ == OperationResult::Cancelled);
 
   conn()->setConnectionOptions(conn_options_);
+  conn()->setKillOnQueryTimeout(getKillOnQueryTimeout());
   conn()->setConnectionContext(std::move(connection_context_));
 
   conn()->notify();
@@ -945,7 +945,7 @@ void FetchOperation::specializedTimeoutTriggered() {
       chrono::duration_cast<chrono::microseconds>(delta).count();
   std::string msg;
 
-  if (conn()->getConnectionOptions().getKillOnQueryTimeout()) {
+  if (conn()->getKillOnQueryTimeout()) {
     killRunningQuery();
   }
 
