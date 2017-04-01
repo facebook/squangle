@@ -47,6 +47,7 @@
 #include <vector>
 
 #include <folly/Exception.h>
+#include <folly/Function.h>
 #include <folly/Memory.h>
 #include <folly/String.h>
 #include <folly/dynamic.h>
@@ -98,6 +99,9 @@ typedef std::function<void(ConnectOperation&)> ConnectCallback;
 // Callback for observer. I will be called for a completed operation,
 // after the callback for the specific operation is called, if one is defined.
 typedef std::function<void(Operation&)> ObserverCallback;
+// Callback that is set on the ConnectOperation, and is then chained along all
+// subsequent queries on that given connection.
+typedef folly::Function<void(Operation&)> ChainedCallback;
 typedef std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>
     QueryCallback;
 typedef std::function<
@@ -387,6 +391,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
  protected:
 
+   // The chained callback will be passed along to following operations
+   void setChainedCallback(ChainedCallback chainedCallback);
+
   // Threshold is 500ms, but because of smoothing, actual last loop delay
   // needs to be roughly 2x this value to trigger detection
   static constexpr double kAvgLoopTimeStallThresholdUs = 500 * 1000;
@@ -520,6 +527,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
  private:
   folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;
+  ChainedCallback chained_callback_;
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   MysqlClientBase* mysql_client_;
@@ -651,6 +659,9 @@ class ConnectOperation : public Operation {
   virtual db::OperationType getOperationType() const override {
     return db::OperationType::Connect;
   }
+
+  // The chained callback will be passed along to following operations
+  using Operation::setChainedCallback;
 
  protected:
   virtual void attemptFailed(OperationResult result);

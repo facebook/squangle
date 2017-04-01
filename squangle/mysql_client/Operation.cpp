@@ -38,7 +38,7 @@ namespace chrono = std::chrono;
 
 ConnectionOptions::ConnectionOptions()
     : connection_timeout_(FLAGS_async_mysql_connect_timeout_micros),
-      total_timeout_(FLAGS_async_mysql_timeout_micros*2),
+      total_timeout_(FLAGS_async_mysql_timeout_micros * 2),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
 Operation::Operation(ConnectionProxy&& safe_conn)
@@ -47,6 +47,7 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       conn_proxy_(std::move(safe_conn)),
       mysql_errno_(0),
       observer_callback_(nullptr),
+      chained_callback_(nullptr),
       mysql_client_(conn()->mysql_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
   conn()->resetActionable();
@@ -168,6 +169,12 @@ void Operation::completeOperationInner(OperationResult result) {
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
 
+  if (chained_callback_) {
+    chained_callback_(*this);
+    // Pass the chained callback to the Connection now that we are done with it
+    conn()->setChainedCallback(std::move(chained_callback_));
+  }
+
   specializedCompleteOperation();
 
   // call observer callback
@@ -238,13 +245,30 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
   CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
   // allow more callbacks to be set
   if (observer_callback_) {
-    ObserverCallback old_obs_cb = observer_callback_;
-    observer_callback_ = [obs_cb, old_obs_cb](Operation& op) {
-      obs_cb(op);
-      old_obs_cb(op);
+    auto old_obs_cb = observer_callback_;
+    observer_callback_ =
+        [ obs = obs_cb,
+          old_obs = old_obs_cb ](Operation & op) {
+      obs(op);
+      old_obs(op);
     };
   } else {
     observer_callback_ = obs_cb;
+  }
+}
+
+void Operation::setChainedCallback(ChainedCallback chainedCallback) {
+  if (chained_callback_) {
+    auto original_callback = std::move(chained_callback_);
+    chained_callback_ = [
+      callback = std::move(original_callback),
+      new_callback = std::move(chainedCallback)
+    ](Operation & op) mutable {
+      callback(op);
+      new_callback(op);
+    };
+  } else {
+    chained_callback_ = std::move(chainedCallback);
   }
 }
 
@@ -334,8 +358,7 @@ bool ConnectOperation::shouldCompleteOperation(OperationResult result) {
     return true;
   }
 
-  auto now =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(1);
+  auto now = std::chrono::steady_clock::now() + std::chrono::milliseconds(1);
   if (now > start_time_ + conn_options_.getTotalTimeout()) {
     return true;
   }
@@ -599,9 +622,7 @@ FetchOperation::FetchOperation(
     std::vector<Query>&& queries)
     : Operation(std::move(conn)), queries_(std::move(queries)) {}
 
-FetchOperation::FetchOperation(
-    ConnectionProxy&& conn,
-    MultiQuery&& multi_query)
+FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
     : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
 
 bool FetchOperation::isStreamAccessAllowed() {

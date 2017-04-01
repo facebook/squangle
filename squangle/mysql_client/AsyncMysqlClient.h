@@ -804,6 +804,16 @@ class Connection {
     conn_dying_callback_ = callback;
   }
 
+  // Note that the chained callback is invoked in the MySQL client thread
+  // and so any callback should execute *very* quickly and not block
+  void setChainedCallback(ChainedCallback&& callback) {
+    callback_ = std::move(callback);
+  }
+
+  ChainedCallback stealChainedCallback() {
+    return std::move(callback_);
+  }
+
   const folly::EventBase* getEventBase() const {
     return client()->getEventBase();
   }
@@ -917,6 +927,8 @@ class Connection {
   ConnectionSocketHandler socket_handler_;
 
   ConnectionDyingCallback conn_dying_callback_;
+
+  ChainedCallback callback_;
 
   bool initialized_;
 
