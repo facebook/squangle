@@ -807,7 +807,18 @@ class Connection {
   // Note that the chained callback is invoked in the MySQL client thread
   // and so any callback should execute *very* quickly and not block
   void setChainedCallback(ChainedCallback&& callback) {
-    callback_ = std::move(callback);
+    if (callback_) {
+      auto original_callback = std::move(callback_);
+      callback_ = [
+        orig_callback = std::move(original_callback),
+        new_callback = std::move(callback)
+      ](Operation & op) mutable {
+        orig_callback(op);
+        new_callback(op);
+      };
+    } else {
+      callback_ = std::move(callback);
+    }
   }
 
   ChainedCallback stealChainedCallback() {
