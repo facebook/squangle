@@ -67,7 +67,7 @@ AsyncMysqlClient::AsyncMysqlClient(
 }
 
 AsyncMysqlClient::AsyncMysqlClient()
-    : AsyncMysqlClient(nullptr, folly::make_unique<db::SimpleDbCounter>()) { }
+    : AsyncMysqlClient(nullptr, std::make_unique<db::SimpleDbCounter>()) { }
 
 void AsyncMysqlClient::init() {
   thread_ = std::thread([this]() {
@@ -302,7 +302,7 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
 std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
     ConnectionKey conn_key,
     MYSQL* mysql_conn) {
-  return folly::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
+  return std::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
 }
 
 std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
@@ -330,7 +330,7 @@ Connection::Connection(
       callback_(nullptr),
       initialized_(false) {
   if (existing_connection) {
-    mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
+    mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
         mysql_client_, existing_connection, conn_key);
   }
 }
@@ -343,7 +343,7 @@ bool Connection::isSSL() const {
 void Connection::initMysqlOnly() {
   DCHECK(isInEventBaseThread());
   CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
-  mysql_connection_ = folly::make_unique<MysqlConnectionHolder>(
+  mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
       mysql_client_, mysql_init(nullptr), conn_key_);
   mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
 }

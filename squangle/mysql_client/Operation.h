@@ -1016,7 +1016,7 @@ class QueryOperation : public FetchOperation {
   }
 
   void setQueryResult(QueryResult query_result) {
-    query_result_ = folly::make_unique<QueryResult>(std::move(query_result));
+    query_result_ = std::make_unique<QueryResult>(std::move(query_result));
   }
 
   // Don't call this; it's public strictly for Connection to be able

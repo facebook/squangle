@@ -189,7 +189,7 @@ class MysqlClientBase {
   explicit MysqlClientBase(
       std::unique_ptr<db::SquangleLoggerBase> db_logger = nullptr,
       std::unique_ptr<db::DBCounterBase> db_stats =
-          folly::make_unique<db::SimpleDbCounter>());
+          std::make_unique<db::SimpleDbCounter>());
 
   virtual bool runInThread(folly::Cob&& fn) = 0;
 

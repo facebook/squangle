@@ -1157,7 +1157,7 @@ void MultiQueryStreamOperation::notifyOperationCompleted(
 
 QueryOperation::QueryOperation(ConnectionProxy&& conn, Query&& query)
     : FetchOperation(std::move(conn), std::vector<Query>{std::move(query)}),
-      query_result_(folly::make_unique<QueryResult>(0)) {}
+      query_result_(std::make_unique<QueryResult>(0)) {}
 
 void QueryOperation::notifyInitQuery() {
   auto* row_stream = rowStream();
@@ -1228,7 +1228,7 @@ MultiQueryOperation::MultiQueryOperation(
     ConnectionProxy&& conn,
     std::vector<Query>&& queries)
     : FetchOperation(std::move(conn), std::move(queries)),
-      current_query_result_(folly::make_unique<QueryResult>(0)) {}
+      current_query_result_(std::make_unique<QueryResult>(0)) {}
 
 void MultiQueryOperation::notifyInitQuery() {
   auto* row_stream = rowStream();
@@ -1278,7 +1278,7 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
     query_results_.emplace_back(std::move(*current_query_result_.get()));
   }
   current_query_result_ =
-      folly::make_unique<QueryResult>(current_query_result_->queryNum() + 1);
+      std::make_unique<QueryResult>(current_query_result_->queryNum() + 1);
 }
 
 void MultiQueryOperation::notifyOperationCompleted(OperationResult result) {

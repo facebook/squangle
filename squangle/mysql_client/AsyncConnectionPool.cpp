@@ -399,7 +399,7 @@ void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
     auto connOp = mysql_client_->beginConnection(pool_key.connKey);
     connOp->setConnectionOptions(pool_key.connOptions);
     connOp->setConnectionContext(
-        folly::make_unique<db::ConnectionContextBase>());
+        std::make_unique<db::ConnectionContextBase>());
     auto pool_ptr = getSelfWeakPointer();
 
     // ADRIANA The attribute part we can do later :D time to do it
@@ -418,7 +418,7 @@ void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
       auto mysql_conn = conn->stealMysqlConnectionHolder();
       // Now we got a connection from the client, it will become a pooled
       // connection
-      auto pooled_conn = folly::make_unique<MysqlPooledHolder>(
+      auto pooled_conn = std::make_unique<MysqlPooledHolder>(
           std::move(mysql_conn), pool_ptr, pool_key);
       locked_pool->removeOpeningConn(pool_key);
       locked_pool->addConnection(std::move(pooled_conn), true);
