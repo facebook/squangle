@@ -387,6 +387,12 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
   void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
 
+  // Same as above, but specify the error code.
+  void setAsyncClientError(
+      int mysql_errno,
+      StringPiece msg,
+      StringPiece normalizeMsg = "");
+
   virtual db::OperationType getOperationType() const = 0;
 
  protected:
@@ -411,12 +417,6 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Save any mysql errors that occurred (since we may hand off the
   // Connection before the user wants this information).
   void snapshotMysqlErrors();
-
-  // Same as above, but specify the error code.
-  void setAsyncClientError(
-      int mysql_errno,
-      StringPiece msg,
-      StringPiece normalizeMsg = "");
 
   // Called when an Operation needs to wait for the socket to become
   // readable or writable (aka actionable).
