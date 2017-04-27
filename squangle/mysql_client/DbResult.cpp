@@ -159,7 +159,7 @@ folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
 void StreamedQueryResult::checkStoredException() {
   if (exception_wrapper_) {
     SCOPE_EXIT { exception_wrapper_ = {}; };
-    exception_wrapper_.throwException();
+    exception_wrapper_.throw_exception();
   }
 }
 
@@ -325,7 +325,7 @@ void MultiQueryStreamHandler::handleQueryFailed(StreamedQueryResult* result) {
     result->setException(exception_wrapper_);
     result->freeHandler();
   } else {
-    exception_wrapper_.throwException();
+    exception_wrapper_.throw_exception();
   }
 }
 
