@@ -550,7 +550,8 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
         db::CommonLoggingData(getOperationType(), elapsed),
         reason,
         *conn()->getKey(),
-        conn()->mysql(),
+        mysql_errno(),
+        mysql_error(),
         connection_context_.get());
   }
 }
@@ -1044,6 +1045,8 @@ void FetchOperation::specializedCompleteOperation() {
             rendered_query_.toString(),
             rows_received_),
         reason,
+        mysql_errno(),
+        mysql_error(),
         *conn().get());
   }
 

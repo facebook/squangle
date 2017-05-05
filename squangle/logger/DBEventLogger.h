@@ -10,8 +10,7 @@
 #ifndef COMMON_DB_EVENT_LOGGER_H
 #define COMMON_DB_EVENT_LOGGER_H
 
-#include <mysql.h>
-#include <errmsg.h> // also MySQL
+#include <errmsg.h> // MySQL
 
 #include <chrono>
 #include <string>
@@ -107,7 +106,8 @@ class DBLoggerBase {
   virtual void logQueryFailure(
       const QueryLoggingData& logging_data,
       FailureReason reason,
-      MYSQL* mysqlConn,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const TConnectionInfo& connInfo) = 0;
 
   virtual void logConnectionSuccess(
@@ -117,7 +117,8 @@ class DBLoggerBase {
   virtual void logConnectionFailure(
       const CommonLoggingData& logging_data,
       FailureReason reason,
-      MYSQL* mysqlConn,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const TConnectionInfo& connInfo) = 0;
 
   const char* FailureString(FailureReason reason) {
@@ -174,7 +175,8 @@ class DBSimpleLogger : public SquangleLoggerBase {
   void logQueryFailure(
       const QueryLoggingData& logging_data,
       FailureReason reason,
-      MYSQL* mysqlConn,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const SquangleLoggingData& connInfo) override;
 
   void logConnectionSuccess(
@@ -184,7 +186,8 @@ class DBSimpleLogger : public SquangleLoggerBase {
   void logConnectionFailure(
       const CommonLoggingData& logging_data,
       FailureReason reason,
-      MYSQL* mysqlConn,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const SquangleLoggingData& connInfo) override;
 };
 }

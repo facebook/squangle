@@ -30,7 +30,8 @@ void DBSimpleLogger::logQuerySuccess(
 void DBSimpleLogger::logQueryFailure(
     const QueryLoggingData& data,
     FailureReason,
-    MYSQL*,
+    unsigned int,
+    const std::string&,
     const SquangleLoggingData&) {
   VLOG(2) << "[" << api_name_ << "]"
           << " query (\"" << data.query << "\") failed.";
@@ -46,7 +47,8 @@ void DBSimpleLogger::logConnectionSuccess(
 void DBSimpleLogger::logConnectionFailure(
     const CommonLoggingData&,
     FailureReason,
-    MYSQL*,
+    unsigned int,
+    const std::string&,
     const SquangleLoggingData& connInfo) {
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << connInfo.connKey->host << " failed";

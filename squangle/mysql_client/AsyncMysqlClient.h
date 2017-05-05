@@ -153,6 +153,8 @@ class MysqlClientBase {
   void logQueryFailure(
       const db::QueryLoggingData& logging_data,
       db::FailureReason reason,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const Connection& conn);
 
   void logConnectionSuccess(
@@ -164,7 +166,8 @@ class MysqlClientBase {
       const db::CommonLoggingData& logging_data,
       db::FailureReason reason,
       const ConnectionKey& conn_key,
-      MYSQL* mysql,
+      unsigned int mysqlErrno,
+      const std::string& error,
       const db::ConnectionContextBase* extra_logging_data);
 
   db::DBCounterBase* stats() {

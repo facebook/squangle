@@ -187,13 +187,16 @@ void MysqlClientBase::logQuerySuccess(
 void MysqlClientBase::logQueryFailure(
     const db::QueryLoggingData& logging_data,
     db::FailureReason reason,
+    unsigned int mysqlErrno,
+    const std::string& error,
     const Connection& conn) {
   stats()->incrFailedQueries();
   if (db_logger_) {
     db_logger_->logQueryFailure(
         logging_data,
         reason,
-        conn.mysql(),
+        mysqlErrno,
+        error,
         makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
   }
 }
@@ -215,14 +218,16 @@ void MysqlClientBase::logConnectionFailure(
     const db::CommonLoggingData& logging_data,
     db::FailureReason reason,
     const ConnectionKey& conn_key,
-    MYSQL* mysql,
+    unsigned int mysqlErrno,
+    const std::string& error,
     const db::ConnectionContextBase* connection_context) {
   stats()->incrFailedConnections();
   if (db_logger_) {
     db_logger_->logConnectionFailure(
         logging_data,
         reason,
-        mysql,
+        mysqlErrno,
+        error,
         makeSquangleLoggingData(&conn_key, connection_context));
   }
 }
