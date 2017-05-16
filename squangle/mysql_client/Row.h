@@ -119,11 +119,13 @@ class RowFields {
   RowFields(
       folly::StringKeyedUnorderedMap<int>&& field_name_map,
       std::vector<string>&& field_names,
+      std::vector<string>&& table_names,
       std::vector<uint64_t>&& mysql_field_flags,
       std::vector<enum_field_types>&& mysql_field_types)
       : num_fields_(field_names.size()),
         field_name_map_(std::move(field_name_map)),
         field_names_(std::move(field_names)),
+        table_names_(std::move(table_names)),
         mysql_field_flags_(std::move(mysql_field_flags)),
         mysql_field_types_(std::move(mysql_field_types)) {}
   // Get the MySQL type of the field.
@@ -156,6 +158,12 @@ class RowFields {
     return field_names_[i];
   }
 
+  // What is the name of the table (or alias) for the i'th column in the
+  // result set?
+  StringPiece tableName(size_t i) const {
+    return table_names_[i];
+  }
+
   // How many fields and rows do we have?
   size_t numFields() const {
     return num_fields_;
@@ -175,6 +183,7 @@ class RowFields {
   size_t num_fields_;
   const folly::StringKeyedUnorderedMap<int> field_name_map_;
   const vector<string> field_names_;
+  const vector<string> table_names_;
   const std::vector<uint64_t> mysql_field_flags_;
   const std::vector<enum_field_types> mysql_field_types_;
 

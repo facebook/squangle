@@ -20,6 +20,7 @@ std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
     return nullptr;
   }
   std::vector<string> field_names;
+  std::vector<string> table_names;
   folly::StringKeyedUnorderedMap<int> field_name_map;
   std::vector<uint64_t> mysql_field_flags;
   std::vector<enum_field_types> mysql_field_types;
@@ -28,6 +29,7 @@ std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
   for (int i = 0; i < num_fields_; ++i) {
     MYSQL_FIELD* mysql_field = &fields_[i];
     field_names.emplace_back(mysql_field->name, mysql_field->name_length);
+    table_names.emplace_back(mysql_field->table, mysql_field->table_length);
     mysql_field_flags.push_back(mysql_field->flags);
     mysql_field_types.push_back(mysql_field->type);
     field_name_map[mysql_field->name] = i;
@@ -35,6 +37,7 @@ std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
   return std::make_shared<RowFields>(
       std::move(field_name_map),
       std::move(field_names),
+      std::move(table_names),
       std::move(mysql_field_flags),
       std::move(mysql_field_types));
 }
