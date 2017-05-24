@@ -47,6 +47,13 @@ class ClientPool {
     return client_pool_[idx];
   }
 
+  template <typename F>
+  void forEachClient(F func) {
+    for (auto& client : client_pool_) {
+      func(client);
+    }
+  }
+
   // Passing in a key will allow the use of a consistent AsyncConnectionPool
   // object per key. This will greatly increase pool hits as currently
   // the multiple pools do not share any resources. This also allows the
