@@ -246,7 +246,7 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
-  FOLLY_WARN_UNUSED_RESULT folly::Future<ConnectResult> connectFuture(
+  FOLLY_NODISCARD folly::Future<ConnectResult> connectFuture(
       const string& host,
       int port,
       const string& database_name,
@@ -258,7 +258,7 @@ class AsyncMysqlClient : public MysqlClientBase {
   // until the operation has finished.
   // In case the we fail to acquire the connection, MysqlException will be
   // thrown.
-  FOLLY_WARN_UNUSED_RESULT std::unique_ptr<Connection> connect(
+  FOLLY_NODISCARD std::unique_ptr<Connection> connect(
       const string& host,
       int port,
       const string& database_name,
