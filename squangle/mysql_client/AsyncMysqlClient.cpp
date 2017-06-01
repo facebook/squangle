@@ -31,6 +31,7 @@ namespace {
 class InitMysqlLibrary {
  public:
   InitMysqlLibrary() {
+    folly::SSLContext::initializeOpenSSL();
     mysql_library_init(-1, nullptr, nullptr);
   }
 };
