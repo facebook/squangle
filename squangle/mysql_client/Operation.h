@@ -547,7 +547,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 // AsyncMysqlClient::beginConnection.
 class ConnectOperation : public Operation {
  public:
-  virtual ~ConnectOperation();
+  ~ConnectOperation() override;
 
   void setCallback(ConnectCallback cb) {
     connect_callback_ = cb;
@@ -656,7 +656,7 @@ class ConnectOperation : public Operation {
   static constexpr Duration kMinimumViableConnectTimeout =
       std::chrono::microseconds(50);
 
-  virtual db::OperationType getOperationType() const override {
+  db::OperationType getOperationType() const override {
     return db::OperationType::Connect;
   }
 
@@ -719,7 +719,7 @@ class ConnectOperation : public Operation {
 // state.
 class FetchOperation : public Operation {
  public:
-  virtual ~FetchOperation() = default;
+  ~FetchOperation() override = default;
   void mustSucceed() override;
 
   // Return the query as it was sent to MySQL (i.e., for a single
@@ -891,7 +891,7 @@ class FetchOperation : public Operation {
 // This is an experimental class. Please don't use directly.
 class MultiQueryStreamOperation : public FetchOperation {
  public:
-  virtual ~MultiQueryStreamOperation() = default;
+  ~MultiQueryStreamOperation() override = default;
 
   typedef std::function<void(FetchOperation*, StreamState)> Callback;
 
@@ -967,7 +967,7 @@ class MultiQueryStreamOperation : public FetchOperation {
 // Constructed via Connection::beginQuery.
 class QueryOperation : public FetchOperation {
  public:
-  virtual ~QueryOperation() = default;
+  ~QueryOperation() override = default;
 
   void setCallback(QueryCallback cb) {
     buffered_query_callback_ = cb;
@@ -1061,7 +1061,7 @@ class QueryOperation : public FetchOperation {
 // Constructed via Connection::beginMultiQuery.
 class MultiQueryOperation : public FetchOperation {
  public:
-  virtual ~MultiQueryOperation();
+  ~MultiQueryOperation() override;
 
   // Set our callback.  This is invoked multiple times -- once for
   // every RowBatch and once, with nullptr for the RowBatch,
