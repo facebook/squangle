@@ -227,7 +227,7 @@ class MysqlClientBase {
 class AsyncMysqlClient : public MysqlClientBase {
  public:
   AsyncMysqlClient();
-  virtual ~AsyncMysqlClient();
+  ~AsyncMysqlClient() override;
 
   std::unique_ptr<Connection> createConnection(
       ConnectionKey conn_key,
@@ -522,8 +522,8 @@ class ConnectionSocketHandler : public folly::EventHandler,
                                 public folly::AsyncTimeout {
  public:
   explicit ConnectionSocketHandler(folly::EventBase* base);
-  virtual void timeoutExpired() noexcept;
-  void handlerReady(uint16_t events) noexcept;
+  void timeoutExpired() noexcept override;
+  void handlerReady(uint16_t events) noexcept override;
   void setOperation(Operation* op) {
     op_ = op;
   }

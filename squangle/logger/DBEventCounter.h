@@ -85,7 +85,7 @@ class SimpleDbCounter : public DBCounterBase {
     return opened_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrOpenedConnections() {
+  void incrOpenedConnections() override {
     opened_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -94,7 +94,7 @@ class SimpleDbCounter : public DBCounterBase {
     return closed_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrClosedConnections() {
+  void incrClosedConnections() override {
     closed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -103,7 +103,7 @@ class SimpleDbCounter : public DBCounterBase {
     return failed_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrFailedConnections() {
+  void incrFailedConnections() override {
     failed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -112,7 +112,7 @@ class SimpleDbCounter : public DBCounterBase {
     return failed_queries_.load(std::memory_order_relaxed);
   }
 
-  void incrFailedQueries() {
+  void incrFailedQueries() override {
     failed_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -121,7 +121,7 @@ class SimpleDbCounter : public DBCounterBase {
     return succeeded_queries_.load(std::memory_order_relaxed);
   }
 
-  void incrSucceededQueries() {
+  void incrSucceededQueries() override {
     succeeded_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -129,7 +129,7 @@ class SimpleDbCounter : public DBCounterBase {
     return ssl_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrSSLConnections() {
+  void incrSSLConnections() override {
     ssl_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -137,7 +137,7 @@ class SimpleDbCounter : public DBCounterBase {
     return reused_ssl_sessions_.load(std::memory_order_relaxed);
   }
 
-  void incrReusedSSLSessions() {
+  void incrReusedSSLSessions() override {
     reused_ssl_sessions_.fetch_add(1, std::memory_order_relaxed);
   }
 
