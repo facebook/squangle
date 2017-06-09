@@ -32,10 +32,10 @@ class Exception : public std::exception {
   explicit Exception(Args&&... args)
       : msg_(folly::to<std::string>(std::forward<Args>(args)...)) {}
 
-  virtual ~Exception() throw() {}
+  ~Exception() throw() override {}
 
   // std::exception methods
-  virtual const char* what() const throw() {
+  const char* what() const throw() override {
     return msg_.c_str();
   }
 

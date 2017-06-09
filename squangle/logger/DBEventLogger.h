@@ -166,7 +166,7 @@ class DBSimpleLogger : public SquangleLoggerBase {
   explicit DBSimpleLogger(std::string api_name)
       : DBLoggerBase(std::move(api_name)) {}
 
-  virtual ~DBSimpleLogger() {}
+  ~DBSimpleLogger() override {}
 
   void logQuerySuccess(
       const QueryLoggingData& logging_data,

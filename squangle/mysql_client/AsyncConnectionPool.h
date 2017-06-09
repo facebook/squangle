@@ -184,7 +184,7 @@ class MysqlPooledHolder : public MysqlConnectionHolder {
       std::weak_ptr<AsyncConnectionPool> weak_pool,
       const PoolKey& pool_key);
 
-  ~MysqlPooledHolder();
+  ~MysqlPooledHolder() override;
 
   void setLifeDuration(Duration dur) {
     good_for_ = dur;
@@ -457,7 +457,7 @@ class AsyncConnectionPool
   class CleanUpTimer : public folly::AsyncTimeout {
    public:
     explicit CleanUpTimer(folly::EventBase* base, ConnStorage* pool);
-    virtual void timeoutExpired() noexcept;
+    void timeoutExpired() noexcept override;
 
    private:
     ConnStorage* pool_;
@@ -505,7 +505,7 @@ class AsyncConnectionPool
 
 class ConnectPoolOperation : public ConnectOperation {
  public:
-  virtual ~ConnectPoolOperation() {}
+  ~ConnectPoolOperation() override {}
 
   // Don't call this; it's public strictly for AsyncConnectionPool to be
   // able to call make_shared.
@@ -520,11 +520,11 @@ class ConnectPoolOperation : public ConnectOperation {
   }
 
  protected:
-  virtual void attemptFailed(OperationResult result) override;
+  void attemptFailed(OperationResult result) override;
 
-  virtual ConnectPoolOperation* specializedRun() override;
-  virtual void specializedTimeoutTriggered() override;
-  virtual void socketActionable() override;
+  ConnectPoolOperation* specializedRun() override;
+  void specializedTimeoutTriggered() override;
+  void socketActionable() override;
 
  private:
   // Called when the connection is matched by the pool client
