@@ -32,6 +32,7 @@
 #include <folly/Format.h>
 #include <folly/Hash.h>
 #include <folly/Range.h>
+#include <folly/dynamic.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 
 namespace facebook {
@@ -65,6 +66,9 @@ class Row {
 
   template <typename T, typename L>
   T getWithDefault(const L& l, const T d) const;
+
+  folly::dynamic getDynamic(size_t l) const;
+  folly::dynamic getDynamic(StringPiece l) const;
 
   // Vector-like and map-like access.  Note the above about ambiguity
   // for map access when column names conflict.
@@ -274,6 +278,11 @@ class RowBlock {
   // What is the name of the i'th column in the result set?
   StringPiece fieldName(size_t i) const {
     return row_fields_info_->fieldName(i);
+  }
+
+  // What is the index of the column labeled n
+  size_t fieldIndex(StringPiece n) const {
+    return row_fields_info_->fieldIndex(n);
   }
 
   // Is our rowblock empty?

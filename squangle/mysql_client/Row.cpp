@@ -90,6 +90,43 @@ auto Row::end() const -> Iterator {
   return Iterator(this, size());
 }
 
+folly::dynamic Row::getDynamic(StringPiece l) const {
+  return getDynamic(row_block_->fieldIndex(l));
+}
+
+folly::dynamic Row::getDynamic(size_t l) const {
+  enum_field_types type = row_block_->getFieldType(l);
+  try {
+    switch (type) {
+      // folly::dynamic::Type::BOOL
+      case MYSQL_TYPE_BIT:
+      case MYSQL_TYPE_TINY:
+        return folly::dynamic(row_block_->getField<bool>(row_number_, l));
+
+      // folly::dynamic::Type::DOUBLE
+      case MYSQL_TYPE_DECIMAL:
+      case MYSQL_TYPE_FLOAT:
+      case MYSQL_TYPE_DOUBLE:
+        return folly::dynamic(row_block_->getField<double>(row_number_, l));
+
+      // folly::dynamic::Type::INT64
+      case MYSQL_TYPE_SHORT:
+      case MYSQL_TYPE_LONG:
+      case MYSQL_TYPE_LONGLONG:
+      case MYSQL_TYPE_INT24:
+      case MYSQL_TYPE_ENUM:
+        return folly::dynamic(row_block_->getField<long>(row_number_, l));
+
+      // folly::dynamic::Type::STRING
+      default:
+        return folly::dynamic(row_block_->getField<string>(row_number_, l));
+    }
+  } catch (const std::exception &e) {
+    // If we failed to parse (NULL int, etc), try again as a string
+    return folly::dynamic(row_block_->getField<string>(row_number_, l));
+  }
+}
+
 template <>
 StringPiece RowBlock::getField(size_t row, size_t field_num) const {
   size_t entry = row * row_fields_info_->numFields() + field_num;
