@@ -125,7 +125,7 @@ void keyPairQueryArgument(int count) {
   }
 }
 
-void simpleConversionDynamic(int count) {
+void simpleConversionDynamic(int /*count*/) {
   folly::dynamic q_int(10), q_double(2.0), q_string("hey, I'm Pusheen"),
       q_pair(dynamic::object("col1", "Leaving la vila loca"));
 
@@ -147,7 +147,7 @@ void simpleConversionDynamic(int count) {
   }
 }
 
-void simpleConversionQueryArgument(int count) {
+void simpleConversionQueryArgument(int /*count*/) {
   QueryArgument q_int(10), q_double(2.0), q_string("hey, I'm Pusheen"),
       q_pair("col1", "Leaving la vila loca");
 
@@ -268,7 +268,7 @@ BENCHMARK(createQueryObject) {
   }
 }
 
-int main(int argc, char** argv) {
+int main(int /*argc*/, char** /*argv*/) {
   int keys_count = 1000;
   for (int i = 0; i < keys_count; ++i) {
     keys.push_back(

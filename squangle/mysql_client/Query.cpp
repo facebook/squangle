@@ -128,7 +128,7 @@ struct FbStringConverter : public boost::static_visitor<fbstring> {
     return folly::to<fbstring>(operand);
   }
   template <typename T>
-  fbstring operator()(const T& operand) const {
+  fbstring operator()(const T& /*operand*/) const {
     throw std::invalid_argument(
         "Only allowed type conversions are Int, Double, Bool and String");
   }

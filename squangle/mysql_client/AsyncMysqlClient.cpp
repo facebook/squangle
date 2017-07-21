@@ -620,7 +620,7 @@ void ConnectionSocketHandler::timeoutExpired() noexcept {
   op_->timeoutTriggered();
 }
 
-void ConnectionSocketHandler::handlerReady(uint16_t events) noexcept {
+void ConnectionSocketHandler::handlerReady(uint16_t /*events*/) noexcept {
   DCHECK(op_->conn()->isInEventBaseThread());
   CHECK_THROW(
       op_->state_ != OperationState::Completed &&

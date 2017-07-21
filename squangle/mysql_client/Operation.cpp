@@ -340,7 +340,7 @@ ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
-    std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider) {
+    std::unique_ptr<SSLOptionsProviderBase> /*ssl_options_provider*/) {
   LOG(ERROR) << "Using deprecated function";
   return this;
 }

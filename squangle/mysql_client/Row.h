@@ -362,7 +362,7 @@ class RowBlock {
  private:
   time_t getDateField(size_t row, size_t field_num) const;
 
-  bool isDate(size_t row, size_t field_num) const {
+  bool isDate(size_t /*row*/, size_t field_num) const {
     switch (getFieldType(field_num)) {
       case MYSQL_TYPE_TIMESTAMP:
       case MYSQL_TYPE_DATETIME:
