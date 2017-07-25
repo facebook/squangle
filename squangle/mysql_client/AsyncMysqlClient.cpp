@@ -19,6 +19,7 @@
 #include <folly/ThreadName.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
+#include <folly/ssl/Init.h>
 
 #include <mysql.h>
 
@@ -31,7 +32,7 @@ namespace {
 class InitMysqlLibrary {
  public:
   InitMysqlLibrary() {
-    folly::SSLContext::initializeOpenSSL();
+    folly::ssl::init();
     mysql_library_init(-1, nullptr, nullptr);
   }
 };
