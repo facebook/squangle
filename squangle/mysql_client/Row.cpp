@@ -57,6 +57,14 @@ int EphemeralRow::numFields() const {
   return row_fields_->numFields();
 }
 
+uint64_t EphemeralRow::calculateRowLength() const {
+  uint64_t rowLength = 0;
+  for (int i = 0; i < numFields(); ++i) {
+    rowLength += field_lengths_[i];
+  }
+  return rowLength;
+}
+
 Row::Row(const RowBlock* row_block, size_t row_number)
     : row_block_(row_block), row_number_(row_number) {
   CHECK_LT(row_number, row_block->numRows());

@@ -736,6 +736,11 @@ class FetchOperation : public Operation {
     return num_queries_executed_;
   }
 
+  uint64_t resultSize() const {
+    CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
+    return total_result_size_;
+  }
+
   // This class encapsulates the operations and access to the MySQL ResultSet.
   // When the consumer receives a notification for RowsFetched, it should
   // consume `rowStream`:
@@ -775,6 +780,7 @@ class FetchOperation : public Operation {
 
     bool query_finished_ = false;
     uint64_t num_rows_seen_ = 0;
+    uint64_t query_result_size_ = 0;
 
     using MysqlResultDeleter =
         folly::static_function_deleter<MYSQL_RES, mysql_free_result>;
@@ -871,6 +877,10 @@ class FetchOperation : public Operation {
   // During a `notify` call, the consumer might want to know the index of the
   // current query, that's what `num_current_query_` is counting.
   int num_current_query_ = 0;
+  // Best effort attempt to calculate the size of the result set in bytes.
+  // Only counts the actual data in rows, not bytes sent over the wire, and
+  // doesn't include column/table metadata or mysql packet overhead
+  uint64_t total_result_size_ = 0;
 
   uint64_t current_affected_rows_ = 0;
   uint64_t current_last_insert_id_ = 0;

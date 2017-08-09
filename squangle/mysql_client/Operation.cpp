@@ -696,6 +696,7 @@ bool FetchOperation::RowStream::slurp() {
   }
   unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_.get());
   current_row_.assign(EphemeralRow(row, field_lengths, &row_fields_));
+  query_result_size_ += current_row_->calculateRowLength();
   return true;
 }
 
@@ -874,6 +875,7 @@ void FetchOperation::socketActionable() {
         if (current_row_stream_ && current_row_stream_->mysql_query_result_) {
           rows_received_ +=
               mysql_num_rows(current_row_stream_->mysql_query_result_.get());
+          total_result_size_ += current_row_stream_->query_result_size_;
         }
         ++num_queries_executed_;
         notifyQuerySuccess(more_results);
@@ -1028,7 +1030,8 @@ void FetchOperation::specializedCompleteOperation() {
         elapsed(),
         num_queries_executed_,
         rendered_query_.toString(),
-        rows_received_);
+        rows_received_,
+        total_result_size_);
     client()->logQuerySuccess(logging_data, *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
@@ -1043,7 +1046,8 @@ void FetchOperation::specializedCompleteOperation() {
             elapsed(),
             num_queries_executed_,
             rendered_query_.toString(),
-            rows_received_),
+            rows_received_,
+            total_result_size_),
         reason,
         mysql_errno(),
         mysql_error(),

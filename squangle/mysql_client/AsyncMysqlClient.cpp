@@ -503,6 +503,7 @@ DbQueryResult Connection::query(Query&& query) {
   DbQueryResult result(
       std::move(op->stealQueryResult()),
       op->numQueriesExecuted(),
+      op->resultSize(),
       nullptr,
       op->result(),
       conn_key,
@@ -535,6 +536,7 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   DbMultiQueryResult result(
       std::move(op->stealQueryResults()),
       op->numQueriesExecuted(),
+      op->resultSize(),
       nullptr,
       op->result(),
       conn_key,

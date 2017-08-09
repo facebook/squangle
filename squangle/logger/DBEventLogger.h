@@ -76,14 +76,17 @@ struct QueryLoggingData : CommonLoggingData {
       Duration duration,
       int queries,
       const std::string& queryString,
-      int rows)
+      int rows,
+      uint64_t resultSize = 0)
       : CommonLoggingData(op, duration),
         queries_executed(queries),
         query(queryString),
-        rows_received(rows) {}
+        rows_received(rows),
+        result_size(resultSize) {}
   int queries_executed;
   std::string query;
   int rows_received;
+  uint64_t result_size;
 };
 
 // Base class for logging events of db client apis. This should be used as an

@@ -67,6 +67,7 @@ folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
       DbQueryResult result(
           std::move(query_result),
           op.numQueriesExecuted(),
+          op.resultSize(),
           op.releaseConnection(),
           op.result(),
           conn_key,
@@ -107,6 +108,7 @@ folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
       DbMultiQueryResult result(
           std::move(query_results),
           op.numQueriesExecuted(),
+          op.resultSize(),
           op.releaseConnection(),
           op.result(),
           conn_key,

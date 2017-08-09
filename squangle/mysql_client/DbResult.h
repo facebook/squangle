@@ -145,16 +145,22 @@ class FetchResult : public DbResult {
   FetchResult(
       SingleMultiResult query_result,
       int num_queries_executed,
+      uint64_t result_size,
       std::unique_ptr<Connection>&& conn,
       OperationResult result,
       const ConnectionKey conn_key,
       Duration elapsed)
       : DbResult(std::move(conn), result, conn_key, elapsed),
         fetch_result_(std::move(query_result)),
-        num_queries_executed_(num_queries_executed) {}
+        num_queries_executed_(num_queries_executed),
+        result_size_(result_size) {}
 
   int numQueriesExecuted() const {
     return num_queries_executed_;
+  }
+
+  uint64_t resultSize() const {
+    return result_size_;
   }
 
   const SingleMultiResult& queryResult() const {
@@ -169,6 +175,7 @@ class FetchResult : public DbResult {
   SingleMultiResult fetch_result_;
 
   int num_queries_executed_;
+  uint64_t result_size_;
 };
 
 // A QueryResult encapsulates the data regarding a query, as rows fetched,

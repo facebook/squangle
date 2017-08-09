@@ -445,6 +445,9 @@ class EphemeralRow {
 
   int numFields() const;
 
+  // Calculates the number of bytes in the row data
+  uint64_t calculateRowLength() const;
+
   EphemeralRow(EphemeralRow const&) = delete;
   EphemeralRow& operator=(EphemeralRow const&) = delete;
 
