@@ -69,7 +69,7 @@ class MysqlConnectionHolder {
   }
 
   bool isReusable() {
-    return can_reuse_;
+    return can_reuse_ && mysql_errno(mysql()) == 0;
   }
 
   // Don't close the mysql fd in the destructor. Useful when connections
