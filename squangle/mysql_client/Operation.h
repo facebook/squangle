@@ -207,7 +207,9 @@ class ConnectionOptions {
 
   ConnectionOptions& setConnectionAttributes(
       const std::unordered_map<string, string>& attributes) {
-    connection_attributes_ = attributes;
+    for (auto& kv : attributes) {
+      connection_attributes_[kv.first] = kv.second;
+    }
     return *this;
   }
 
