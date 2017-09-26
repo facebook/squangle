@@ -39,8 +39,8 @@
 //
 // Codes:
 //
-// %s, %d, %f - strings, integers, or floats; NULL if a nullptr is
-//              passed in.
+// %s, %d, %u, %f - strings, integers, unsigned integers or floats;
+//                  NULL if a nullptr is passed in.
 // %m - folly::dynamic, gets converted to string/integer/float,
 //      throws otherwise
 // %=s, %=d, %=f - like the previous except suitable for comparison,
@@ -54,7 +54,7 @@
 //      will become "`table_name`.`column_name` AS `alias`"
 // %V - VALUES style row list; expects a list of lists, each of the same
 //      length.
-// %Ls, %Ld, %Lf - strings/ints/floats separated by commas
+// %Ls, %Ld, %Lu, %Lf - strings/ints/uints/floats separated by commas
 // %LC - list of column names separated by commas. Optionally supplied as
 //       a list of two-/three-tuples to define qualified column names or
 //       qualified column names with aliases. Similar to %C.
@@ -62,7 +62,8 @@
 //            to %W)
 // %U, %W - keys and values suitable for UPDATE and WHERE clauses,
 //          respectively.  %U becomes "`col1` = val1, `col2` = val2"
-//          and %W becomes "`col1` = val1 AND `col2` = val2"
+//          and %W becomes "`col1` = val1 AND `col2` = val2". Does not currently
+//          support unsigned integers.
 // %Q - literal string, evil evil.  don't use.
 // %K - an SQL comment.  Will put the /* and */ for you.
 //
