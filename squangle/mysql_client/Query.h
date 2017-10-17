@@ -269,7 +269,7 @@ class Query {
       }
       DCHECK_EQ(query_, *query_buffer_);
       *query_buffer_ += " ";
-      *query_buffer_ += other.getQuery().toFbstring();
+      *query_buffer_ += other.getQuery().to<folly::fbstring>();
       query_ = folly::StringPiece(*query_buffer_);
       sanityChecks();
       return *this;

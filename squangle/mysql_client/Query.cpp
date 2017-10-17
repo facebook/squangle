@@ -453,7 +453,7 @@ folly::fbstring Query::render(MYSQL* conn,
   auto querySp = query_text_.getQuery();
 
   if (unsafe_query_) {
-    return querySp.toFbstring();
+    return querySp.to<folly::fbstring>();
   }
 
   auto offset = querySp.find_first_of(";'\"`");

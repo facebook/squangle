@@ -729,7 +729,7 @@ class FetchOperation : public Operation {
   // combined).
   folly::fbstring getExecutedQuery() const {
     CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
-    return rendered_query_.toFbstring();
+    return rendered_query_.to<folly::fbstring>();
   }
 
   // Number of queries that succeed to execute
