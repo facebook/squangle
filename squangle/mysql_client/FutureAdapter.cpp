@@ -32,7 +32,11 @@ folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
     if (op.ok()) {
       // succeeded, let's build the result
       ConnectResult conn_res(
-          op.releaseConnection(), op.result(), *op.getKey(), op.elapsed());
+          op.releaseConnection(),
+          op.result(),
+          *op.getKey(),
+          op.elapsed(),
+          op.attemptsMade());
       promise->setValue(std::move(conn_res));
     } else {
       auto conn = op.releaseConnection();

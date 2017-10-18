@@ -59,6 +59,16 @@ std::unique_ptr<Connection> DbResult::releaseConnection() {
   return std::move(conn_);
 }
 
+ConnectResult::ConnectResult(
+    std::unique_ptr<Connection>&& conn,
+    OperationResult result,
+    const ConnectionKey& conn_key,
+    Duration elapsed_time,
+    uint32_t num_attempts)
+    : DbResult(std::move(conn), result, conn_key, elapsed_time),
+      num_attempts_(num_attempts) {}
+
+
 QueryResult::QueryResult(int query_num)
     : query_num_(query_num),
       partial_(true),

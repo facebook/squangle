@@ -137,7 +137,22 @@ class DbResult : public OperationResultBase {
   OperationResult result_;
 };
 
-typedef DbResult ConnectResult;
+class ConnectResult : public DbResult {
+ public:
+  ConnectResult(
+      std::unique_ptr<Connection>&& conn,
+      OperationResult result,
+      const ConnectionKey& conn_key,
+      Duration elapsed_time,
+      uint32_t num_attempts);
+
+ uint32_t numAttempts() const {
+   return num_attempts_;
+ }
+
+ private:
+   uint32_t num_attempts_;
+};
 
 template <typename SingleMultiResult>
 class FetchResult : public DbResult {
