@@ -11,7 +11,7 @@
 #include "squangle/base/ConnectionKey.h"
 
 #include <folly/Format.h>
-#include <folly/hash/Hash.h>
+#include <folly/Hash.h>
 
 namespace facebook {
 namespace common {
