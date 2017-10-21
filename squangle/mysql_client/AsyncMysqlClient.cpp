@@ -16,7 +16,7 @@
 
 #include <folly/Memory.h>
 #include <folly/Singleton.h>
-#include <folly/ThreadName.h>
+#include <folly/system/ThreadName.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
 #include <folly/ssl/Init.h>
