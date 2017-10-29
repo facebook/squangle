@@ -30,7 +30,7 @@
 
 #include <folly/Conv.h>
 #include <folly/Format.h>
-#include <folly/Hash.h>
+#include <folly/hash/Hash.h>
 #include <folly/Range.h>
 #include <folly/dynamic.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>

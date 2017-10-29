@@ -5,7 +5,7 @@
 
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
-#include <folly/Hash.h>
+#include <folly/hash/Hash.h>
 #include <folly/Random.h>
 
 namespace facebook {
