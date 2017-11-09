@@ -724,6 +724,10 @@ class FetchOperation : public Operation {
   ~FetchOperation() override = default;
   void mustSucceed() override;
 
+  // Only supported with fbmysql server
+  void setQueryAttributes(
+      const std::unordered_map<std::string, std::string>& attributes);
+
   // Return the query as it was sent to MySQL (i.e., for a single
   // query, the query itself, but for multiquery, all queries
   // combined).
@@ -820,6 +824,9 @@ class FetchOperation : public Operation {
 
  protected:
   MultiQuery queries_;
+
+  // Only for fbmysql fork
+  std::unordered_map<std::string, std::string> attributes_;
 
   FetchOperation* specializedRun() override;
 

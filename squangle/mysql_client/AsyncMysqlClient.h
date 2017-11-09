@@ -622,11 +622,15 @@ class Connection {
   // StreamResultHandler
   static MultiQueryStreamHandler streamMultiQuery(
       std::unique_ptr<Connection> connection,
-      std::vector<Query>&& queries);
+      std::vector<Query>&& queries,
+      const std::unordered_map<std::string, std::string>& attributes =
+          std::unordered_map<std::string, std::string>());
 
   static MultiQueryStreamHandler streamMultiQuery(
       std::unique_ptr<Connection> connection,
-      MultiQuery&& multi_query);
+      MultiQuery&& multi_query,
+      const std::unordered_map<std::string, std::string>& attributes =
+          std::unordered_map<std::string, std::string>());
 
   // variant that takes a QueryOperation for more convenient chaining of
   // queries.

@@ -626,6 +626,11 @@ FetchOperation::FetchOperation(
 FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
     : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
 
+void FetchOperation::setQueryAttributes(
+    const std::unordered_map<std::string, std::string>& attributes) {
+  attributes_ = attributes;
+}
+
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();
@@ -645,6 +650,14 @@ FetchOperation* FetchOperation::specializedRun() {
 
 void FetchOperation::specializedRunImpl() {
   try {
+    mysql_options(this->conn()->mysql(), MYSQL_OPT_QUERY_ATTR_RESET, 0);
+    for (auto& it : attributes_) {
+      mysql_options4(
+          conn()->mysql(),
+          MYSQL_OPT_QUERY_ATTR_ADD,
+          it.first.c_str(),
+          it.second.c_str());
+    }
     rendered_query_ = queries_.renderQuery(conn()->mysql());
     socketActionable();
   } catch (std::invalid_argument& e) {

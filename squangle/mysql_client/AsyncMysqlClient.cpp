@@ -556,23 +556,31 @@ DbMultiQueryResult Connection::multiQuery(Args&&... args) {
 
 MultiQueryStreamHandler Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
-    std::vector<Query>&& queries) {
-  auto operation = beginAnyQuery<MultiQueryStreamOperation>(
-      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
-      std::move(queries));
+    std::vector<Query>&& queries,
+    const std::unordered_map<std::string, std::string>& attributes) {
   // MultiQueryStreamHandler needs to be alive while the operation is running.
   // To accomplish that, ~MultiQueryStreamHandler waits until
   // `postOperationEnded` is called.
+  auto operation = beginAnyQuery<MultiQueryStreamOperation>(
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
+      std::move(queries));
+  if (attributes.size() > 0) {
+    operation->setQueryAttributes(attributes);
+  }
   return MultiQueryStreamHandler(operation);
 }
 
 MultiQueryStreamHandler Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
-    MultiQuery&& multi_query) {
+    MultiQuery&& multi_query,
+    const std::unordered_map<std::string, std::string>& attributes) {
   auto proxy =
       Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn)));
   auto connP = proxy.get();
   auto ret = connP->createOperation(std::move(proxy), std::move(multi_query));
+  if (attributes.size() > 0) {
+    ret->setQueryAttributes(attributes);
+  }
   Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {
     ret->setTimeout(timeout);
