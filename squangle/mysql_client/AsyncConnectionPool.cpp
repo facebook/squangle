@@ -654,45 +654,58 @@ void ConnectPoolOperation::attemptFailed(OperationResult result) {
 }
 
 ConnectPoolOperation* ConnectPoolOperation::specializedRun() {
-  if (!client()->runInThread([this]() {
-        // There is a race condition that allows a cancelled operation
-        // getting here, but checking inside the main thread again is fine.
-
-        // Initialize all we need from our tevent handler
-        if (attempts_made_ == 0) {
-          conn()->initialize(false);
-        }
-        conn()->socketHandler()->setOperation(this);
-
-        if (conn_options_.getSSLOptionsProviderPtr() && connection_context_) {
-          connection_context_->isSslConnection = true;
-        }
-
-        // Set timeout for waiting for connection
-        auto end = timeout_ + start_time_;
-        auto now = std::chrono::steady_clock::now();
-        if (now >= end) {
-          timeoutTriggered();
+  std::weak_ptr<Operation> weakSelf = getSharedPointer();
+  if (!client()->runInThread([weakSelf]() {
+        // There is a race confition that allows a cancelled or completed
+        // operation getting here. The self ptr check ensures that the client
+        // has not freed the reference to the operation, and the state() check
+        // verifies whether other relevant memebers have been cleaned up by
+        // connect callbacks
+        auto self =
+            std::static_pointer_cast<ConnectPoolOperation>(weakSelf.lock());
+        if (!self || (self->state() == OperationState::Completed)) {
+          LOG(ERROR) << "ConnectPoolOperation freed before running";
           return;
         }
 
-        conn()->socketHandler()->scheduleTimeout(
-            std::chrono::duration_cast<std::chrono::milliseconds>(end - now)
-                .count());
-
-        auto shared_pool = pool_.lock();
-        // Remove before to not count against itself
-        removeClientReference();
-        if (shared_pool) {
-          shared_pool->registerForConnection(this);
-        } else {
-          VLOG(2) << "Pool is gone, operation must cancel";
-          this->cancel();
-        }
+        self->specializedRunImpl();
       })) {
     completeOperationInner(OperationResult::Failed);
   }
   return this;
+}
+
+void ConnectPoolOperation::specializedRunImpl() {
+  // Initialize all we need from our tevent handler
+  if (attempts_made_ == 0) {
+    conn()->initialize(false);
+  }
+  conn()->socketHandler()->setOperation(this);
+
+  if (conn_options_.getSSLOptionsProviderPtr() && connection_context_) {
+    connection_context_->isSslConnection = true;
+  }
+
+  // Set timeout for waiting for connection
+  auto end = timeout_ + start_time_;
+  auto now = std::chrono::steady_clock::now();
+  if (now >= end) {
+    timeoutTriggered();
+    return;
+  }
+
+  conn()->socketHandler()->scheduleTimeout(
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - now).count());
+
+  auto shared_pool = pool_.lock();
+  // Remove before to not count against itself
+  removeClientReference();
+  if (shared_pool) {
+    shared_pool->registerForConnection(this);
+  } else {
+    VLOG(2) << "Pool is gone, operation must cancel";
+    cancel();
+  }
 }
 
 void ConnectPoolOperation::specializedTimeoutTriggered() {

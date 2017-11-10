@@ -527,6 +527,7 @@ class ConnectPoolOperation : public ConnectOperation {
   void socketActionable() override;
 
  private:
+  void specializedRunImpl();
   // Called when the connection is matched by the pool client
   void connectionCallback(std::unique_ptr<MysqlPooledHolder> mysql_conn);
   // Called when the connection that the pool is trying to acquire failed
