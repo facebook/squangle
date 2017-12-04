@@ -891,6 +891,8 @@ void FetchOperation::socketActionable() {
           total_result_size_ += current_row_stream_->query_result_size_;
         }
         ++num_queries_executed_;
+        no_index_used_ |=
+            conn()->mysql()->server_status & SERVER_QUERY_NO_INDEX_USED;
         notifyQuerySuccess(more_results);
       }
       current_row_stream_.clear();
@@ -1044,7 +1046,8 @@ void FetchOperation::specializedCompleteOperation() {
         num_queries_executed_,
         rendered_query_.toString(),
         rows_received_,
-        total_result_size_);
+        total_result_size_,
+        no_index_used_);
     client()->logQuerySuccess(logging_data, *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
@@ -1060,7 +1063,8 @@ void FetchOperation::specializedCompleteOperation() {
             num_queries_executed_,
             rendered_query_.toString(),
             rows_received_,
-            total_result_size_),
+            total_result_size_,
+            no_index_used_),
         reason,
         mysql_errno(),
         mysql_error(),

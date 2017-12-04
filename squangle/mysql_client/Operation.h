@@ -806,6 +806,10 @@ class FetchOperation : public Operation {
   uint64_t currentAffectedRows();
   const std::string& currentRecvGtid();
 
+  bool noIndexUsed() const {
+    return no_index_used_;
+  }
+
   int numCurrentQuery() const {
     return num_current_query_;
   }
@@ -881,6 +885,7 @@ class FetchOperation : public Operation {
   // Current query data
   folly::Optional<RowStream> current_row_stream_;
   bool query_executed_ = false;
+  bool no_index_used_ = false;
   // TODO: Rename `executed` to `succeeded`
   int num_queries_executed_ = 0;
   // During a `notify` call, the consumer might want to know the index of the

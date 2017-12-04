@@ -77,16 +77,19 @@ struct QueryLoggingData : CommonLoggingData {
       int queries,
       const std::string& queryString,
       int rows,
-      uint64_t resultSize = 0)
+      uint64_t resultSize = 0,
+      bool noIndexUsed = false)
       : CommonLoggingData(op, duration),
         queries_executed(queries),
         query(queryString),
         rows_received(rows),
-        result_size(resultSize) {}
+        result_size(resultSize),
+        no_index_used(noIndexUsed) {}
   int queries_executed;
   std::string query;
   int rows_received;
   uint64_t result_size;
+  bool no_index_used;
 };
 
 // Base class for logging events of db client apis. This should be used as an
