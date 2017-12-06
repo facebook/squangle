@@ -213,13 +213,15 @@ class ConnectionOptions {
     return *this;
   }
 
-  bool useCompression() const {
-    return use_compression_;
+  // Sorry for the weird API, there is no enum for compression = None
+  ConnectionOptions& setCompression(
+      folly::Optional<mysql_compression_lib> comp_lib) {
+    compression_lib_ = comp_lib;
+    return *this;
   }
 
-  ConnectionOptions& setUseCompression(bool use_compression) {
-    use_compression_ = use_compression;
-    return *this;
+  folly::Optional<mysql_compression_lib> getCompression() const {
+    return compression_lib_;
   }
 
   // MySQL 5.6 connection attributes.  Sent at time of connect.
@@ -258,7 +260,7 @@ class ConnectionOptions {
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> connection_attributes_;
-  bool use_compression_ = false;
+  folly::Optional<mysql_compression_lib> compression_lib_ = nullptr;
   uint32_t max_attempts_ = 1;
 };
 
@@ -644,13 +646,14 @@ class ConnectOperation : public Operation {
     return killOnQueryTimeout_;
   }
 
-  ConnectOperation* setUseCompression(bool use_compression) {
-    conn_options_.setUseCompression(use_compression);
+  ConnectOperation* setCompression(
+      folly::Optional<mysql_compression_lib> compression_lib) {
+    conn_options_.setCompression(compression_lib);
     return this;
   }
 
-  bool useCompression() const {
-    return conn_options_.useCompression();
+  folly::Optional<mysql_compression_lib> getCompression() const {
+    return conn_options_.getCompression();
   }
 
   ConnectOperation* setConnectionOptions(const ConnectionOptions& conn_options);

@@ -290,7 +290,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setConnectionAttributes(conn_opts.getConnectionAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
-  setUseCompression(conn_opts.useCompression());
+  setCompression(conn_opts.getCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
@@ -415,8 +415,10 @@ void ConnectOperation::specializedRunImpl() {
         kv.second.c_str());
   }
 
-  if (useCompression()) {
-    mysql_options(conn()->mysql(), MYSQL_OPT_COMPRESS, nullptr);
+  auto compression_lib = getCompression();
+  if (compression_lib) {
+    mysql_options(
+        conn()->mysql(), MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
   }
 
   auto provider = conn_options_.getSSLOptionsProviderPtr();
