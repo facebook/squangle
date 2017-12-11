@@ -417,6 +417,8 @@ void ConnectOperation::specializedRunImpl() {
 
   auto compression_lib = getCompression();
   if (compression_lib) {
+    CHECK(*compression_lib != MYSQL_COMPRESSION_ZSTD)
+        << "ZSTD is not yet supported";
     mysql_options(
         conn()->mysql(), MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
   }
