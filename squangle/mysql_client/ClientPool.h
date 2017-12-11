@@ -42,7 +42,7 @@ class ClientPool {
     }
   }
 
-  std::shared_ptr<TClient> getClient() {
+  std::shared_ptr<TClient> getClient() const {
     auto idx = folly::Random::rand32() % client_pool_.size();
     return client_pool_[idx];
   }
@@ -58,7 +58,7 @@ class ClientPool {
   // object per key. This will greatly increase pool hits as currently
   // the multiple pools do not share any resources. This also allows the
   // MultiPool to respect limits
-  std::shared_ptr<TClient> getClient(const std::string& key) {
+  std::shared_ptr<TClient> getClient(const std::string& key) const {
     return client_pool_[folly::Hash()(key) % client_pool_.size()];
   }
 
