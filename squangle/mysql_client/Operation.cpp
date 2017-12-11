@@ -993,17 +993,26 @@ void FetchOperation::specializedTimeoutTriggered() {
   }
 
   /*
-   * Calling mysql_free_result currently tries to flush the socket
-   * This is unnecessary as the socket will be cleaned up anyway and
-   * blocking calls are used to clean up. By removing the MYSQL
-   * handle here, we stop the socket from being flushed.
+   * The MYSQL_RES struct contains a handle to the MYSQL struct that created
+   * it. Currently, calling mysql_free_result attempts to flush the buffer in
+   * accordance with the protocol. This makes it so that if a MYSQL_RES is
+   * freed during a query and before the entire result is read, then the
+   * subsequent queries sent over the same connection will still succeed.
    *
-   * The current problem with that flush is that it can cause
-   * underflow if the socket read returns an async response,
-   * which isn't correctly handled and results in buffer overrun
+   * In Operation.h it can be seen that mysql_free_result is used to delete
+   * the result set, instead of the nonblocking version. The logic to flush
+   * the socket is impossible to correctly implement in a destructor, because
+   * the function needs to be called repeatedly to ensure all data has been
+   * read. Instead we use the code below to detach the result object from the
+   * connection, so no network flushing is done.
    *
-   * We will move to mysql_free_result_nonblocking once it has
-   * been thoroughly tested
+   * This does not cause a memory leak because the socket will still be cleaned
+   * up when the connection is freed. AsyncMySQL also does not provide a way
+   * for clients to read half a result, then send more queries. If we allowed
+   * partial reads of results, then this strategy would not work. The most
+   * common case where we would normally need to flush results is for client
+   * query timeouts, where we might still be receiving rows when we interrupt
+   * and return an error to the client.
    */
   if (rowStream() && rowStream()->mysql_query_result_) {
     rowStream()->mysql_query_result_->handle = nullptr;
