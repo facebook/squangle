@@ -516,7 +516,7 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   auto op = beginAnyQuery<MultiQueryOperation>(
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(queries));
-  folly::ScopeGuard guard =
+  auto guard =
       folly::makeGuard([&] { operation_in_progress_ = false; });
 
   operation_in_progress_ = true;
