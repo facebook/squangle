@@ -17,6 +17,7 @@
 #include <folly/portability/GFlags.h>
 
 #include <wangle/client/ssl/SSLSession.h>
+#include "squangle/base/ExceptionUtil.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
 
@@ -609,7 +610,8 @@ void ConnectOperation::mustSucceed() {
   run();
   wait();
   if (!ok()) {
-    LOG(FATAL) << "Connect failed: " << mysql_error_;
+    throw db::RequiredOperationFailedException(
+        "Connect failed: " + mysql_error_);
   }
 }
 
@@ -1097,7 +1099,7 @@ void FetchOperation::mustSucceed() {
   run();
   wait();
   if (!ok()) {
-    LOG(FATAL) << "Query failed: " << mysql_error_;
+    throw db::RequiredOperationFailedException("Query failed: " + mysql_error_);
   }
 }
 

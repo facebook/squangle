@@ -53,7 +53,13 @@ class InvalidConnectionException : public Exception {
   explicit InvalidConnectionException(std::string const& msg)
       : Exception(msg) {}
 };
-}
-}
+
+class RequiredOperationFailedException : public Exception {
+ public:
+  explicit RequiredOperationFailedException(std::string const& msg)
+      : Exception(msg) {}
+};
+} // namespace db
+} // namespace facebook
 
 #endif
