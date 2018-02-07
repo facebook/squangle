@@ -420,6 +420,7 @@ void ConnectOperation::specializedRunImpl() {
   if (compression_lib) {
     CHECK(*compression_lib != MYSQL_COMPRESSION_ZSTD)
         << "ZSTD is not yet supported";
+    mysql_options(conn()->mysql(), MYSQL_OPT_COMPRESS, nullptr);
     mysql_options(
         conn()->mysql(), MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
   }
@@ -881,8 +882,11 @@ void FetchOperation::socketActionable() {
       } else {
         current_last_insert_id_ = mysql_insert_id(conn()->mysql());
         current_affected_rows_ = mysql_affected_rows(conn()->mysql());
-        if (conn()->mysql()->recv_gtid) {
-          current_recv_gtid_ = conn()->mysql()->recv_gtid;
+        const char* data;
+        size_t length;
+        if (!mysql_session_track_get_first(
+                conn()->mysql(), SESSION_TRACK_GTIDS, &data, &length)) {
+          current_recv_gtid_ = std::string(data, length);
         }
         more_results = mysql_more_results(conn()->mysql());
         active_fetch_action_ = more_results ? FetchAction::StartQuery
