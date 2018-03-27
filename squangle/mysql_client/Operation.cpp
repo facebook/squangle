@@ -1419,6 +1419,12 @@ folly::StringPiece Operation::toString(OperationResult result) {
   return "Unknown result";
 }
 
+//overload of operator<< for Operation Result
+std::ostream& operator<<(std::ostream& os, OperationResult result)
+{
+    return os << Operation::toString(result);
+}
+
 folly::StringPiece FetchOperation::toString(FetchAction action) {
   switch (action) {
     case FetchAction::StartQuery:

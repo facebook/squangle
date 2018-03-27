@@ -145,6 +145,9 @@ enum class OperationResult {
   TimedOut,
 };
 
+//overload of operator<< for Operation Result
+std::ostream& operator<<(std::ostream& os, OperationResult result);
+
 // For control flows in callbacks. This indicates the reason a callback was
 // fired. When a pack of rows if fetched it is used RowsFetched to
 // indicate that new rows are available. QueryBoundary means that the
