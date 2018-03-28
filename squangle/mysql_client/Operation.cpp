@@ -1369,6 +1369,12 @@ folly::StringPiece Operation::toString(StreamState state) {
   return "Unknown state";
 }
 
+//overload of operator<< for StreamState
+std::ostream& operator<<(std::ostream& os, StreamState state)
+{
+    return os << Operation::toString(state);
+}
+
 folly::StringPiece Operation::toString(QueryCallbackReason reason) {
   switch (reason) {
     case QueryCallbackReason::RowsFetched:
@@ -1385,6 +1391,12 @@ folly::StringPiece Operation::toString(QueryCallbackReason reason) {
   return "Unknown reason";
 }
 
+//overload of operator<< for QueryCallbackReason
+std::ostream& operator<<(std::ostream& os, QueryCallbackReason reason)
+{
+    return os << Operation::toString(reason);
+}
+
 folly::StringPiece Operation::toString(OperationState state) {
   switch (state) {
     case OperationState::Unstarted:
@@ -1399,6 +1411,12 @@ folly::StringPiece Operation::toString(OperationState state) {
   LOG(DFATAL) << "unable to convert state to string: "
               << static_cast<int>(state);
   return "Unknown state";
+}
+
+//overload of operator<< for OperationState
+std::ostream& operator<<(std::ostream& os, OperationState state)
+{
+    return os << Operation::toString(state);
 }
 
 folly::StringPiece Operation::toString(OperationResult result) {
@@ -1419,7 +1437,7 @@ folly::StringPiece Operation::toString(OperationResult result) {
   return "Unknown result";
 }
 
-//overload of operator<< for Operation Result
+//overload of operator<< for OperationResult
 std::ostream& operator<<(std::ostream& os, OperationResult result)
 {
     return os << Operation::toString(result);

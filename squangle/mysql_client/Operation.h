@@ -135,6 +135,9 @@ enum class OperationState {
   Completed,
 };
 
+//overload of operator<< for OperationState
+std::ostream& operator<<(std::ostream& os, OperationState state);
+
 // Once an operation is Completed, it has a result type, indicating
 // what ultimately occurred.  These are self-explanatory.
 enum class OperationResult {
@@ -145,7 +148,7 @@ enum class OperationResult {
   TimedOut,
 };
 
-//overload of operator<< for Operation Result
+//overload of operator<< for OperationResult
 std::ostream& operator<<(std::ostream& os, OperationResult result);
 
 // For control flows in callbacks. This indicates the reason a callback was
@@ -156,7 +159,13 @@ std::ostream& operator<<(std::ostream& os, OperationResult result);
 // indicating that all queries have been successfully fetched.
 enum class QueryCallbackReason { RowsFetched, QueryBoundary, Failure, Success };
 
+//overload of operator<< for QueryCallbackReason
+std::ostream& operator<<(std::ostream& os, QueryCallbackReason reason);
+
 enum class StreamState { InitQuery, RowsReady, QueryEnded, Failure, Success };
+
+//overload of operator<< for StreamState
+std::ostream& operator<<(std::ostream& os, StreamState state);
 
 class ConnectionOptions {
  public:
