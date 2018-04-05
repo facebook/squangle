@@ -42,6 +42,35 @@ ConnectionOptions::ConnectionOptions()
       total_timeout_(FLAGS_async_mysql_timeout_micros * 2),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
+std::string ConnectionOptions::getDisplayString() const {
+  std::vector<std::string> parts;
+
+  parts.push_back(
+      folly::sformat("conn timeout={}us", connection_timeout_.count()));
+  parts.push_back(folly::sformat("query timeout={}us", query_timeout_.count()));
+  parts.push_back(folly::sformat("total timeout={}us", total_timeout_.count()));
+  parts.push_back(folly::sformat("conn attempts={}", max_attempts_));
+  if (ssl_options_provider_ != nullptr) {
+    parts.push_back(folly::sformat(
+        "SSL options provider={}", (void*)ssl_options_provider_.get()));
+  }
+  if (compression_lib_.hasValue()) {
+    parts.push_back(folly::sformat(
+        "compression library={}", (void*)compression_lib_.get_pointer()));
+  }
+
+  if (!connection_attributes_.empty()) {
+    std::vector<std::string> substrings;
+    for (auto it : connection_attributes_) {
+      substrings.push_back(folly::sformat("{}={}", it.first, it.second));
+    }
+
+    parts.push_back(folly::sformat(
+        "connection attributes=[{}]", folly::join(",", substrings)));
+  }
+  return folly::sformat("({})", folly::join(", ", parts));
+}
+
 Operation::Operation(ConnectionProxy&& safe_conn)
     : state_(OperationState::Unstarted),
       result_(OperationResult::Unknown),

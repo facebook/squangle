@@ -266,6 +266,8 @@ class ConnectionOptions {
     return total_timeout_;
   }
 
+  std::string getDisplayString() const;
+
  private:
   Duration connection_timeout_;
   Duration total_timeout_;

@@ -793,6 +793,12 @@ void ConnectPoolOperation::socketActionable() {
   DCHECK(client()->getEventBase()->isInEventBaseThread());
   LOG(DFATAL) << "Should not be called";
 }
+
+std::ostream& operator<<(std::ostream& os, PoolKey key)
+{
+  return os << "{" << key.connKey.getDisplayString() << ","
+            << key.connOptions.getDisplayString() << "}";
+}
 }
 }
 } // namespace facebook::common::mysql_client

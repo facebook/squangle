@@ -156,6 +156,10 @@ class PoolKey {
         connKey == rhs.connKey;
   }
 
+  bool operator!=(const PoolKey& rhs) const {
+    return !(*this == rhs);
+  }
+
   const ConnectionKey connKey;
   const ConnectionOptions connOptions;
 
@@ -167,6 +171,8 @@ class PoolKey {
   size_t options_hash_;
   size_t hash_;
 };
+
+std::ostream& operator<<(std::ostream& os, PoolKey key);
 
 class PoolKeyHash {
  public:
