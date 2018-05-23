@@ -84,6 +84,7 @@ QueryResult::QueryResult(QueryResult&& other) noexcept
       num_rows_(other.num_rows_),
       num_rows_affected_(other.num_rows_affected_),
       last_insert_id_(other.last_insert_id_),
+      recv_gtid_(std::move(other.recv_gtid_)),
       operation_result_(other.operation_result_),
       row_blocks_(std::move(other.row_blocks_)) {
   other.row_blocks_.clear();
@@ -98,6 +99,7 @@ QueryResult& QueryResult::operator=(QueryResult&& other) {
     num_rows_ = other.num_rows_;
     num_rows_affected_ = other.num_rows_affected_;
     last_insert_id_ = other.last_insert_id_;
+    recv_gtid_ = std::move(other.recv_gtid_);
     operation_result_ = other.operation_result_;
 
     row_blocks_ = std::move(other.row_blocks_);
