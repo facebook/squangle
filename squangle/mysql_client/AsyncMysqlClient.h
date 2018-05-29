@@ -691,7 +691,7 @@ class Connection {
 
   // Returns the MySQL server version. If the connection has been closed
   // an error is generated.
-  const string serverInfo() const {
+  string serverInfo() const {
     CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
     auto ret = mysql_get_server_info(mysql_connection_->mysql());
     return string(ret);
@@ -713,14 +713,14 @@ class Connection {
   //
   // This is provided so that non-Facebook users of the HHVM extension have
   // a familiar API.
-  const string escapeString(const string& unescaped) {
+  string escapeString(const string& unescaped) {
     CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
     return Query::escapeString(mysql_connection_->mysql(), unescaped);
   }
 
   // Returns the number of errors, warnings, and notes generated during
   // execution of the previous SQL statement
-  const int warningCount() const {
+  int warningCount() const {
     CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
     return mysql_warning_count(mysql_connection_->mysql());
   }
