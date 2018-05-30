@@ -49,7 +49,7 @@ class OperationResultBase {
 };
 
 // This exception represents a basic mysql error, either during a connection
-// opening or querying, when it times out or a  mysql error happened
+// opening or querying, when it times out or a mysql error happened
 // (invalid host or query, disconnected during query, etc)
 class MysqlException : public Exception, public OperationResultBase {
  public:

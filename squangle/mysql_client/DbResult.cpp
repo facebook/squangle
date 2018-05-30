@@ -28,15 +28,22 @@ std::ostream& operator<<(
   return stream;
 }
 
-MysqlException::MysqlException(OperationResult failure_type,
-                               int mysql_errno,
-                               const std::string& mysql_error,
-                               const ConnectionKey conn_key,
-                               Duration elapsed_time)
-    : Exception(failure_type == OperationResult::Failed
-                    ? folly::format(
-                          "Mysql error {}. {}", mysql_errno, mysql_error).str()
-                    : Operation::toString(failure_type)),
+MysqlException::MysqlException(
+    OperationResult failure_type,
+    int mysql_errno,
+    const std::string& mysql_error,
+    const ConnectionKey conn_key,
+    Duration elapsed_time)
+    : Exception(
+          failure_type == OperationResult::Failed
+              ? folly::sformat(
+                    "Mysql error {}. {} to db {} at {}:{}",
+                    mysql_errno,
+                    mysql_error,
+                    conn_key.db_name,
+                    conn_key.host,
+                    conn_key.port)
+              : Operation::toString(failure_type)),
       OperationResultBase(conn_key, elapsed_time),
       failure_type_(failure_type),
       mysql_errno_(mysql_errno),
