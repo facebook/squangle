@@ -353,11 +353,9 @@ void Connection::initMysqlOnly() {
   mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
       mysql_client_, mysql_init(nullptr), conn_key_);
   mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
-#if MYSQL_VERSION_ID >= 80004
   // Turn off SSL by default for tests that rely on this.
   enum mysql_ssl_mode ssl_mode = SSL_MODE_DISABLED;
   mysql_options(mysql_connection_->mysql(), MYSQL_OPT_SSL_MODE, &ssl_mode);
-#endif
 }
 
 void Connection::initialize(bool initMysql) {
