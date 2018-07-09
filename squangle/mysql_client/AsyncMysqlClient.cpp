@@ -16,10 +16,10 @@
 
 #include <folly/Memory.h>
 #include <folly/Singleton.h>
-#include <folly/system/ThreadName.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
 #include <folly/ssl/Init.h>
+#include <folly/system/ThreadName.h>
 
 #include <mysql.h>
 
@@ -69,7 +69,7 @@ AsyncMysqlClient::AsyncMysqlClient(
 }
 
 AsyncMysqlClient::AsyncMysqlClient()
-    : AsyncMysqlClient(nullptr, std::make_unique<db::SimpleDbCounter>()) { }
+    : AsyncMysqlClient(nullptr, std::make_unique<db::SimpleDbCounter>()) {}
 
 void AsyncMysqlClient::init() {
   thread_ = std::thread([this]() {
@@ -89,8 +89,8 @@ bool AsyncMysqlClient::runInThread(folly::Cob&& fn) {
   if (!getEventBase()->runInEventBaseThread(
           [fn = std::move(fn), scheduleTime, this]() mutable {
             auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::steady_clock::now() -
-                             scheduleTime).count();
+                             std::chrono::steady_clock::now() - scheduleTime)
+                             .count();
             stats_tracker_->callbackDelayAvg.addSample(delay);
             fn();
           })) {
@@ -261,6 +261,18 @@ void AsyncMysqlClient::cleanupCompletedOperations() {
            << ", after: " << pending_operations_.size();
 }
 
+folly::SemiFuture<ConnectResult>
+AsyncMysqlClient::connectSemiFuture(
+    const string& host,
+    int port,
+    const string& database_name,
+    const string& user,
+    const string& password,
+    const ConnectionOptions& conn_opts) {
+  return toSemiFuture(beginConnection(host, port, database_name, user, password)
+                          ->setConnectionOptions(conn_opts));
+}
+
 folly::Future<ConnectResult> AsyncMysqlClient::connectFuture(
     const string& host,
     int port,
@@ -268,8 +280,8 @@ folly::Future<ConnectResult> AsyncMysqlClient::connectFuture(
     const string& user,
     const string& password,
     const ConnectionOptions& conn_opts) {
-  return toFuture(beginConnection(host, port, database_name, user, password)
-                      ->setConnectionOptions(conn_opts));
+  return toFuture(
+      connectSemiFuture(host, port, database_name, user, password, conn_opts));
 }
 
 std::unique_ptr<Connection> AsyncMysqlClient::connect(
@@ -450,35 +462,66 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
 }
 
 template <>
-folly::Future<DbQueryResult> Connection::queryFuture(
+folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     std::unique_ptr<Connection> conn,
     Query&& query) {
   auto op = beginQuery(std::move(conn), std::move(query));
-  return toFuture(op);
+  return toSemiFuture(op);
+}
+
+template <>
+folly::Future<DbQueryResult> Connection::queryFuture(
+    std::unique_ptr<Connection> conn,
+    Query&& query) {
+  return toFuture(querySemiFuture(std::move(conn), query));
+}
+
+template <typename... Args>
+folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
+    std::unique_ptr<Connection> conn,
+    Args&&... args) {
+  auto op = beginMultiQuery(std::move(conn), std::forward<Args>(args)...);
+  return toSemiFuture(op);
+}
+
+template <>
+folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
+    std::unique_ptr<Connection> conn,
+    Query&& args) {
+  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  return toSemiFuture(op);
+}
+
+template <>
+folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
+    std::unique_ptr<Connection> conn,
+    vector<Query>&& args) {
+  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  return toSemiFuture(op);
 }
 
 template <typename... Args>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     Args&&... args) {
-  auto op = beginMultiQuery(std::move(conn), std::forward<Args>(args)...);
-  return toFuture(op);
+  return toFuture(
+      multiQuerySemiFuture(std::move(conn), std::forward<Args>(args)...));
 }
 
 template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     Query&& args) {
-  auto op = beginMultiQuery(std::move(conn), std::move(args));
-  return toFuture(op);
+  return toFuture(
+      multiQuerySemiFuture(std::move(conn), std::move(args)));
 }
 
 template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     vector<Query>&& args) {
-  auto op = beginMultiQuery(std::move(conn), std::move(args));
-  return toFuture(op);
+  return toFuture(
+      multiQuerySemiFuture(std::move(conn), std::move(args)));
 }
 
 template <>
@@ -519,8 +562,7 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   auto op = beginAnyQuery<MultiQueryOperation>(
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(queries));
-  auto guard =
-      folly::makeGuard([&] { operation_in_progress_ = false; });
+  auto guard = folly::makeGuard([&] { operation_in_progress_ = false; });
 
   operation_in_progress_ = true;
   op->run()->wait();
@@ -647,6 +689,6 @@ void ConnectionSocketHandler::handlerReady(uint16_t /*events*/) noexcept {
     op_->socketActionable();
   }
 }
-}
-}
-} // namespace facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

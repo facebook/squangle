@@ -247,6 +247,23 @@ class AsyncConnectionPool
   // The destructor will start the shutdown phase
   ~AsyncConnectionPool();
 
+  folly::SemiFuture<ConnectResult> connectSemiFuture(
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password,
+      const ConnectionOptions& conn_opts = ConnectionOptions());
+
+  folly::SemiFuture<ConnectResult> connectSemiFuture(
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password,
+      const string& special_tag,
+      const ConnectionOptions& conn_opts = ConnectionOptions());
+
   folly::Future<ConnectResult> connectFuture(
       const string& host,
       int port,

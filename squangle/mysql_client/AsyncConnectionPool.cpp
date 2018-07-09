@@ -135,6 +135,30 @@ void AsyncConnectionPool::shutdown() {
   }
 }
 
+folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
+    const string& host,
+    int port,
+    const string& database_name,
+    const string& user,
+    const string& password,
+    const ConnectionOptions& conn_opts) {
+  return connectSemiFuture(
+      host, port, database_name, user, password, "", conn_opts);
+}
+
+folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
+    const string& host,
+    int port,
+    const string& database_name,
+    const string& user,
+    const string& password,
+    const string& special_tag,
+    const ConnectionOptions& conn_opts) {
+  return toSemiFuture(
+      beginConnection(host, port, database_name, user, password, special_tag)
+          ->setConnectionOptions(conn_opts));
+}
+
 folly::Future<ConnectResult> AsyncConnectionPool::connectFuture(
     const string& host,
     int port,
@@ -154,9 +178,8 @@ folly::Future<ConnectResult> AsyncConnectionPool::connectFuture(
     const string& password,
     const string& special_tag,
     const ConnectionOptions& conn_opts) {
-  return toFuture(
-      beginConnection(host, port, database_name, user, password, special_tag)
-          ->setConnectionOptions(conn_opts));
+  return toFuture(connectSemiFuture(
+      host, port, database_name, user, password, special_tag));
 }
 
 std::unique_ptr<Connection> AsyncConnectionPool::connect(

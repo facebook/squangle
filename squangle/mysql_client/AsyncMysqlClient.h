@@ -246,6 +246,14 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
+  FOLLY_NODISCARD folly::SemiFuture<ConnectResult> connectSemiFuture(
+      const string& host,
+      int port,
+      const string& database_name,
+      const string& user,
+      const string& password,
+      const ConnectionOptions& conn_opts = ConnectionOptions());
+
   FOLLY_NODISCARD folly::Future<ConnectResult> connectFuture(
       const string& host,
       int port,
@@ -575,7 +583,17 @@ class Connection {
       Args&&... args);
 
   template <typename... Args>
+  static folly::SemiFuture<DbQueryResult> querySemiFuture(
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
+
+  template <typename... Args>
   static folly::Future<DbQueryResult> queryFuture(
+      std::unique_ptr<Connection> conn,
+      Args&&... args);
+
+  template <typename... Args>
+  static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
       std::unique_ptr<Connection> conn,
       Args&&... args);
 
@@ -1015,6 +1033,19 @@ std::shared_ptr<QueryOperation> Connection::beginQuery(
     Args&&... args) {
   Query query{std::forward<Args>(args)...};
   return beginQuery(std::move(conn), std::move(query));
+}
+
+template <>
+folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
+    std::unique_ptr<Connection> conn,
+    Query&& query);
+
+template <typename... Args>
+folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
+    std::unique_ptr<Connection> conn,
+    Args&&... args) {
+  Query query{std::forward<Args>(args)...};
+  return querySemiFuture(std::move(conn), std::move(query));
 }
 
 template <>
