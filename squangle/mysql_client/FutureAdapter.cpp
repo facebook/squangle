@@ -19,13 +19,13 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-folly::Future<ConnectResult> toFuture(ConnectOperation_ptr conn_op) {
-  return toFuture(conn_op.get());
+folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation_ptr conn_op) {
+  return toSemiFuture(conn_op.get());
 }
 
-folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
+folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op) {
   folly::MoveWrapper<folly::Promise<ConnectResult>> promise;
-  auto future = promise->getFuture();
+  auto future = promise->getSemiFuture();
 
   conn_op->setCallback([promise](ConnectOperation& op) mutable {
     // TODO: Improve the creation of the result, it's like this just to test
@@ -54,13 +54,13 @@ folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
   return future;
 }
 
-folly::Future<DbQueryResult> toFuture(QueryOperation_ptr& query_op) {
-  return toFuture(query_op.get());
+folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr& query_op) {
+  return toSemiFuture(query_op.get());
 }
 
-folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
+folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op) {
   folly::MoveWrapper<folly::Promise<DbQueryResult>> promise;
-  auto future = promise->getFuture();
+  auto future = promise->getSemiFuture();
 
   QueryAppenderCallback appender_callback = [promise](
       QueryOperation& op,
@@ -95,13 +95,15 @@ folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
   return future;
 }
 
-folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op) {
-  return toFuture(mquery_op.get());
+folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+    MultiQueryOperation_ptr& mquery_op) {
+  return toSemiFuture(mquery_op.get());
 }
 
-folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
+folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+    MultiQueryOperation* mquery_op) {
   folly::MoveWrapper<folly::Promise<DbMultiQueryResult>> promise;
-  auto future = promise->getFuture();
+  auto future = promise->getSemiFuture();
 
   MultiQueryAppenderCallback appender_callback = [promise](
       MultiQueryOperation& op,
@@ -135,6 +137,44 @@ folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
   mquery_op->run();
   return future;
 }
+
+folly::Future<ConnectResult> toFuture(ConnectOperation_ptr conn_op) {
+  return toFuture(conn_op.get());
+}
+
+folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
+  return toFuture(toSemiFuture(conn_op));
+}
+
+folly::Future<DbQueryResult> toFuture(QueryOperation_ptr& query_op) {
+  return toFuture(query_op.get());
+}
+
+folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
+  return toFuture(toSemiFuture(query_op));
+}
+
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op) {
+  return toFuture(mquery_op.get());
+}
+
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
+  return toFuture(toSemiFuture(mquery_op));
+}
+
+folly::Future<ConnectResult> toFuture(folly::SemiFuture<ConnectResult>&& fut) {
+  return std::move(fut).toUnsafeFuture();
+}
+
+folly::Future<DbQueryResult> toFuture(folly::SemiFuture<DbQueryResult>&& fut) {
+  return std::move(fut).toUnsafeFuture();
+}
+
+folly::Future<DbMultiQueryResult> toFuture(
+    folly::SemiFuture<DbMultiQueryResult>&& fut) {
+  return std::move(fut).toUnsafeFuture();
+}
+
 }
 }
 } // facebook::common::mysql_client

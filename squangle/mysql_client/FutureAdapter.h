@@ -31,6 +31,20 @@ typedef std::shared_ptr<ConnectOperation> ConnectOperation_ptr;
 typedef std::shared_ptr<QueryOperation> QueryOperation_ptr;
 typedef std::shared_ptr<MultiQueryOperation> MultiQueryOperation_ptr;
 
+// SemiFuture for ConnectOperation
+folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op);
+folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation_ptr conn_op);
+
+// SemiFuture for QueryOperation
+folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op);
+folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr& query_op);
+
+// SemiFuture for MultiQueryOperation
+folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+    MultiQueryOperation* mquery_op);
+folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+    MultiQueryOperation_ptr& mquery_op);
+
 // Future for ConnectOperation
 folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op);
 folly::Future<ConnectResult> toFuture(ConnectOperation_ptr conn_op);
@@ -42,8 +56,15 @@ folly::Future<DbQueryResult> toFuture(QueryOperation_ptr& query_op);
 // Future for MultiQueryOperation
 folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op);
 folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op);
-}
-}
-} // facebook::common::mysql_client
+
+// Trivial conversions are defined so that all Future uses are handled
+// by this interface
+folly::Future<ConnectResult> toFuture(folly::SemiFuture<ConnectResult>&& fut);
+folly::Future<DbQueryResult> toFuture(folly::SemiFuture<DbQueryResult>&& fut);
+folly::Future<DbMultiQueryResult> toFuture(
+    folly::SemiFuture<DbMultiQueryResult>&& fut);
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_FUTURE_ADAPTER_H
