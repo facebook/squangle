@@ -18,13 +18,13 @@
 //
 // Usage is simple; construct the query using special printf-like
 // markup, provide parameters for the substitution, and then hand to
-// the database libraries.  Alternatively, you can call the render()
-// method to see the actual SQL it would run.
+// the database libraries.  Alternatively, you can call one of render*()
+// methods to see the actual SQL it would run.
 //
 // Example:
 //
 // Query q("SELECT foo, bar FROM Table WHERE id = %d", 17);
-// LOG(INFO) << "query: " << q.render();
+// LOG(INFO) << "query: " << q.renderInsecure();
 //
 // folly::dynamic condition(dynamic::object("id1", 7)("id2", 14));
 // Query q("SELECT %LC FROM %T WHERE %W",
