@@ -742,7 +742,7 @@ class FetchOperation : public Operation {
   void mustSucceed() override;
 
   // Only supported with fbmysql server
-  void setQueryAttributes(
+  FetchOperation* setQueryAttributes(
       const std::unordered_map<std::string, std::string>& attributes);
 
   // Return the query as it was sent to MySQL (i.e., for a single

@@ -662,9 +662,10 @@ FetchOperation::FetchOperation(
 FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
     : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
 
-void FetchOperation::setQueryAttributes(
+FetchOperation* FetchOperation::setQueryAttributes(
     const std::unordered_map<std::string, std::string>& attributes) {
   attributes_ = attributes;
+  return this;
 }
 
 bool FetchOperation::isStreamAccessAllowed() {
