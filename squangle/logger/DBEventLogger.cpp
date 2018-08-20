@@ -16,8 +16,8 @@ namespace db {
 
 void ConnectionContextBase::collectNormalValues(
     AddNormalValueFunction add) const {
-  add("is_ssl_connection", folly::to<std::string, bool>(isSslConnection));
-  add("ssl_session_reused", folly::to<std::string, bool>(sslSessionReused));
+  add("is_ssl", folly::to<std::string, bool>(isSslConnection));
+  add("is_ssl_session_reused", folly::to<std::string, bool>(sslSessionReused));
 }
 
 void DBSimpleLogger::logQuerySuccess(
