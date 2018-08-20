@@ -1040,6 +1040,12 @@ folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     std::unique_ptr<Connection> conn,
     Query&& query);
 
+template <>
+folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
+    std::unique_ptr<Connection> conn,
+    Query&& query,
+    QueryOptions&& options);
+
 template <typename... Args>
 folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     std::unique_ptr<Connection> conn,

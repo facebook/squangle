@@ -464,6 +464,16 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
 template <>
 folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     std::unique_ptr<Connection> conn,
+    Query&& query,
+    QueryOptions&& options) {
+  auto op = beginQuery(std::move(conn), std::move(query));
+  op->setQueryAttributes(std::move(options.getAttributes()));
+  return toSemiFuture(op);
+}
+
+template <>
+folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
+    std::unique_ptr<Connection> conn,
     Query&& query) {
   auto op = beginQuery(std::move(conn), std::move(query));
   return toSemiFuture(op);
@@ -473,7 +483,7 @@ template <>
 folly::Future<DbQueryResult> Connection::queryFuture(
     std::unique_ptr<Connection> conn,
     Query&& query) {
-  return toFuture(querySemiFuture(std::move(conn), query));
+  return toFuture(querySemiFuture(std::move(conn), std::move(query)));
 }
 
 template <typename... Args>
@@ -495,8 +505,27 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
 template <>
 folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     std::unique_ptr<Connection> conn,
+    Query&& args,
+    QueryOptions&& options) {
+  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  op->setQueryAttributes(options.getAttributes());
+  return toSemiFuture(op);
+}
+template <>
+folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
+    std::unique_ptr<Connection> conn,
     vector<Query>&& args) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
+  return toSemiFuture(op);
+}
+
+template <>
+folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
+    std::unique_ptr<Connection> conn,
+    vector<Query>&& args,
+    QueryOptions&& options) {
+  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  op->setQueryAttributes(options.getAttributes());
   return toSemiFuture(op);
 }
 

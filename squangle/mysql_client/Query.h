@@ -96,8 +96,28 @@ using folly::StringPiece;
 using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
 using AliasedQualifiedColumn =
   std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
+typedef std::unordered_map<std::string, std::string> QueryAttributes;
 
 class QueryArgument;
+
+/*
+ * This class will be responsible of passing various per query options.
+ * For the time being we only have attributes but class will be extended
+ * as we introduce additional options.
+ */
+class QueryOptions {
+public:
+  const QueryAttributes& getAttributes() const {
+    return attributes_;
+  }
+
+  QueryAttributes& getAttributes() {
+    return attributes_;
+  }
+
+protected:
+  QueryAttributes attributes_;
+};
 
 class Query {
  struct QueryText;

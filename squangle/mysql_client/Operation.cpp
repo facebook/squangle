@@ -668,6 +668,12 @@ FetchOperation* FetchOperation::setQueryAttributes(
   return this;
 }
 
+FetchOperation* FetchOperation::setQueryAttributes(
+    std::unordered_map<std::string, std::string>&& attributes) {
+  attributes_ = std::move(attributes);
+  return this;
+}
+
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();

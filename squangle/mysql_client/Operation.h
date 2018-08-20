@@ -744,6 +744,8 @@ class FetchOperation : public Operation {
   // Only supported with fbmysql server
   FetchOperation* setQueryAttributes(
       const std::unordered_map<std::string, std::string>& attributes);
+  FetchOperation* setQueryAttributes(
+      std::unordered_map<std::string, std::string>&& attributes);
 
   // Return the query as it was sent to MySQL (i.e., for a single
   // query, the query itself, but for multiquery, all queries
