@@ -14,8 +14,10 @@ bool SSLOptionsProviderBase::setMysqlSSLOptions(MYSQL* mysql) {
   }
   // We need to set ssl_mode because we set it to disabled after we call
   // mysql_init.
+#ifdef MYSQL_OPT_SSL_MODE
   enum mysql_ssl_mode ssl_mode = SSL_MODE_PREFERRED;
   mysql_options(mysql, MYSQL_OPT_SSL_MODE, &ssl_mode);
+#endif
   mysql_options(mysql, MYSQL_OPT_SSL_CONTEXT, sslContext->getSSLCtx());
   auto sslSession = getSSLSession();
   if (sslSession) {
