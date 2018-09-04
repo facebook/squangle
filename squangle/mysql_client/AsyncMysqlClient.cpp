@@ -461,7 +461,6 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
       std::move(conn), std::vector<Query>{std::move(query)});
 }
 
-template <>
 folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     std::unique_ptr<Connection> conn,
     Query&& query,
@@ -472,80 +471,36 @@ folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
 }
 
 template <>
-folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Query&& query) {
-  auto op = beginQuery(std::move(conn), std::move(query));
-  return toSemiFuture(op);
-}
-
-template <>
 folly::Future<DbQueryResult> Connection::queryFuture(
     std::unique_ptr<Connection> conn,
     Query&& query) {
   return toFuture(querySemiFuture(std::move(conn), std::move(query)));
 }
 
-template <typename... Args>
-folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Args&&... args) {
-  auto op = beginMultiQuery(std::move(conn), std::forward<Args>(args)...);
-  return toSemiFuture(op);
-}
-
-template <>
-folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Query&& args) {
-  auto op = beginMultiQuery(std::move(conn), std::move(args));
-  return toSemiFuture(op);
-}
-
-template <>
 folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     std::unique_ptr<Connection> conn,
     Query&& args,
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
-  op->setQueryAttributes(options.getAttributes());
-  return toSemiFuture(op);
-}
-template <>
-folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
-    std::unique_ptr<Connection> conn,
-    vector<Query>&& args) {
-  auto op = beginMultiQuery(std::move(conn), std::move(args));
+  op->setQueryAttributes(std::move(options.getAttributes()));
   return toSemiFuture(op);
 }
 
-template <>
 folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     std::unique_ptr<Connection> conn,
     vector<Query>&& args,
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
-  op->setQueryAttributes(options.getAttributes());
+  op->setQueryAttributes(std::move(options.getAttributes()));
   return toSemiFuture(op);
 }
 
-template <typename... Args>
-folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
-    std::unique_ptr<Connection> conn,
-    Args&&... args) {
-  return toFuture(
-      multiQuerySemiFuture(std::move(conn), std::forward<Args>(args)...));
-}
-
-template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     Query&& args) {
-  return toFuture(
-      multiQuerySemiFuture(std::move(conn), std::move(args)));
+  return toFuture(multiQuerySemiFuture(std::move(conn), std::move(args)));
 }
 
-template <>
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     vector<Query>&& args) {

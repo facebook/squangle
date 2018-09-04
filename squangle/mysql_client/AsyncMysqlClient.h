@@ -582,25 +582,33 @@ class Connection {
       std::unique_ptr<Connection> conn,
       Args&&... args);
 
-  template <typename... Args>
   static folly::SemiFuture<DbQueryResult> querySemiFuture(
       std::unique_ptr<Connection> conn,
-      Args&&... args);
+      Query&& query,
+      QueryOptions&& options = QueryOptions());
 
   template <typename... Args>
   static folly::Future<DbQueryResult> queryFuture(
       std::unique_ptr<Connection> conn,
       Args&&... args);
 
-  template <typename... Args>
   static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
       std::unique_ptr<Connection> conn,
-      Args&&... args);
+      Query&& query,
+      QueryOptions&& options = QueryOptions());
 
-  template <typename... Args>
+  static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
+      std::unique_ptr<Connection> conn,
+      std::vector<Query>&& queries,
+      QueryOptions&& options = QueryOptions());
+
   static folly::Future<DbMultiQueryResult> multiQueryFuture(
       std::unique_ptr<Connection> conn,
-      Args&&... args);
+      Query&& query);
+
+  static folly::Future<DbMultiQueryResult> multiQueryFuture(
+      std::unique_ptr<Connection> conn,
+      std::vector<Query>&& queries);
 
   // An alternate interface that allows for easier re-use of an
   // existing query_op, moving the Connection from the old op and into
@@ -1033,25 +1041,6 @@ std::shared_ptr<QueryOperation> Connection::beginQuery(
     Args&&... args) {
   Query query{std::forward<Args>(args)...};
   return beginQuery(std::move(conn), std::move(query));
-}
-
-template <>
-folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Query&& query);
-
-template <>
-folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Query&& query,
-    QueryOptions&& options);
-
-template <typename... Args>
-folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
-    std::unique_ptr<Connection> conn,
-    Args&&... args) {
-  Query query{std::forward<Args>(args)...};
-  return querySemiFuture(std::move(conn), std::move(query));
 }
 
 template <>
