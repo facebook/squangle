@@ -274,7 +274,7 @@ class ConnectionOptions {
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> connection_attributes_;
-  folly::Optional<mysql_compression_lib> compression_lib_ = nullptr;
+  folly::Optional<mysql_compression_lib> compression_lib_;
   uint32_t max_attempts_ = 1;
 };
 
