@@ -1,4 +1,4 @@
-common/db/mysql_client
+squangle/mysql_client
 --------------------
 
 facebook::common::mysql_client is a collection of classes for
@@ -17,7 +17,7 @@ for example usage.
 #### Synchronous Examples
 ### Basic Example
 
-    #include "common/db/mysql_client/AsyncMysqlClient.h"
+    #include "squangle/mysql_client/AsyncMysqlClient.h"
 
     AsyncMysqlClient* client = AsyncMysqlClient::defaultClient();
 
