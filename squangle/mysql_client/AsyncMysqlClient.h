@@ -77,9 +77,9 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
+using facebook::db::InvalidConnectionException;
 using std::string;
 using std::unordered_map;
-using facebook::db::InvalidConnectionException;
 
 class AsyncMysqlClient;
 class SyncMysqlClient;
@@ -254,13 +254,16 @@ class AsyncMysqlClient : public MysqlClientBase {
       const string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
-  FOLLY_NODISCARD folly::Future<ConnectResult> connectFuture(
-      const string& host,
-      int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
-      const ConnectionOptions& conn_opts = ConnectionOptions());
+  [[deprecated(
+      "Replaced by the SemiFuture APIs, use SemiFutures and pass an executor")]] FOLLY_NODISCARD
+      folly::Future<ConnectResult>
+      connectFuture(
+          const string& host,
+          int port,
+          const string& database_name,
+          const string& user,
+          const string& password,
+          const ConnectionOptions& conn_opts = ConnectionOptions());
 
   // Synchronous call to acquire a connection, the caller thread will be blocked
   // until the operation has finished.
@@ -587,7 +590,7 @@ class Connection {
       Query&& query,
       QueryOptions&& options = QueryOptions());
 
-  template <typename... Args>
+  template <typename... Args> [[deprecated("Replaced by the SemiFuture APIs")]]
   static folly::Future<DbQueryResult> queryFuture(
       std::unique_ptr<Connection> conn,
       Args&&... args);
@@ -602,11 +605,13 @@ class Connection {
       std::vector<Query>&& queries,
       QueryOptions&& options = QueryOptions());
 
-  static folly::Future<DbMultiQueryResult> multiQueryFuture(
-      std::unique_ptr<Connection> conn,
-      Query&& query);
+  [[deprecated("Replaced by the SemiFuture APIs")]] static folly::Future<
+      DbMultiQueryResult>
+  multiQueryFuture(std::unique_ptr<Connection> conn, Query&& query);
 
-  static folly::Future<DbMultiQueryResult> multiQueryFuture(
+  [[deprecated("Replaced by the SemiFuture APIs")]] static folly::Future<
+      DbMultiQueryResult>
+  multiQueryFuture(
       std::unique_ptr<Connection> conn,
       std::vector<Query>&& queries);
 
@@ -842,10 +847,8 @@ class Connection {
   void setChainedCallback(ChainedCallback&& callback) {
     if (callback_) {
       auto original_callback = std::move(callback_);
-      callback_ = [
-        orig_callback = std::move(original_callback),
-        new_callback = std::move(callback)
-      ](Operation & op) mutable {
+      callback_ = [orig_callback = std::move(original_callback),
+                   new_callback = std::move(callback)](Operation& op) mutable {
         orig_callback(op);
         new_callback(op);
       };
@@ -1044,19 +1047,17 @@ std::shared_ptr<QueryOperation> Connection::beginQuery(
 }
 
 template <>
-folly::Future<DbQueryResult> Connection::queryFuture(
-    std::unique_ptr<Connection> conn,
-    Query&& query);
+[[deprecated("Replaced by the SemiFuture APIs")]] folly::Future<DbQueryResult>
+Connection::queryFuture(std::unique_ptr<Connection> conn, Query&& query);
 
 template <typename... Args>
-folly::Future<DbQueryResult> Connection::queryFuture(
-    std::unique_ptr<Connection> conn,
-    Args&&... args) {
+[[deprecated("Replaced by the SemiFuture APIs")]] folly::Future<DbQueryResult>
+Connection::queryFuture(std::unique_ptr<Connection> conn, Args&&... args) {
   Query query{std::forward<Args>(args)...};
   return queryFuture(std::move(conn), std::move(query));
 }
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_CLIENT_H
