@@ -502,7 +502,8 @@ void ConnectOperation::socketActionable() {
         attemptFailed(OperationResult::Failed);
         return;
       } else {
-        conn()->socketHandler()->changeHandlerFD(fd);
+        conn()->socketHandler()->changeHandlerFD(
+            folly::NetworkSocket::fromFd(fd));
         conn()->mysqlConnection()->connectionOpened();
         attemptSucceeded(OperationResult::Succeeded);
         return;
@@ -522,7 +523,8 @@ void ConnectOperation::socketActionable() {
       attemptFailed(OperationResult::Failed);
       return;
     } else {
-      conn()->socketHandler()->changeHandlerFD(fd);
+      conn()->socketHandler()->changeHandlerFD(
+          folly::NetworkSocket::fromFd(fd));
       waitForSocketActionable();
       return;
     }

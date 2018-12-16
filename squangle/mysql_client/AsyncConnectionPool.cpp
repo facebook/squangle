@@ -782,8 +782,8 @@ void ConnectPoolOperation::connectionCallback(
     return;
   }
 
-  conn()->socketHandler()->changeHandlerFD(
-      mysql_get_file_descriptor(mysql_conn->mysql()));
+  conn()->socketHandler()->changeHandlerFD(folly::NetworkSocket::fromFd(
+      mysql_get_file_descriptor(mysql_conn->mysql())));
 
   conn()->setMysqlConnectionHolder(std::move(mysql_conn));
   conn()->setConnectionOptions(getConnectionOptions());

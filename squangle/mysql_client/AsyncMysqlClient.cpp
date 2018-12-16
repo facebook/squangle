@@ -335,7 +335,8 @@ std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
       raw_conn->async_op_status == ASYNC_OP_UNSET, InvalidConnectionException);
   auto conn = createConnection(
       ConnectionKey(host, port, database_name, user, password), raw_conn);
-  conn->socketHandler()->changeHandlerFD(mysql_get_file_descriptor(raw_conn));
+  conn->socketHandler()->changeHandlerFD(
+      folly::NetworkSocket::fromFd(mysql_get_file_descriptor(raw_conn)));
   return conn;
 }
 
