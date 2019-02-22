@@ -172,6 +172,12 @@ class PoolKey {
   size_t hash_;
 };
 
+struct PoolKeyStats {
+  size_t open_connections;
+  size_t pending_connections;
+  size_t connection_limit;
+};
+
 std::ostream& operator<<(std::ostream& os, PoolKey key);
 
 class PoolKeyHash {
@@ -322,6 +328,8 @@ class AsyncConnectionPool
     return &pool_stats_;
   }
 
+  PoolKeyStats getPoolKeyStats(const PoolKey& key);
+
   // Don't use the constructor directly, only public to use make_shared
   AsyncConnectionPool(
       std::shared_ptr<AsyncMysqlClient> mysql_client,
@@ -398,9 +406,6 @@ class AsyncConnectionPool
   void removeOpeningConn(const PoolKey& conn_key);
 
   void connectionSpotFreed(const PoolKey& conn_key);
-
-  std::pair<uint64_t, uint64_t> numOpenAndPendingPerKey(
-      const PoolKey& conn_key);
 
   // Auxiliary class to isolate the queue code. Clean ups also happen in this
   // class, it mainly manages the ConnectPoolOperation and

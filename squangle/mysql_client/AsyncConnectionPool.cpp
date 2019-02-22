@@ -352,12 +352,13 @@ bool AsyncConnectionPool::canCreateMoreConnections(const PoolKey& pool_key) {
   return false;
 }
 
-std::pair<uint64_t, uint64_t> AsyncConnectionPool::numOpenAndPendingPerKey(
-    const PoolKey& pool_key) {
+PoolKeyStats AsyncConnectionPool::getPoolKeyStats(const PoolKey& pool_key) {
+  PoolKeyStats stats;
+  stats.connection_limit = conn_per_key_limit_;
   std::unique_lock<std::mutex> l(counter_mutex_);
-  auto open_conns = open_connections_[pool_key];
-  auto pending_conns = pending_connections_[pool_key];
-  return std::make_pair(open_conns, pending_conns);
+  stats.open_connections = open_connections_[pool_key];
+  stats.pending_connections = pending_connections_[pool_key];
+  return stats;
 }
 
 void AsyncConnectionPool::addOpenConnection(const PoolKey& pool_key) {
@@ -737,9 +738,9 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     // Check if the timeout happened because of the host is being slow or the
     // pool is lacking resources
     auto pool_key = PoolKey(getConnectionKey(), getConnectionOptions());
-    auto open_and_pending = locked_pool->numOpenAndPendingPerKey(pool_key);
-    auto num_open = open_and_pending.first;
-    auto num_opening = open_and_pending.second;
+    auto key_stats = locked_pool->getPoolKeyStats(pool_key);
+    auto num_open = key_stats.open_connections;
+    auto num_opening = key_stats.pending_connections;
 
     // As a way to be realistic regarding the reason a connection was not
     // obtained, we start from the principle that this is pool's fault.
