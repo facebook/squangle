@@ -79,7 +79,6 @@
 #include <folly/String.h>
 
 #include <boost/variant.hpp>
-#include <glog/logging.h>
 
 #include <mysql.h>
 

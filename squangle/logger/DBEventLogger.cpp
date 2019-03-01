@@ -9,8 +9,6 @@
  */
 #include "squangle/logger/DBEventLogger.h"
 
-#include <glog/logging.h>
-
 #include <folly/Random.h>
 
 namespace facebook {
