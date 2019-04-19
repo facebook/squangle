@@ -765,7 +765,9 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
           locked_pool->conn_per_key_limit_,
           delta_micros / 1000.0);
       setAsyncClientError(
-          ER_OUT_OF_RESOURCES, msg, "Connection timed out in pool");
+          static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_POOL_CONN_TIMEOUT),
+          msg,
+          "Connection timed out in pool");
       attemptFailed(OperationResult::TimedOut);
       return;
     }
