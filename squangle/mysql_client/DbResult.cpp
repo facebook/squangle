@@ -35,7 +35,8 @@ MysqlException::MysqlException(
     const ConnectionKey conn_key,
     Duration elapsed_time)
     : Exception(
-          failure_type == OperationResult::Failed
+          (failure_type == OperationResult::Failed ||
+           failure_type == OperationResult::TimedOut)
               ? folly::sformat(
                     "Mysql error {}. {} to db {} at {}:{}",
                     mysql_errno,
