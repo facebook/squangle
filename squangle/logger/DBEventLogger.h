@@ -48,6 +48,9 @@ class ConnectionContextBase {
  public:
   virtual ~ConnectionContextBase() {}
   virtual void collectNormalValues(AddNormalValueFunction add) const;
+  virtual std::unique_ptr<ConnectionContextBase> copy() const {
+    return std::make_unique<ConnectionContextBase>(*this);
+  }
   bool isSslConnection = false;
   bool sslSessionReused = false;
 };

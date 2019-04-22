@@ -312,7 +312,16 @@ void AsyncConnectionPool::registerForConnection(
     // Sanity check
     DCHECK(pool_op != nullptr);
     conn_storage_.queueOperation(pool_key, pool_op);
-    tryRequestNewConnection(pool_key);
+    // Copy the ConnectionContext from the incoming operation. These contexts
+    // contain application specific logging that will be lost if not passed to
+    // the new ConnectOperation that is spawned to fulfill the pool miss.
+    // Creating a copy ensures that both operations are logged with the
+    // expected additional logging
+    std::unique_ptr<db::ConnectionContextBase> context;
+    if (pool_op->connection_context_) {
+      context = pool_op->connection_context_->copy();
+    }
+    tryRequestNewConnection(pool_key, std::move(context));
   } else {
     // Cache hit
     stats()->incrPoolHits();
@@ -404,7 +413,9 @@ void AsyncConnectionPool::connectionSpotFreed(const PoolKey& pool_key) {
   });
 }
 
-void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
+void AsyncConnectionPool::tryRequestNewConnection(
+    const PoolKey& pool_key,
+    std::unique_ptr<db::ConnectionContextBase> context) {
   // Only called internally, this doesn't need to check if it's shutting
   // down
   DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
@@ -422,8 +433,10 @@ void AsyncConnectionPool::tryRequestNewConnection(const PoolKey& pool_key) {
 
     auto connOp = mysql_client_->beginConnection(pool_key.connKey);
     connOp->setConnectionOptions(pool_key.connOptions);
-    connOp->setConnectionContext(
-        std::make_unique<db::ConnectionContextBase>());
+    if (!context) {
+      context = std::make_unique<db::ConnectionContextBase>();
+    }
+    connOp->setConnectionContext(std::move(context));
     auto pool_ptr = getSelfWeakPointer();
 
     // ADRIANA The attribute part we can do later :D time to do it

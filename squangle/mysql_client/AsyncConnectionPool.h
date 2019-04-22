@@ -372,7 +372,9 @@ class AsyncConnectionPool
   // If we fail in creating the connection, `failedToConnect` will be called.
   // TODO#4527126: maybe have a cache for the unreachable hosts to fail faster
   // these connections.
-  void tryRequestNewConnection(const PoolKey& pool_key);
+  void tryRequestNewConnection(
+      const PoolKey& pool_key,
+      std::unique_ptr<db::ConnectionContextBase> context = nullptr);
 
   // Used for when we fail to open a requested connection. In case of mysql
   // failure (e.g. bad password) we propagate the error to all queued
