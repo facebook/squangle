@@ -106,11 +106,6 @@ folly::dynamic Row::getDynamic(size_t l) const {
   enum_field_types type = row_block_->getFieldType(l);
   try {
     switch (type) {
-      // folly::dynamic::Type::BOOL
-      case MYSQL_TYPE_BIT:
-      case MYSQL_TYPE_TINY:
-        return folly::dynamic(row_block_->getField<bool>(row_number_, l));
-
       // folly::dynamic::Type::DOUBLE
       case MYSQL_TYPE_DECIMAL:
       case MYSQL_TYPE_FLOAT:
@@ -118,11 +113,14 @@ folly::dynamic Row::getDynamic(size_t l) const {
         return folly::dynamic(row_block_->getField<double>(row_number_, l));
 
       // folly::dynamic::Type::INT64
+      case MYSQL_TYPE_BIT:
+      case MYSQL_TYPE_TINY:
       case MYSQL_TYPE_SHORT:
       case MYSQL_TYPE_LONG:
       case MYSQL_TYPE_LONGLONG:
       case MYSQL_TYPE_INT24:
       case MYSQL_TYPE_ENUM:
+      case MYSQL_TYPE_YEAR:
         return folly::dynamic(row_block_->getField<long>(row_number_, l));
 
       // folly::dynamic::Type::STRING
