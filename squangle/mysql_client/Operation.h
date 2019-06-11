@@ -1133,6 +1133,11 @@ class MultiQueryOperation : public FetchOperation {
     return queries_.getQuery(index);
   }
 
+  // Returns the list of Queries
+  const std::vector<Query>& getQueries() const {
+    return queries_.getQueries();
+  }
+
   void setQueryResults(std::vector<QueryResult> query_results) {
     query_results_ = std::move(query_results);
   }

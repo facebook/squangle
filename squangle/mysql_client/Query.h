@@ -369,6 +369,10 @@ class MultiQuery {
     return queries_[index];
   }
 
+  const std::vector<Query>& getQueries() const {
+    return queries_;
+  }
+
  private:
 
   explicit MultiQuery(folly::StringPiece multi_query)
