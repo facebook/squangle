@@ -6,10 +6,6 @@ performing fully asynchronous queries against MySQL databases.  It
 supports connecting and querying in asynchronous modes (either
 callbacks or explicit waiting).
 
-This readme can be a little out dated, for more Usage examples in all
-interface modes (sync, folly::Future and callbacks), please refer to:
-https://our.intern.facebook.com/intern/dex/mysql-client-cxx-api/
-
 This document is a basic overview/roadmap; please consult the headers
 for more details, as well as the test cases and ParallelMysqlTool.cpp
 for example usage.
