@@ -22,6 +22,9 @@ void ConnectionContextBase::collectNormalValues(
   add("is_ssl_session_reused", folly::to<std::string, bool>(sslSessionReused));
 }
 
+void ConnectionContextBase::collectIntValues(
+    AddIntValueFunction /* add */) const {}
+
 void DBSimpleLogger::logQuerySuccess(
     const QueryLoggingData& data,
     const SquangleLoggingData&) {

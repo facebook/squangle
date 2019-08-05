@@ -40,6 +40,8 @@ enum class OperationType {
 
 typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
     AddNormalValueFunction;
+typedef std::function<void(folly::StringPiece key, int64_t value)>
+    AddIntValueFunction;
 /*
  * Base class to allow dynamic logging data efficiently saved in Squangle core
  * classes. Should be used for data about the connection.
@@ -48,6 +50,7 @@ class ConnectionContextBase {
  public:
   virtual ~ConnectionContextBase() {}
   virtual void collectNormalValues(AddNormalValueFunction add) const;
+  virtual void collectIntValues(AddIntValueFunction add) const;
   virtual std::unique_ptr<ConnectionContextBase> copy() const {
     return std::make_unique<ConnectionContextBase>(*this);
   }
