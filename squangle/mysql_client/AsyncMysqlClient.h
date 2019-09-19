@@ -822,6 +822,11 @@ class Connection {
     return false;
   }
 
+  bool inTransaction() {
+    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    return mysql_connection_->inTransaction();
+  }
+
   const ConnectionOptions& getConnectionOptions() const {
     return conn_options_;
   }
