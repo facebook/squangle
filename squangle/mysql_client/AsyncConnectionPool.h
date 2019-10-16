@@ -53,7 +53,7 @@ class PoolKey;
 
 // In order to keep always healthy connections avoid and avoid holding one
 // connection for way too long, we have the options:
-//   Age: Connection will be closed when reaches a limit from the tie it
+//   Age: Connection will be closed when reaches a limit from the time it
 // was opened. With this option the connections also get killed by idle time.
 //   IdleTime: Doesn't close a connection due the total time it has been opened,
 // only closes a connection due being idle for a given amount of time.
@@ -72,7 +72,7 @@ class PoolOptions {
   static constexpr Duration kDefaultMaxIdleTime = std::chrono::seconds(4);
   static constexpr std::chrono::milliseconds kCleanUpTimeout =
       std::chrono::milliseconds(300);
-  static const int kDefaultMaxOpenConn = 50;
+  static const int kDefaultMaxOpenConn = 100;
 
   PoolOptions()
       : per_key_limit_(kDefaultMaxOpenConn),
