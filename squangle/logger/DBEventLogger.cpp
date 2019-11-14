@@ -18,12 +18,23 @@ namespace db {
 
 void ConnectionContextBase::collectNormalValues(
     AddNormalValueFunction add) const {
-  add("is_ssl", folly::to<std::string, bool>(isSslConnection));
-  add("is_ssl_session_reused", folly::to<std::string, bool>(sslSessionReused));
+  add("is_ssl", folly::to<std::string>(isSslConnection));
+  add("is_ssl_session_reused", folly::to<std::string>(sslSessionReused));
 }
 
 void ConnectionContextBase::collectIntValues(
     AddIntValueFunction /* add */) const {}
+
+folly::Optional<std::string> ConnectionContextBase::getNormalValue(
+    folly::StringPiece key) const {
+  if (key == "is_ssl") {
+    return folly::to<std::string>(isSslConnection);
+  } else if (key == "is_ssl_session_reused") {
+    return folly::to<std::string>(sslSessionReused);
+  } else {
+    return folly::none;
+  }
+}
 
 void DBSimpleLogger::logQuerySuccess(
     const QueryLoggingData& data,
@@ -58,5 +69,5 @@ void DBSimpleLogger::logConnectionFailure(
   VLOG(2) << "[" << api_name_ << "]"
           << " connection with " << connInfo.connKey->host << " failed";
 }
-}
-}
+} // namespace db
+} // namespace facebook

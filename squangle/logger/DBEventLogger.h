@@ -54,6 +54,14 @@ class ConnectionContextBase {
   virtual std::unique_ptr<ConnectionContextBase> copy() const {
     return std::make_unique<ConnectionContextBase>(*this);
   }
+
+  /**
+   * Provide a more efficient mechanism to access a single value stored in the
+   * ConnectionContextBase that does not require executing a functor against
+   * every possible value and filtering in the functor
+   */
+  virtual folly::Optional<std::string> getNormalValue(
+      folly::StringPiece key) const;
   bool isSslConnection = false;
   bool sslSessionReused = false;
 };
@@ -61,8 +69,9 @@ class ConnectionContextBase {
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
 
 struct SquangleLoggingData {
-  SquangleLoggingData(const common::mysql_client::ConnectionKey* conn_key,
-                      const ConnectionContextBase* conn_context)
+  SquangleLoggingData(
+      const common::mysql_client::ConnectionKey* conn_key,
+      const ConnectionContextBase* conn_context)
       : connKey(conn_key), connContext(conn_context) {}
   const common::mysql_client::ConnectionKey* connKey;
   const ConnectionContextBase* connContext;
@@ -86,7 +95,7 @@ struct QueryLoggingData : CommonLoggingData {
       uint64_t resultSize = 0,
       bool noIndexUsed = false,
       const std::unordered_map<std::string, std::string>& queryAttributes =
-      std::unordered_map<std::string, std::string>())
+          std::unordered_map<std::string, std::string>())
       : CommonLoggingData(op, duration),
         queries_executed(queries),
         query(queryString),
@@ -139,14 +148,14 @@ class DBLoggerBase {
 
   const char* FailureString(FailureReason reason) {
     switch (reason) {
-    case FailureReason::BAD_USAGE:
-      return "BadUsage";
-    case FailureReason::TIMEOUT:
-      return "Timeout";
-    case FailureReason::CANCELLED:
-      return "Cancelled";
-    case FailureReason::DATABASE_ERROR:
-      return "DatabaseError";
+      case FailureReason::BAD_USAGE:
+        return "BadUsage";
+      case FailureReason::TIMEOUT:
+        return "Timeout";
+      case FailureReason::CANCELLED:
+        return "Cancelled";
+      case FailureReason::DATABASE_ERROR:
+        return "DatabaseError";
     }
     return "(should not happen)";
   }
@@ -206,7 +215,7 @@ class DBSimpleLogger : public SquangleLoggerBase {
       const std::string& error,
       const SquangleLoggingData& connInfo) override;
 };
-}
-}
+} // namespace db
+} // namespace facebook
 
 #endif // COMMON_DB_EVENT_LOGGER_H
