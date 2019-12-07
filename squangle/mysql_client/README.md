@@ -35,7 +35,7 @@ for example usage.
 
     DbLocator dblocator(XDB_MACROS, db::InstanceRequirement::Closest);
 
-    auto conn_op = FbAsyncMysqlClient::defaultClient()->beginConnection(&dblocator);
+    auto conn_op = FbAsyncMysqlClient::defaultClient()->beginConnection(dblocator);
     conn_op->run()->wait();
     if (!conn_op->ok()) {
       panicalittlebit();
