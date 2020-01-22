@@ -184,7 +184,6 @@ class ConnectionOptions {
 
   ConnectionOptions& setQueryTimeout(Duration dur) {
     query_timeout_ = dur;
-    total_timeout_ = std::max(dur, total_timeout_);
     return *this;
   }
 
