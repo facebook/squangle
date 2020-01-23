@@ -11,6 +11,7 @@
 #include "squangle/mysql_client/Operation.h"
 #include <errmsg.h> // mysql
 #include <openssl/ssl.h>
+#include <cmath>
 
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
@@ -541,23 +542,23 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out (took %.2fms)",
+        "[%d](%s) Connect to %s:%d timed out (took %ld ms)",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
         host().c_str(),
         port(),
-        delta_micros / 1000.0);
+        std::lround(delta_micros / 1000.0));
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
         "[%d](%s) Connect to %s:%d timed out"
-        " (loop stalled, avg loop time %.2fms)",
+        " (loop stalled, avg loop time %ld ms)",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
         host().c_str(),
         port(),
-        avgLoopTimeUs / 1000.0);
+        std::lround(avgLoopTimeUs / 1000.0));
     setAsyncClientError(msg, "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
@@ -1072,21 +1073,21 @@ void FetchOperation::specializedTimeoutTriggered() {
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     msg = folly::stringPrintf(
-        "[%d](%s) Query timed out (%s, took %.2fms)",
+        "[%d](%s) Query timed out (%s, took %ld ms)",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
         kErrorPrefix,
         rows.c_str(),
-        delta_micros / 1000.0);
+        std::lround(delta_micros / 1000.0));
     setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "Query timed out");
   } else {
     msg = folly::stringPrintf(
         "[%d](%s) Query timed out (%s, loop stalled,"
-        " avg loop time %.2fms)",
+        " avg loop time %ld ms)",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
         rows.c_str(),
-        avgLoopTimeUs / 1000.0);
+        std::lround(avgLoopTimeUs / 1000.0));
     setAsyncClientError(msg, "Query timed out (loop stalled)");
   }
   completeOperation(OperationResult::TimedOut);
