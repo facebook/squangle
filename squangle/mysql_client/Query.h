@@ -251,7 +251,7 @@ class Query {
       }
       if (!other.query_buffer_.hasValue()) {
         /* shallow copy string */
-        query_buffer_.clear();
+        query_buffer_.reset();
         query_ = other.query_;
       } else {
         query_buffer_ = other.query_buffer_;
@@ -271,13 +271,13 @@ class Query {
       }
       if (!other.query_buffer_.hasValue()) {
         /* shallow copy */
-        query_buffer_.clear();
+        query_buffer_.reset();
         query_ = other.query_;
       } else {
         query_buffer_ = std::move(other.query_buffer_);
         query_ = folly::StringPiece(*query_buffer_);
         other.query_ = {};
-        other.query_buffer_.clear();
+        other.query_buffer_.reset();
       }
       sanityChecks();
       return *this;

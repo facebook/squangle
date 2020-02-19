@@ -727,7 +727,7 @@ EphemeralRow FetchOperation::RowStream::consumeRow() {
     LOG(DFATAL) << "Illegal operation";
   }
   EphemeralRow eph_row(std::move(*current_row_));
-  current_row_.clear();
+  current_row_.reset();
   return eph_row;
 }
 
@@ -944,7 +944,7 @@ void FetchOperation::socketActionable() {
             conn()->mysql()->server_status & SERVER_QUERY_NO_INDEX_USED;
         notifyQuerySuccess(more_results);
       }
-      current_row_stream_.clear();
+      current_row_stream_.reset();
     }
 
     // Once this action is set, the operation is going to be completed no matter
