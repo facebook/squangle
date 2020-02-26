@@ -55,7 +55,7 @@ std::string ConnectionOptions::getDisplayString() const {
     parts.push_back(folly::sformat(
         "SSL options provider={}", (void*)ssl_options_provider_.get()));
   }
-  if (compression_lib_.hasValue()) {
+  if (compression_lib_.has_value()) {
     parts.push_back(folly::sformat(
         "compression library={}", (void*)compression_lib_.get_pointer()));
   }
@@ -723,7 +723,7 @@ FetchOperation::RowStream::RowStream(
       handler_(handler) {}
 
 EphemeralRow FetchOperation::RowStream::consumeRow() {
-  if (!current_row_.hasValue()) {
+  if (!current_row_.has_value()) {
     LOG(DFATAL) << "Illegal operation";
   }
   EphemeralRow eph_row(std::move(*current_row_));
@@ -736,12 +736,12 @@ bool FetchOperation::RowStream::hasNext() {
   // Because it will move the buffer.
   slurp();
   // First iteration
-  return current_row_.hasValue();
+  return current_row_.has_value();
 }
 
 bool FetchOperation::RowStream::slurp() {
   CHECK_THROW(mysql_query_result_ != nullptr, OperationStateException);
-  if (current_row_.hasValue() || query_finished_) {
+  if (current_row_.has_value() || query_finished_) {
     return true;
   }
   MYSQL_ROW row;
@@ -876,9 +876,9 @@ void FetchOperation::socketActionable() {
     //  - CompleteQuery: an error occurred or rows finished to fetch
     //  - WaitForConsumer: in case `pause` is called during `notifyRowsReady`
     if (active_fetch_action_ == FetchAction::Fetch) {
-      DCHECK(current_row_stream_.hasValue());
+      DCHECK(current_row_stream_.has_value());
       // Try to catch when the user didn't pause or consumed the rows
-      if (current_row_stream_->current_row_.hasValue()) {
+      if (current_row_stream_->current_row_.has_value()) {
         // This should help
         LOG(ERROR) << "Rows not consumed. Perhaps missing `pause`?";
         cancel_ = true;

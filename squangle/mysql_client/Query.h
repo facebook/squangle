@@ -249,7 +249,7 @@ class Query {
       if (this == &other) {
         return *this;
       }
-      if (!other.query_buffer_.hasValue()) {
+      if (!other.query_buffer_.has_value()) {
         /* shallow copy string */
         query_buffer_.reset();
         query_ = other.query_;
@@ -269,7 +269,7 @@ class Query {
       if (this == &other) {
         return *this;
       }
-      if (!other.query_buffer_.hasValue()) {
+      if (!other.query_buffer_.has_value()) {
         /* shallow copy */
         query_buffer_.reset();
         query_ = other.query_;
@@ -284,7 +284,7 @@ class Query {
     }
 
     QueryText& operator+=(const QueryText& other) {
-      if (!query_buffer_.hasValue()) {
+      if (!query_buffer_.has_value()) {
         // this was a shallow copy before; we need to copy now
         query_buffer_.assign(folly::fbstring(query_.begin(), query_.size()));
       }
@@ -305,7 +305,7 @@ class Query {
 
     // ensures invariants are met
     void sanityChecks() {
-      if (!query_buffer_.hasValue()) {
+      if (!query_buffer_.has_value()) {
         /* shallow copy */
         return;
       }
