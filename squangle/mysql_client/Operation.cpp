@@ -140,9 +140,10 @@ void Operation::cancel() {
       // otherwise we will throw exception
       return;
     }
+
+    state_ = OperationState::Cancelling;
   }
 
-  state_ = OperationState::Cancelling;
   if (!connection()->runInThread(
           this, &Operation::completeOperation, OperationResult::Cancelled)) {
     // if a strange error happen in EventBase , mark it cancelled now
