@@ -529,20 +529,19 @@ void ConnectOperation::socketActionable() {
 }
 
 void ConnectOperation::specializedTimeoutTriggered() {
-  auto delta = chrono::steady_clock::now() - start_time_;
-  int64_t delta_micros =
-      chrono::duration_cast<chrono::microseconds>(delta).count();
+  auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
+      chrono::steady_clock::now() - start_time_);
 
   // Check for an overloaded EventBase
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out (took %ld ms)",
+        "[%d](%s) Connect to %s:%d timed out (took %lu ms)",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
         host().c_str(),
         port(),
-        std::lround(delta_micros / 1000.0));
+        delta.count());
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
