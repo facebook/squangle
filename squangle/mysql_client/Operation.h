@@ -108,8 +108,8 @@ typedef std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>
     MultiQueryCallback;
 
-using std::vector;
 using std::string;
+using std::vector;
 
 enum class SquangleErrno : uint16_t {
   SQ_ERRNO_CONN_TIMEOUT = 7000,
@@ -135,7 +135,7 @@ enum class OperationState {
   Completed,
 };
 
-//overload of operator<< for OperationState
+// overload of operator<< for OperationState
 std::ostream& operator<<(std::ostream& os, OperationState state);
 
 // Once an operation is Completed, it has a result type, indicating
@@ -148,7 +148,7 @@ enum class OperationResult {
   TimedOut,
 };
 
-//overload of operator<< for OperationResult
+// overload of operator<< for OperationResult
 std::ostream& operator<<(std::ostream& os, OperationResult result);
 
 // For control flows in callbacks. This indicates the reason a callback was
@@ -159,12 +159,12 @@ std::ostream& operator<<(std::ostream& os, OperationResult result);
 // indicating that all queries have been successfully fetched.
 enum class QueryCallbackReason { RowsFetched, QueryBoundary, Failure, Success };
 
-//overload of operator<< for QueryCallbackReason
+// overload of operator<< for QueryCallbackReason
 std::ostream& operator<<(std::ostream& os, QueryCallbackReason reason);
 
 enum class StreamState { InitQuery, RowsReady, QueryEnded, Failure, Success };
 
-//overload of operator<< for StreamState
+// overload of operator<< for StreamState
 std::ostream& operator<<(std::ostream& os, StreamState state);
 
 class ConnectionOptions {
@@ -413,9 +413,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual db::OperationType getOperationType() const = 0;
 
  protected:
-
-   // The chained callback will be passed along to following operations
-   void setChainedCallback(ChainedCallback chainedCallback);
+  // The chained callback will be passed along to following operations
+  void setChainedCallback(ChainedCallback chainedCallback);
 
   // Threshold is 500ms, but because of smoothing, actual last loop delay
   // needs to be roughly 2x this value to trigger detection
@@ -775,9 +774,7 @@ class FetchOperation : public Operation {
   // or not to go to next query.
   class RowStream {
    public:
-    RowStream(
-        MYSQL_RES* mysql_query_result,
-        MysqlHandler* handler);
+    RowStream(MYSQL_RES* mysql_query_result, MysqlHandler* handler);
 
     EphemeralRow consumeRow();
 
@@ -963,13 +960,12 @@ class MultiQueryStreamOperation : public FetchOperation {
     return db::OperationType::MultiQueryStream;
   }
 
-  template<typename C>
+  template <typename C>
   void setCallback(C cb) {
     stream_callback_ = cb;
   }
 
  private:
-
   // wrapper to construct CallbackVistor and invoke the
   // right callback
   void invokeCallback(StreamState state);
@@ -993,6 +989,7 @@ class MultiQueryStreamOperation : public FetchOperation {
         cb(op_, state_);
       }
     }
+
    private:
     MultiQueryStreamOperation* op_;
     StreamState state_;
@@ -1081,7 +1078,6 @@ class QueryOperation : public FetchOperation {
   }
 
  protected:
-
   void notifyInitQuery() override;
   void notifyRowsReady() override;
   void notifyQuerySuccess(bool more_results) override;
@@ -1163,7 +1159,6 @@ class MultiQueryOperation : public FetchOperation {
   }
 
  protected:
-
   void notifyInitQuery() override;
   void notifyRowsReady() override;
   void notifyQuerySuccess(bool more_results) override;
@@ -1192,8 +1187,8 @@ class MultiQueryOperation : public FetchOperation {
 // error, it will throw MysqlException as expected in the sync mode.
 std::unique_ptr<Connection> blockingConnectHelper(
     std::shared_ptr<ConnectOperation>& conn_op);
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_OPERATION_H

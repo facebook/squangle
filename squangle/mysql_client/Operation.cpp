@@ -226,9 +226,10 @@ std::unique_ptr<Connection>&& Operation::releaseConnection() {
 }
 
 void Operation::snapshotMysqlErrors() {
-  mysql_errno_ = ::mysql_errno(conn()->mysql());
+  MYSQL* mysql = conn()->mysql();
+  mysql_errno_ = ::mysql_errno(mysql);
   if (mysql_errno_ != 0) {
-    mysql_error_ = ::mysql_error(conn()->mysql());
+    mysql_error_ = ::mysql_error(mysql);
     mysql_normalize_error_ = mysql_error_;
   }
 }
@@ -278,9 +279,7 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
   // allow more callbacks to be set
   if (observer_callback_) {
     auto old_obs_cb = observer_callback_;
-    observer_callback_ =
-        [ obs = obs_cb,
-          old_obs = old_obs_cb ](Operation & op) {
+    observer_callback_ = [obs = obs_cb, old_obs = old_obs_cb](Operation& op) {
       obs(op);
       old_obs(op);
     };
@@ -292,13 +291,12 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
 void Operation::setChainedCallback(ChainedCallback chainedCallback) {
   if (chained_callback_) {
     auto original_callback = std::move(chained_callback_);
-    chained_callback_ = [
-      callback = std::move(original_callback),
-      new_callback = std::move(chainedCallback)
-    ](Operation & op) mutable {
-      callback(op);
-      new_callback(op);
-    };
+    chained_callback_ =
+        [callback = std::move(original_callback),
+         new_callback = std::move(chainedCallback)](Operation& op) mutable {
+          callback(op);
+          new_callback(op);
+        };
   } else {
     chained_callback_ = std::move(chainedCallback);
   }
@@ -432,39 +430,35 @@ void ConnectOperation::specializedRunImpl() {
     conn()->initMysqlOnly();
   }
   removeClientReference();
-  if (!conn()->mysql()) {
+  MYSQL* mysql = conn()->mysql();
+  if (!mysql) {
     setAsyncClientError("connection initialization failed");
     attemptFailed(OperationResult::Failed);
     return;
   }
 
-  mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
+  mysql_options(mysql, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
   for (const auto& kv : conn_options_.getConnectionAttributes()) {
     mysql_options4(
-        conn()->mysql(),
-        MYSQL_OPT_CONNECT_ATTR_ADD,
-        kv.first.c_str(),
-        kv.second.c_str());
+        mysql, MYSQL_OPT_CONNECT_ATTR_ADD, kv.first.c_str(), kv.second.c_str());
   }
 
   auto compression_lib = getCompression();
   if (compression_lib) {
     CHECK(*compression_lib != MYSQL_COMPRESSION_ZSTD)
         << "ZSTD is not yet supported";
-    mysql_options(conn()->mysql(), MYSQL_OPT_COMPRESS, nullptr);
-    mysql_options(
-        conn()->mysql(), MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
+    mysql_options(mysql, MYSQL_OPT_COMPRESS, nullptr);
+    mysql_options(mysql, MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
   }
 
   auto provider = conn_options_.getSSLOptionsProviderPtr();
-  if (provider && provider->setMysqlSSLOptions(conn()->mysql())) {
+  if (provider && provider->setMysqlSSLOptions(mysql)) {
     if (connection_context_) {
       connection_context_->isSslConnection = true;
     }
   }
 
-  if (!client()->getMysqlHandler().initConnect(
-          conn()->mysql(), conn_key_, flags_)) {
+  if (!client()->getMysqlHandler().initConnect(mysql, conn_key_, flags_)) {
     setAsyncClientError("mysql_real_connect_nonblocking_init failed");
     attemptFailed(OperationResult::Failed);
     return;
@@ -490,9 +484,9 @@ void ConnectOperation::socketActionable() {
   DCHECK(isInEventBaseThread());
   int error;
   auto& handler = conn()->client()->getMysqlHandler();
-  auto status =
-      handler.connect(conn()->mysql(), error, conn_options_, conn_key_, flags_);
-  auto fd = mysql_get_file_descriptor(conn()->mysql());
+  MYSQL* mysql = conn()->mysql();
+  auto status = handler.connect(mysql, error, conn_options_, conn_key_, flags_);
+  auto fd = mysql_get_file_descriptor(mysql);
   if (status == MysqlHandler::DONE) {
     if (error == 0) {
       if (fd <= 0) {
@@ -697,15 +691,13 @@ FetchOperation* FetchOperation::specializedRun() {
 
 void FetchOperation::specializedRunImpl() {
   try {
-    mysql_options(this->conn()->mysql(), MYSQL_OPT_QUERY_ATTR_RESET, 0);
+    MYSQL* mysql = conn()->mysql();
+    mysql_options(mysql, MYSQL_OPT_QUERY_ATTR_RESET, 0);
     for (auto& it : attributes_) {
       mysql_options4(
-          conn()->mysql(),
-          MYSQL_OPT_QUERY_ATTR_ADD,
-          it.first.c_str(),
-          it.second.c_str());
+          mysql, MYSQL_OPT_QUERY_ATTR_ADD, it.first.c_str(), it.second.c_str());
     }
-    rendered_query_ = queries_.renderQuery(conn()->mysql());
+    rendered_query_ = queries_.renderQuery(mysql);
     socketActionable();
   } catch (std::invalid_argument& e) {
     setAsyncClientError(
@@ -793,6 +785,7 @@ void FetchOperation::socketActionable() {
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
   auto& handler = conn()->client()->getMysqlHandler();
+  MYSQL* mysql = conn()->mysql();
 
   // This loop runs the fetch actions required to successfully execute query,
   // request next results, fetch results, identify errors and complete operation
@@ -817,9 +810,9 @@ void FetchOperation::socketActionable() {
 
       if (query_executed_) {
         ++num_current_query_;
-        status = handler.nextResult(conn()->mysql(), error);
+        status = handler.nextResult(mysql, error);
       } else {
-        status = handler.runQuery(conn()->mysql(), rendered_query_, error);
+        status = handler.runQuery(mysql, rendered_query_, error);
       }
 
       if (status == MysqlHandler::PENDING) {
@@ -847,8 +840,8 @@ void FetchOperation::socketActionable() {
     //  - CompleteQuery: no rows to fetch (complete query will read rowsAffected
     //                   and lastInsertId to add to result
     if (active_fetch_action_ == FetchAction::InitFetch) {
-      auto* mysql_query_result = handler.getResult(conn()->mysql());
-      auto num_fields = mysql_field_count(conn()->mysql());
+      auto* mysql_query_result = handler.getResult(mysql);
+      auto num_fields = mysql_field_count(mysql);
 
       // Check to see if this an empty query or an error
       if (!mysql_query_result && num_fields > 0) {
@@ -920,15 +913,15 @@ void FetchOperation::socketActionable() {
       if (mysql_errno_ != 0 || cancel_) {
         active_fetch_action_ = FetchAction::CompleteOperation;
       } else {
-        current_last_insert_id_ = mysql_insert_id(conn()->mysql());
-        current_affected_rows_ = mysql_affected_rows(conn()->mysql());
+        current_last_insert_id_ = mysql_insert_id(mysql);
+        current_affected_rows_ = mysql_affected_rows(mysql);
         const char* data;
         size_t length;
         if (!mysql_session_track_get_first(
-                conn()->mysql(), SESSION_TRACK_GTIDS, &data, &length)) {
+                mysql, SESSION_TRACK_GTIDS, &data, &length)) {
           current_recv_gtid_ = std::string(data, length);
         }
-        more_results = mysql_more_results(conn()->mysql());
+        more_results = mysql_more_results(mysql);
         active_fetch_action_ = more_results ? FetchAction::StartQuery
                                             : FetchAction::CompleteOperation;
 
@@ -941,8 +934,7 @@ void FetchOperation::socketActionable() {
           total_result_size_ += current_row_stream_->query_result_size_;
         }
         ++num_queries_executed_;
-        no_index_used_ |=
-            conn()->mysql()->server_status & SERVER_QUERY_NO_INDEX_USED;
+        no_index_used_ |= mysql->server_status & SERVER_QUERY_NO_INDEX_USED;
         notifyQuerySuccess(more_results);
       }
       current_row_stream_.reset();
@@ -1025,7 +1017,7 @@ RowBlock makeRowBlockFromStream(
   }
   return row_block;
 }
-}
+} // namespace
 
 void FetchOperation::specializedTimeoutTriggered() {
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
@@ -1174,9 +1166,9 @@ void FetchOperation::killRunningQuery() {
       auto op = Connection::beginQuery(
           conn_op.releaseConnection(), "KILL %d", thread_id);
       op->setCallback([thread_id, host, port](
-          QueryOperation& /* unused */,
-          QueryResult* /* unused */,
-          QueryCallbackReason reason) {
+                          QueryOperation& /* unused */,
+                          QueryResult* /* unused */,
+                          QueryCallbackReason reason) {
         if (reason == QueryCallbackReason::Failure) {
           LOG(WARNING) << folly::format(
               "Failed to kill query in thread {} on {}:{}",
@@ -1410,10 +1402,9 @@ folly::StringPiece Operation::toString(StreamState state) {
   return "Unknown state";
 }
 
-//overload of operator<< for StreamState
-std::ostream& operator<<(std::ostream& os, StreamState state)
-{
-    return os << Operation::toString(state);
+// overload of operator<< for StreamState
+std::ostream& operator<<(std::ostream& os, StreamState state) {
+  return os << Operation::toString(state);
 }
 
 folly::StringPiece Operation::toString(QueryCallbackReason reason) {
@@ -1432,10 +1423,9 @@ folly::StringPiece Operation::toString(QueryCallbackReason reason) {
   return "Unknown reason";
 }
 
-//overload of operator<< for QueryCallbackReason
-std::ostream& operator<<(std::ostream& os, QueryCallbackReason reason)
-{
-    return os << Operation::toString(reason);
+// overload of operator<< for QueryCallbackReason
+std::ostream& operator<<(std::ostream& os, QueryCallbackReason reason) {
+  return os << Operation::toString(reason);
 }
 
 folly::StringPiece Operation::toString(OperationState state) {
@@ -1454,10 +1444,9 @@ folly::StringPiece Operation::toString(OperationState state) {
   return "Unknown state";
 }
 
-//overload of operator<< for OperationState
-std::ostream& operator<<(std::ostream& os, OperationState state)
-{
-    return os << Operation::toString(state);
+// overload of operator<< for OperationState
+std::ostream& operator<<(std::ostream& os, OperationState state) {
+  return os << Operation::toString(state);
 }
 
 folly::StringPiece Operation::toString(OperationResult result) {
@@ -1478,10 +1467,9 @@ folly::StringPiece Operation::toString(OperationResult result) {
   return "Unknown result";
 }
 
-//overload of operator<< for OperationResult
-std::ostream& operator<<(std::ostream& os, OperationResult result)
-{
-    return os << Operation::toString(result);
+// overload of operator<< for OperationResult
+std::ostream& operator<<(std::ostream& os, OperationResult result) {
+  return os << Operation::toString(result);
 }
 
 folly::StringPiece FetchOperation::toString(FetchAction action) {
@@ -1549,6 +1537,6 @@ std::unique_ptr<Connection>&& Operation::ConnectionProxy::releaseConnection() {
   }
   throw std::runtime_error("Releasing connection from referenced conn");
 }
-}
-}
-} // namespace facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
