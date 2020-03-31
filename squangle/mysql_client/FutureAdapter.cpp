@@ -50,7 +50,6 @@ folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op) {
     }
   });
   conn_op->run();
-
   return future;
 }
 

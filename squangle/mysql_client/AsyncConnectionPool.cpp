@@ -738,6 +738,9 @@ void ConnectPoolOperation::specializedRunImpl() {
   // Remove before to not count against itself
   removeClientReference();
   if (shared_pool) {
+    // Sync attributes in conn_options_ with the Operation::attributes_ value
+    // as pool key uses the attributes from ConnectionOptions
+    conn_options_.setAttributes(attributes_);
     shared_pool->registerForConnection(this);
   } else {
     VLOG(2) << "Pool is gone, operation must cancel";

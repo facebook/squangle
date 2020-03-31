@@ -205,21 +205,21 @@ class ConnectionOptions {
     return ssl_options_provider_.get();
   }
 
-  ConnectionOptions& setConnectionAttribute(
+  ConnectionOptions& setAttribute(
       const string& attr,
       const string& value) {
-    connection_attributes_[attr] = value;
+    attributes_[attr] = value;
     return *this;
   }
 
-  const std::unordered_map<string, string>& connectionAttributes() const {
-    return connection_attributes_;
+  const std::unordered_map<string, string>& getAttributes() const {
+    return attributes_;
   }
 
-  ConnectionOptions& setConnectionAttributes(
+  ConnectionOptions& setAttributes(
       const std::unordered_map<string, string>& attributes) {
-    for (auto& kv : attributes) {
-      connection_attributes_[kv.first] = kv.second;
+    for (auto& [key, value] : attributes) {
+      attributes_[key] = value;
     }
     return *this;
   }
@@ -233,11 +233,6 @@ class ConnectionOptions {
 
   folly::Optional<mysql_compression_lib> getCompression() const {
     return compression_lib_;
-  }
-
-  // MySQL 5.6 connection attributes.  Sent at time of connect.
-  const std::unordered_map<string, string>& getConnectionAttributes() const {
-    return connection_attributes_;
   }
 
   // Sets the amount of attempts that will be tried in order to acquire the
@@ -272,7 +267,7 @@ class ConnectionOptions {
   Duration total_timeout_;
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
-  std::unordered_map<string, string> connection_attributes_;
+  std::unordered_map<string, string> attributes_;
   folly::Optional<mysql_compression_lib> compression_lib_;
   uint32_t max_attempts_ = 1;
 };
@@ -369,6 +364,34 @@ class Operation : public std::enable_shared_from_this<Operation> {
   }
   folly::dynamic&& stealUserData() {
     return std::move(*user_data_);
+  }
+
+  Operation* setAttributes(
+      const std::unordered_map<std::string, std::string>& attributes) {
+    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    for (const auto& [key, value] : attributes) {
+      attributes_[key] = value;
+    }
+    return this;
+  }
+
+  Operation* setAttributes(
+      std::unordered_map<std::string, std::string>&& attributes) {
+    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    for (auto& [key, value] : attributes) {
+      attributes_[key] = std::move(value);
+    }
+    return this;
+  }
+
+  Operation* setAttribute(const std::string& key, const std::string& value) {
+    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    attributes_[key] = value;
+    return this;
+  }
+
+  const std::unordered_map<string, string>& getAttributes() const {
+    return attributes_;
   }
 
   // Connections are transferred across operations.  At any one time,
@@ -535,6 +558,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   string mysql_error_;
   string mysql_normalize_error_;
 
+  // Connection or query attributes (depending on the Operation type)
+  std::unordered_map<std::string, std::string> attributes_;
+
   // This mutex protects the operation cancel process when the state
   // is being checked in `run` and the operation is being cancelled in other
   // thread.
@@ -583,18 +609,6 @@ class ConnectOperation : public Operation {
   const ConnectionKey* getKey() const {
     return &conn_key_;
   }
-
-  // Get and set MySQL 5.6 connection attributes.
-  ConnectOperation* setConnectionAttribute(
-      const string& attr,
-      const string& value);
-
-  const std::unordered_map<string, string>& connectionAttributes() const {
-    return conn_options_.getConnectionAttributes();
-  }
-
-  ConnectOperation* setConnectionAttributes(
-      const std::unordered_map<string, string>& attributes);
 
   ConnectOperation* setSSLOptionsProviderBase(
       std::unique_ptr<SSLOptionsProviderBase> ssl_options_provider);
@@ -739,12 +753,6 @@ class FetchOperation : public Operation {
   ~FetchOperation() override = default;
   void mustSucceed() override;
 
-  // Only supported with fbmysql server
-  FetchOperation* setQueryAttributes(
-      const std::unordered_map<std::string, std::string>& attributes);
-  FetchOperation* setQueryAttributes(
-      std::unordered_map<std::string, std::string>&& attributes);
-
   // Return the query as it was sent to MySQL (i.e., for a single
   // query, the query itself, but for multiquery, all queries
   // combined).
@@ -843,9 +851,6 @@ class FetchOperation : public Operation {
 
  protected:
   MultiQuery queries_;
-
-  // Only for fbmysql fork
-  std::unordered_map<std::string, std::string> attributes_;
 
   FetchOperation* specializedRun() override;
 

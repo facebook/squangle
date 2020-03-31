@@ -146,8 +146,8 @@ class PoolKey {
   PoolKey(ConnectionKey conn_key, ConnectionOptions conn_opts)
       : connKey(std::move(conn_key)), connOptions(std::move(conn_opts)) {
     options_hash_ = folly::hash::hash_range(
-        connOptions.getConnectionAttributes().begin(),
-        connOptions.getConnectionAttributes().end());
+        connOptions.getAttributes().begin(),
+        connOptions.getAttributes().end());
     hash_ = folly::hash::hash_combine(connKey.hash, options_hash_);
   }
 

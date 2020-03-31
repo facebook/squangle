@@ -465,7 +465,7 @@ folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     Query&& query,
     QueryOptions&& options) {
   auto op = beginQuery(std::move(conn), std::move(query));
-  op->setQueryAttributes(std::move(options.getAttributes()));
+  op->setAttributes(std::move(options.getAttributes()));
   return toSemiFuture(op);
 }
 
@@ -481,7 +481,7 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     Query&& args,
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
-  op->setQueryAttributes(std::move(options.getAttributes()));
+  op->setAttributes(std::move(options.getAttributes()));
   return toSemiFuture(op);
 }
 
@@ -490,7 +490,7 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     vector<Query>&& args,
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
-  op->setQueryAttributes(std::move(options.getAttributes()));
+  op->setAttributes(std::move(options.getAttributes()));
   return toSemiFuture(op);
 }
 
@@ -593,7 +593,7 @@ MultiQueryStreamHandler Connection::streamMultiQuery(
       Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
       std::move(queries));
   if (attributes.size() > 0) {
-    operation->setQueryAttributes(attributes);
+    operation->setAttributes(attributes);
   }
   return MultiQueryStreamHandler(operation);
 }
@@ -607,7 +607,7 @@ MultiQueryStreamHandler Connection::streamMultiQuery(
   auto connP = proxy.get();
   auto ret = connP->createOperation(std::move(proxy), std::move(multi_query));
   if (attributes.size() > 0) {
-    ret->setQueryAttributes(attributes);
+    ret->setAttributes(attributes);
   }
   Duration timeout = ret->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {

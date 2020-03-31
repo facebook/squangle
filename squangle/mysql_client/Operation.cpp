@@ -60,10 +60,10 @@ std::string ConnectionOptions::getDisplayString() const {
         "compression library={}", (void*)compression_lib_.get_pointer()));
   }
 
-  if (!connection_attributes_.empty()) {
+  if (!attributes_.empty()) {
     std::vector<std::string> substrings;
-    for (auto it : connection_attributes_) {
-      substrings.push_back(folly::sformat("{}={}", it.first, it.second));
+    for (const auto& [key, value] : attributes_) {
+      substrings.push_back(folly::sformat("{}={}", key, value));
     }
 
     parts.push_back(folly::sformat(
@@ -317,7 +317,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
     const ConnectionOptions& conn_opts) {
   setTimeout(conn_opts.getTimeout());
   setDefaultQueryTimeout(conn_opts.getQueryTimeout());
-  setConnectionAttributes(conn_opts.getConnectionAttributes());
+  setAttributes(conn_opts.getAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
   setTotalTimeout(conn_opts.getTotalTimeout());
   setCompression(conn_opts.getCompression());
@@ -332,20 +332,6 @@ const ConnectionOptions& ConnectOperation::getConnectionOptions() const {
   return conn_options_;
 }
 
-ConnectOperation* ConnectOperation::setConnectionAttribute(
-    const string& attr,
-    const string& value) {
-  CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
-  conn_options_.setConnectionAttribute(attr, value);
-  return this;
-}
-
-ConnectOperation* ConnectOperation::setConnectionAttributes(
-    const std::unordered_map<string, string>& attributes) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
-  conn_options_.setConnectionAttributes(attributes);
-  return this;
-}
 ConnectOperation* ConnectOperation::setDefaultQueryTimeout(Duration t) {
   CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setQueryTimeout(t);
@@ -420,7 +406,6 @@ void ConnectOperation::attemptFailed(OperationResult result) {
   auto timeout_attempt_based = conn_options_.getTimeout() +
       std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time_);
   timeout_ = min(timeout_attempt_based, conn_options_.getTotalTimeout());
-
   specializedRun();
 }
 
@@ -443,10 +428,13 @@ void ConnectOperation::specializedRunImpl() {
     return;
   }
 
-  mysql_options(mysql, MYSQL_OPT_CONNECT_ATTR_RESET, 0);
-  for (const auto& kv : conn_options_.getConnectionAttributes()) {
+  mysql_options(conn()->mysql(), MYSQL_OPT_CONNECT_ATTR_RESET, 0);
+  for (const auto& [key, value] : attributes_) {
     mysql_options4(
-        mysql, MYSQL_OPT_CONNECT_ATTR_ADD, kv.first.c_str(), kv.second.c_str());
+        conn()->mysql(),
+        MYSQL_OPT_CONNECT_ATTR_ADD,
+        key.c_str(),
+        value.c_str());
   }
 
   auto compression_lib = getCompression();
@@ -665,20 +653,6 @@ FetchOperation::FetchOperation(
 FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
     : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
 
-FetchOperation* FetchOperation::setQueryAttributes(
-    const std::unordered_map<std::string, std::string>& attributes) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
-  attributes_ = attributes;
-  return this;
-}
-
-FetchOperation* FetchOperation::setQueryAttributes(
-    std::unordered_map<std::string, std::string>&& attributes) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
-  attributes_ = std::move(attributes);
-  return this;
-}
-
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();
@@ -700,9 +674,12 @@ void FetchOperation::specializedRunImpl() {
   try {
     MYSQL* mysql = conn()->mysql();
     mysql_options(mysql, MYSQL_OPT_QUERY_ATTR_RESET, 0);
-    for (auto& it : attributes_) {
+    for (const auto& [key, value] : attributes_) {
       mysql_options4(
-          mysql, MYSQL_OPT_QUERY_ATTR_ADD, it.first.c_str(), it.second.c_str());
+          mysql,
+          MYSQL_OPT_QUERY_ATTR_ADD,
+          key.c_str(),
+          value.c_str());
     }
     rendered_query_ = queries_.renderQuery(mysql);
     socketActionable();
