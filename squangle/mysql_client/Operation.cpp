@@ -165,7 +165,7 @@ Operation* Operation::run() {
           this, &Operation::completeOperation, OperationResult::Cancelled);
       return this;
     }
-    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
     state_ = OperationState::Pending;
   }
   start_time_ = chrono::steady_clock::now();
@@ -342,10 +342,12 @@ ConnectOperation* ConnectOperation::setConnectionAttribute(
 
 ConnectOperation* ConnectOperation::setConnectionAttributes(
     const std::unordered_map<string, string>& attributes) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setConnectionAttributes(attributes);
   return this;
 }
 ConnectOperation* ConnectOperation::setDefaultQueryTimeout(Duration t) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setQueryTimeout(t);
   return this;
 }
@@ -361,21 +363,25 @@ ConnectOperation* ConnectOperation::setTotalTimeout(Duration total_timeout) {
   return this;
 }
 ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setConnectAttempts(max_attempts);
   return this;
 }
 ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
     bool killOnQueryTimeout) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   killOnQueryTimeout_ = killOnQueryTimeout;
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
     std::unique_ptr<SSLOptionsProviderBase> /*ssl_options_provider*/) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   LOG(ERROR) << "Using deprecated function";
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProvider(
     std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setSSLOptionsProvider(ssl_options_provider);
   return this;
 }
@@ -661,12 +667,14 @@ FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
 
 FetchOperation* FetchOperation::setQueryAttributes(
     const std::unordered_map<std::string, std::string>& attributes) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   attributes_ = attributes;
   return this;
 }
 
 FetchOperation* FetchOperation::setQueryAttributes(
     std::unordered_map<std::string, std::string>&& attributes) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   attributes_ = std::move(attributes);
   return this;
 }
