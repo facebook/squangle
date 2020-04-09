@@ -64,6 +64,7 @@ class ConnectionContextBase {
       folly::StringPiece key) const;
   bool isSslConnection = false;
   bool sslSessionReused = false;
+  std::string endpointVersion;
 };
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;

@@ -604,6 +604,12 @@ void ConnectOperation::maybeStoreSSLSession() {
 
 void ConnectOperation::specializedCompleteOperation() {
   maybeStoreSSLSession();
+  // Can only log this on successful connections because unsuccessful
+  // ones call mysql_close_free inside libmysql
+  if (result_ == OperationResult::Succeeded && conn()->ok() &&
+      connection_context_) {
+    connection_context_->endpointVersion = conn()->serverInfo();
+  }
 
   logConnectCompleted(result_);
 
