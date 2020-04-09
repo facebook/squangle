@@ -77,8 +77,9 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       result_(OperationResult::Unknown),
       conn_proxy_(std::move(safe_conn)),
       mysql_errno_(0),
+      pre_operation_callback_(nullptr),
+      post_operation_callback_(nullptr),
       observer_callback_(nullptr),
-      chained_callback_(nullptr),
       mysql_client_(conn()->mysql_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
   conn()->resetActionable();
@@ -168,6 +169,10 @@ Operation* Operation::run() {
     CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
     state_ = OperationState::Pending;
   }
+  if (pre_operation_callback_) {
+    CHECK_THROW(state() == OperationState::Pending, OperationStateException);
+    pre_operation_callback_(*this);
+  }
   start_time_ = chrono::steady_clock::now();
   return specializedRun();
 }
@@ -201,11 +206,13 @@ void Operation::completeOperationInner(OperationResult result) {
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
 
-  if (chained_callback_) {
-    chained_callback_(*this);
-    // Pass the chained callback to the Connection now that we are done with it
-    conn()->setChainedCallback(std::move(chained_callback_));
+  if (post_operation_callback_) {
+    post_operation_callback_(*this);
   }
+
+  // Pass the chained callback to the Connection now that we are done with it
+  conn()->setPreOperationCallback(std::move(pre_operation_callback_));
+  conn()->setPostOperationCallback(std::move(post_operation_callback_));
 
   specializedCompleteOperation();
 
@@ -288,18 +295,28 @@ void Operation::setObserverCallback(ObserverCallback obs_cb) {
   }
 }
 
-void Operation::setChainedCallback(ChainedCallback chainedCallback) {
-  if (chained_callback_) {
-    auto original_callback = std::move(chained_callback_);
-    chained_callback_ =
-        [callback = std::move(original_callback),
-         new_callback = std::move(chainedCallback)](Operation& op) mutable {
-          callback(op);
-          new_callback(op);
-        };
-  } else {
-    chained_callback_ = std::move(chainedCallback);
+ChainedCallback Operation::setCallback(
+    ChainedCallback orgCallback,
+    ChainedCallback newCallback) {
+  if (!orgCallback) {
+    return newCallback;
   }
+
+  return [orgCallback = std::move(orgCallback),
+          newCallback = std::move(newCallback)](Operation& op) mutable {
+    orgCallback(op);
+    newCallback(op);
+  };
+}
+
+void Operation::setPreOperationCallback(ChainedCallback chainedCallback) {
+  pre_operation_callback_ = setCallback(
+      std::move(pre_operation_callback_), std::move(chainedCallback));
+}
+
+void Operation::setPostOperationCallback(ChainedCallback chainedCallback) {
+  post_operation_callback_ = setCallback(
+      std::move(post_operation_callback_), std::move(chainedCallback));
 }
 
 ConnectOperation::ConnectOperation(
@@ -679,6 +696,8 @@ FetchOperation* FetchOperation::specializedRun() {
 void FetchOperation::specializedRunImpl() {
   try {
     MYSQL* mysql = conn()->mysql();
+    rendered_query_ = queries_.renderQuery(mysql);
+
     mysql_options(mysql, MYSQL_OPT_QUERY_ATTR_RESET, 0);
     for (const auto& [key, value] : attributes_) {
       mysql_options4(
@@ -687,7 +706,6 @@ void FetchOperation::specializedRunImpl() {
           key.c_str(),
           value.c_str());
     }
-    rendered_query_ = queries_.renderQuery(mysql);
     socketActionable();
   } catch (std::invalid_argument& e) {
     setAsyncClientError(

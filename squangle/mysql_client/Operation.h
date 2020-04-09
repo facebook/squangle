@@ -212,6 +212,7 @@ class ConnectionOptions {
     return *this;
   }
 
+  // MySQL 5.6 connection attributes.  Sent at time of connect.
   const std::unordered_map<string, string>& getAttributes() const {
     return attributes_;
   }
@@ -416,7 +417,15 @@ class Operation : public std::enable_shared_from_this<Operation> {
         end_time_ - start_time_);
   }
 
+  /**
+   * Set various callbacks that are invoked during the operation's lifetime
+   * The pre and post operations are chained, in that they are propagated to
+   * operations that are scheduled on the connection following the current
+   * operation
+   */
   void setObserverCallback(ObserverCallback obs_cb);
+  void setPreOperationCallback(ChainedCallback obs_cb);
+  void setPostOperationCallback(ChainedCallback obs_cb);
 
   // Retrieve the shared pointer that holds this instance.
   std::shared_ptr<Operation> getSharedPointer();
@@ -436,8 +445,10 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual db::OperationType getOperationType() const = 0;
 
  protected:
-  // The chained callback will be passed along to following operations
-  void setChainedCallback(ChainedCallback chainedCallback);
+  // Helper function to set chained callbacks
+  ChainedCallback setCallback(
+      ChainedCallback orgCallback,
+      ChainedCallback newCallback);
 
   // Threshold is 500ms, but because of smoothing, actual last loop delay
   // needs to be roughly 2x this value to trigger detection
@@ -566,10 +577,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // thread.
   std::mutex run_state_mutex_;
 
+  ChainedCallback pre_operation_callback_;
+  ChainedCallback post_operation_callback_;
  private:
   folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;
-  ChainedCallback chained_callback_;
   std::unique_ptr<db::ConnectionContextBase> connection_context_;
 
   MysqlClientBase* mysql_client_;
@@ -690,9 +702,6 @@ class ConnectOperation : public Operation {
   db::OperationType getOperationType() const override {
     return db::OperationType::Connect;
   }
-
-  // The chained callback will be passed along to following operations
-  using Operation::setChainedCallback;
 
  protected:
   virtual void attemptFailed(OperationResult result);

@@ -345,7 +345,8 @@ Connection::Connection(
     : conn_key_(conn_key),
       mysql_client_(mysql_client),
       socket_handler_(mysql_client_->getEventBase()),
-      callback_(nullptr),
+      pre_operation_callback_(nullptr),
+      post_operation_callback_(nullptr),
       initialized_(false) {
   if (existing_connection) {
     mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
@@ -438,7 +439,8 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
 
   ret->connection()->mysql_client_->addOperation(ret);
   ret->connection()->socket_handler_.setOperation(ret.get());
-  ret->chained_callback_ = ret->connection()->stealChainedCallback();
+  ret->pre_operation_callback_ = ret->connection()->stealPreOperationCallback();
+  ret->post_operation_callback_ = ret->connection()->stealPostOperationCallback();
   return ret;
 }
 

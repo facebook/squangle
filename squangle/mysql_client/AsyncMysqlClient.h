@@ -849,21 +849,22 @@ class Connection {
 
   // Note that the chained callback is invoked in the MySQL client thread
   // and so any callback should execute *very* quickly and not block
-  void setChainedCallback(ChainedCallback&& callback) {
-    if (callback_) {
-      auto original_callback = std::move(callback_);
-      callback_ = [orig_callback = std::move(original_callback),
-                   new_callback = std::move(callback)](Operation& op) mutable {
-        orig_callback(op);
-        new_callback(op);
-      };
-    } else {
-      callback_ = std::move(callback);
-    }
+  void setPreOperationCallback(ChainedCallback&& callback) {
+    pre_operation_callback_ =
+        setCallback(std::move(pre_operation_callback_), std::move(callback));
   }
 
-  ChainedCallback stealChainedCallback() {
-    return std::move(callback_);
+  void setPostOperationCallback(ChainedCallback&& callback) {
+    post_operation_callback_ =
+        setCallback(std::move(post_operation_callback_), std::move(callback));
+  }
+
+  ChainedCallback stealPreOperationCallback() {
+    return std::move(pre_operation_callback_);
+  }
+
+  ChainedCallback stealPostOperationCallback() {
+    return std::move(post_operation_callback_);
   }
 
   const folly::EventBase* getEventBase() const {
@@ -913,6 +914,20 @@ class Connection {
   friend class QueryOperation;
   friend class MultiQueryOperation;
   friend class MultiQueryStreamOperation;
+
+  ChainedCallback setCallback(
+      ChainedCallback orgCallback,
+      ChainedCallback newCallback) {
+    if (!orgCallback) {
+      return newCallback;
+    }
+
+    return [orgCallback = std::move(orgCallback),
+            newCallback = std::move(newCallback)](Operation& op) mutable {
+      orgCallback(op);
+      newCallback(op);
+    };
+  }
 
   ConnectionSocketHandler* socketHandler() {
     return &socket_handler_;
@@ -980,7 +995,7 @@ class Connection {
 
   ConnectionDyingCallback conn_dying_callback_;
 
-  ChainedCallback callback_;
+  ChainedCallback pre_operation_callback_, post_operation_callback_;
 
   bool initialized_;
 
