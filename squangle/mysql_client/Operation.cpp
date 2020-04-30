@@ -157,6 +157,10 @@ void Operation::timeoutTriggered() {
 }
 
 Operation* Operation::run() {
+    if (pre_operation_callback_) {
+      CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+      pre_operation_callback_(*this);
+    }
   {
     std::unique_lock<std::mutex> l(run_state_mutex_);
     if (cancel_on_run_) {
@@ -168,10 +172,6 @@ Operation* Operation::run() {
     }
     CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
     state_ = OperationState::Pending;
-  }
-  if (pre_operation_callback_) {
-    CHECK_THROW(state() == OperationState::Pending, OperationStateException);
-    pre_operation_callback_(*this);
   }
   start_time_ = chrono::steady_clock::now();
   return specializedRun();

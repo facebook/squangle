@@ -421,7 +421,12 @@ class Operation : public std::enable_shared_from_this<Operation> {
    * Set various callbacks that are invoked during the operation's lifetime
    * The pre and post operations are chained, in that they are propagated to
    * operations that are scheduled on the connection following the current
-   * operation
+   * operation. A couple notes:
+   *
+   * The PreOperationCallback will be invoked on a cancelled operation before
+   * the cancellation takes effect
+   *
+   * The PostOperationCallback will be invoked on operations that have failed
    */
   void setObserverCallback(ObserverCallback obs_cb);
   void setPreOperationCallback(ChainedCallback obs_cb);
@@ -551,6 +556,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   };
 
   bool isInEventBaseThread();
+
+  bool isCancelledOnRun() const {
+    return cancel_on_run_;
+  }
+
   // Data members; subclasses freely interact with these.
   OperationState state_;
   OperationResult result_;
