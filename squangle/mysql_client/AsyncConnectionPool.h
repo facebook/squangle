@@ -43,9 +43,9 @@ namespace common {
 namespace mysql_client {
 
 using db::PoolStats;
+using folly::StringPiece;
 using std::string;
 using std::unordered_map;
-using folly::StringPiece;
 
 class ConnectPoolOperation;
 class AsyncConnectionPool;
@@ -146,8 +146,7 @@ class PoolKey {
   PoolKey(ConnectionKey conn_key, ConnectionOptions conn_opts)
       : connKey(std::move(conn_key)), connOptions(std::move(conn_opts)) {
     options_hash_ = folly::hash::hash_range(
-        connOptions.getAttributes().begin(),
-        connOptions.getAttributes().end());
+        connOptions.getAttributes().begin(), connOptions.getAttributes().end());
     hash_ = folly::hash::hash_combine(connKey.hash, options_hash_);
   }
 
@@ -570,8 +569,8 @@ class ConnectPoolOperation : public ConnectOperation {
 
   friend class AsyncConnectionPool;
 };
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_CONNECTION_POOL_H
