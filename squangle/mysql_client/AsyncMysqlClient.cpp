@@ -72,16 +72,17 @@ AsyncMysqlClient::AsyncMysqlClient()
     : AsyncMysqlClient(nullptr, std::make_unique<db::SimpleDbCounter>()) {}
 
 void AsyncMysqlClient::init() {
-  thread_ = std::thread([this]() {
+  auto eventBase = getEventBase();
+  eventBase->setObserver(stats_tracker_);
+  thread_ = std::thread([eventBase]() {
 #ifdef __GLIBC__
     folly::setThreadName("async-mysql");
 #endif
-    folly::EventBaseManager::get()->setEventBase(this->getEventBase(), false);
-    getEventBase()->loopForever();
+    folly::EventBaseManager::get()->setEventBase(eventBase, false);
+    eventBase->loopForever();
     mysql_thread_end();
   });
-  getEventBase()->setObserver(stats_tracker_);
-  getEventBase()->waitUntilRunning();
+  eventBase->waitUntilRunning();
 }
 
 bool AsyncMysqlClient::runInThread(folly::Cob&& fn) {
