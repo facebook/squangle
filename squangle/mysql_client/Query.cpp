@@ -95,9 +95,8 @@ bool QueryArgument::isTwoTuple() const {
 }
 
 bool QueryArgument::isThreeTuple() const {
-  return value_.type() == typeid(
-      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>
-  );
+  return value_.type() ==
+      typeid(std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>);
 }
 
 QueryArgument&& QueryArgument::operator()(
@@ -166,15 +165,15 @@ const std::vector<ArgPair>& QueryArgument::getPairs() const {
   return boost::get<std::vector<ArgPair>>(value_);
 }
 
-const std::tuple<folly::fbstring, folly::fbstring>&
-QueryArgument::getTwoTuple() const {
+const std::tuple<folly::fbstring, folly::fbstring>& QueryArgument::getTwoTuple()
+    const {
   return boost::get<std::tuple<folly::fbstring, folly::fbstring>>(value_);
 }
 
 const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
 QueryArgument::getThreeTuple() const {
-  return boost::get<std::tuple<
-    folly::fbstring, folly::fbstring, folly::fbstring>>(value_);
+  return boost::get<
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>>(value_);
 }
 
 void QueryArgument::initFromDynamic(const folly::dynamic& param) {
@@ -217,9 +216,7 @@ std::vector<ArgPair>& QueryArgument::getPairs() {
 }
 
 Query::Query(const StringPiece query_text, std::vector<QueryArgument> params)
-    : query_text_(query_text),
-      unsafe_query_(false),
-      params_(params) {}
+    : query_text_(query_text), unsafe_query_(false), params_(params) {}
 
 Query::~Query() {}
 
@@ -338,12 +335,12 @@ void Query::append(Query&& query2) {
 // Append a dynamic to the query string we're building.  We ensure the
 // type matches the dynamic's type (or allow a magic 'v' type to be
 // any value, but this isn't exposed to the users of the library).
-void Query::appendValue(folly::fbstring* s,
-                        size_t offset,
-                        char type,
-                        const QueryArgument& d,
-                        MYSQL* connection) const {
-
+void Query::appendValue(
+    folly::fbstring* s,
+    size_t offset,
+    char type,
+    const QueryArgument& d,
+    MYSQL* connection) const {
   auto querySp = query_text_.getQuery();
 
   if (d.isString()) {
@@ -359,7 +356,7 @@ void Query::appendValue(folly::fbstring* s,
     if (type != 'd' && type != 'v' && type != 'm' && type != 'u') {
       formatStringParseError(querySp, offset, type, "int");
     }
-    if(type == 'u') {
+    if (type == 'u') {
       s->append(folly::to<fbstring>(static_cast<uint64_t>(d.getInt())));
     } else {
       s->append(d.asString());
@@ -378,12 +375,12 @@ void Query::appendValue(folly::fbstring* s,
   }
 }
 
-void Query::appendValueClauses(folly::fbstring* ret,
-                               size_t* idx,
-                               const char* sep,
-                               const QueryArgument& param,
-                               MYSQL* connection) const {
-
+void Query::appendValueClauses(
+    folly::fbstring* ret,
+    size_t* idx,
+    const char* sep,
+    const QueryArgument& param,
+    MYSQL* connection) const {
   auto querySp = query_text_.getQuery();
 
   if (!param.isPairList()) {
@@ -447,9 +444,9 @@ folly::fbstring Query::render(MYSQL* conn) const {
   return render(conn, params_);
 }
 
-folly::fbstring Query::render(MYSQL* conn,
-                              const std::vector<QueryArgument>& params) const {
-
+folly::fbstring Query::render(
+    MYSQL* conn,
+    const std::vector<QueryArgument>& params) const {
   auto querySp = query_text_.getQuery();
 
   if (unsafe_query_) {
@@ -612,6 +609,6 @@ folly::StringPiece MultiQuery::renderQuery(MYSQL* conn) {
   return folly::StringPiece(rendered_multi_query_);
 }
 
-}
-}
-} // namespace facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

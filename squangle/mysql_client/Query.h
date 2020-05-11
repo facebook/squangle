@@ -72,11 +72,11 @@
 #ifndef COMMON_ASYNC_MYSQL_QUERY_H
 #define COMMON_ASYNC_MYSQL_QUERY_H
 
-#include <folly/dynamic.h>
 #include <folly/Memory.h>
 #include <folly/Optional.h>
 #include <folly/Range.h>
 #include <folly/String.h>
+#include <folly/dynamic.h>
 
 #include <boost/variant.hpp>
 #include <glog/logging.h>
@@ -96,7 +96,7 @@ using folly::StringPiece;
 
 using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
 using AliasedQualifiedColumn =
-  std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
+    std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
 typedef std::unordered_map<std::string, std::string> QueryAttributes;
 
 class QueryArgument;
@@ -107,7 +107,7 @@ class QueryArgument;
  * as we introduce additional options.
  */
 class QueryOptions {
-public:
+ public:
   const QueryAttributes& getAttributes() const {
     return attributes_;
   }
@@ -116,20 +116,19 @@ public:
     return attributes_;
   }
 
-protected:
+ protected:
   QueryAttributes attributes_;
 };
 
 class Query {
- struct QueryText;
+  struct QueryText;
+
  public:
   // Query can be constructed with or without params.
   // By default we deep copy the query text
-  explicit Query(const StringPiece query_text)
-      : query_text_(query_text) {}
+  explicit Query(const StringPiece query_text) : query_text_(query_text) {}
 
-  explicit Query(QueryText&& query_text)
-      : query_text_(std::move(query_text)) {}
+  explicit Query(QueryText&& query_text) : query_text_(std::move(query_text)) {}
 
   ~Query();
 
@@ -165,8 +164,7 @@ class Query {
   }
 
   // If you need to construct a raw query, use this evil function.
-  static Query unsafe(const StringPiece query_text,
-                      bool shallowCopy = false) {
+  static Query unsafe(const StringPiece query_text, bool shallowCopy = false) {
     Query ret{shallowCopy ? QueryText::makeShallow(query_text)
                           : QueryText{query_text}};
     ret.allowUnsafeEvilQueries();
@@ -209,10 +207,11 @@ class Query {
   folly::fbstring renderInsecure(
       const std::vector<QueryArgument>& params) const;
 
-  folly::StringPiece getQueryFormat() const { return query_text_.getQuery(); }
+  folly::StringPiece getQueryFormat() const {
+    return query_text_.getQuery();
+  }
 
  private:
-
   // QueryText is a container for query stmt used by the Query (see below).
   // Its a union like structure that supports managing either a shallow copy
   // or a deep copy of a query stmt. If QueryText holds a shallow reference
@@ -315,7 +314,7 @@ class Query {
 
     folly::Optional<folly::fbstring> query_buffer_;
     folly::StringPiece query_;
-  };  // end QueryText class
+  }; // end QueryText class
 
   // Allow queries that look evil (aka, raw queries).  Don't use this.
   // It's horrible.
@@ -374,7 +373,6 @@ class MultiQuery {
   }
 
  private:
-
   explicit MultiQuery(folly::StringPiece multi_query)
       : unsafe_multi_query_(multi_query) {}
 
@@ -423,8 +421,7 @@ class QueryArgument {
   /* implicit */ QueryArgument(std::tuple<folly::fbstring, folly::fbstring> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(
-        std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup
-      )
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
 
@@ -456,7 +453,7 @@ class QueryArgument {
   const std::vector<QueryArgument>& getList() const;
   const std::tuple<folly::fbstring, folly::fbstring>& getTwoTuple() const;
   const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
-      getThreeTuple() const;
+  getThreeTuple() const;
 
   bool isString() const;
   bool isQuery() const;
@@ -480,9 +477,7 @@ class QueryArgument {
 
 template <typename... Args>
 Query::Query(const StringPiece query_text, Args&&... args)
-    : query_text_(query_text),
-      unsafe_query_(false),
-      params_() {
+    : query_text_(query_text), unsafe_query_(false), params_() {
   params_.reserve(sizeof...(args));
   unpack(std::forward<Args>(args)...);
 }
@@ -491,8 +486,8 @@ void Query::unpack(Arg&& arg, Args&&... args) {
   params_.emplace_back(std::forward<Arg>(arg));
   unpack(std::forward<Args>(args)...);
 }
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_QUERY_H
