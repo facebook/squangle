@@ -352,6 +352,11 @@ void Query::appendValue(
     s->push_back('"');
     appendEscapedString(s, value, connection);
     s->push_back('"');
+  } else if (d.isBool()) {
+    if (type != 'v' && type != 'm') {
+      formatStringParseError(querySp, offset, type, "bool");
+    }
+    s->append(d.asString());
   } else if (d.isInt()) {
     if (type != 'd' && type != 'v' && type != 'm' && type != 'u') {
       formatStringParseError(querySp, offset, type, "int");
@@ -490,8 +495,9 @@ folly::fbstring Query::render(
     if (c == 'd' || c == 's' || c == 'f' || c == 'u') {
       appendValue(&ret, idx, c, param, conn);
     } else if (c == 'm') {
-      if (!(param.isString() || param.isInt() || param.isDouble())) {
-        parseError(querySp, idx, "%m expects int/float/string");
+      if (!(param.isString() || param.isInt() || param.isDouble() ||
+            param.isBool() || param.isNull())) {
+        parseError(querySp, idx, "%m expects int/float/string/bool");
       }
       appendValue(&ret, idx, c, param, conn);
     } else if (c == 'K') {
@@ -502,8 +508,9 @@ folly::fbstring Query::render(
       appendColumnTableName(&ret, param);
     } else if (c == '=') {
       StringPiece type = advance(querySp, &idx, 1);
-      if (type != "d" && type != "s" && type != "f" && type != "u") {
-        parseError(querySp, idx, "expected %=d, %=c, %=s, or %=u");
+      if (type != "d" && type != "s" && type != "f" && type != "u" &&
+          type != "m") {
+        parseError(querySp, idx, "expected %=d, %=c, %=s, %=u, or %=m");
       }
 
       if (param.isNull()) {
