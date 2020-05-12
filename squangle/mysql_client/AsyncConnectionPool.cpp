@@ -764,8 +764,9 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     // open connections and none trying to be open.
     // The second rule is applied where the resource restriction is so small
     // that the pool can't even try to open a connection.
-    if (!(num_open == 0 && (num_opening > 0 ||
-                            locked_pool->canCreateMoreConnections(pool_key)))) {
+    if (!(num_open == 0 &&
+          (num_opening > 0 ||
+           locked_pool->canCreateMoreConnections(pool_key)))) {
       auto delta = std::chrono::steady_clock::now() - start_time_;
       int64_t delta_micros =
           std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
@@ -802,7 +803,11 @@ void ConnectPoolOperation::connectionCallback(
   }
 
   conn()->socketHandler()->changeHandlerFD(folly::NetworkSocket::fromFd(
+#if MYSQL_VERSION_ID < 80017
       mysql_get_file_descriptor(mysql_conn->mysql())));
+#else
+      mysql_get_socket_descriptor(mysql_conn->mysql())));
+#endif
 
   conn()->setMysqlConnectionHolder(std::move(mysql_conn));
   conn()->setConnectionOptions(getConnectionOptions());
@@ -836,11 +841,10 @@ void ConnectPoolOperation::socketActionable() {
   LOG(DFATAL) << "Should not be called";
 }
 
-std::ostream& operator<<(std::ostream& os, PoolKey key)
-{
+std::ostream& operator<<(std::ostream& os, PoolKey key) {
   return os << "{" << key.connKey.getDisplayString() << ","
             << key.connOptions.getDisplayString() << "}";
 }
-}
-}
-} // namespace facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

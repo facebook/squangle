@@ -37,7 +37,6 @@
 #ifndef COMMON_ASYNC_MYSQL_OPERATION_H
 #define COMMON_ASYNC_MYSQL_OPERATION_H
 
-#include <mysql.h>
 #include <condition_variable>
 #include <memory>
 #include <mutex>

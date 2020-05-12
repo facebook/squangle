@@ -98,8 +98,12 @@ class MysqlHandler {
   enum Status {
     PENDING,
     DONE,
+#if MYSQL_VERSION_ID >= 80017
+    ERROR,
+#endif
   };
   virtual ~MysqlHandler() = default;
+#if MYSQL_VERSION_ID < 80017
   virtual bool
   initConnect(MYSQL* mysql, const ConnectionKey& key, int flags) = 0;
   virtual Status connect(
@@ -113,6 +117,17 @@ class MysqlHandler {
   virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
   virtual Status nextResult(MYSQL* mysql, int& error) = 0;
   virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
+#else
+  virtual Status tryConnect(
+      MYSQL* mysql,
+      const ConnectionOptions& opts,
+      const ConnectionKey& key,
+      int flags) = 0;
+  virtual Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt) = 0;
+  virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
+  virtual Status nextResult(MYSQL* mysql) = 0;
+  virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
+#endif
 };
 
 class MysqlClientBase {
@@ -393,6 +408,7 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // implementation of MysqlHandler interface
   class AsyncMysqlHandler : public MysqlHandler {
+#if MYSQL_VERSION_ID < 80017
     bool initConnect(MYSQL* mysql, const ConnectionKey& conn_key, int flags)
         override {
       const bool res = mysql_real_connect_nonblocking_init(
@@ -437,6 +453,17 @@ class AsyncMysqlClient : public MysqlClientBase {
         return DONE;
       }
     }
+#else
+    Status tryConnect(
+        MYSQL* mysql,
+        const ConnectionOptions& /*opts*/,
+        const ConnectionKey& conn_key,
+        int flags);
+    Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt) override;
+    Status nextResult(MYSQL* mysql) override;
+    Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override;
+    MYSQL_RES* getResult(MYSQL* mysql) override;
+#endif
   } mysql_handler_;
 
   // Private methods, primarily used by Operations and its subclasses.
@@ -590,10 +617,10 @@ class Connection {
       Query&& query,
       QueryOptions&& options = QueryOptions());
 
-  template <typename... Args> [[deprecated("Replaced by the SemiFuture APIs")]]
-  static folly::Future<DbQueryResult> queryFuture(
-      std::unique_ptr<Connection> conn,
-      Args&&... args);
+  template <typename... Args>
+  [[deprecated(
+      "Replaced by the SemiFuture APIs")]] static folly::Future<DbQueryResult>
+  queryFuture(std::unique_ptr<Connection> conn, Args&&... args);
 
   static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
       std::unique_ptr<Connection> conn,

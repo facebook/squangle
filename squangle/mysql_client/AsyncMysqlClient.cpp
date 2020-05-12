@@ -36,7 +36,7 @@ class InitMysqlLibrary {
     mysql_library_init(-1, nullptr, nullptr);
   }
 };
-}
+} // namespace
 
 namespace facebook {
 namespace common {
@@ -87,15 +87,14 @@ void AsyncMysqlClient::init() {
 
 bool AsyncMysqlClient::runInThread(folly::Cob&& fn) {
   auto scheduleTime = std::chrono::steady_clock::now();
-  getEventBase()
-      ->runInEventBaseThread(
-          [fn = std::move(fn), scheduleTime, this]() mutable {
-            auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
-                             std::chrono::steady_clock::now() - scheduleTime)
-                             .count();
-            stats_tracker_->callbackDelayAvg.addSample(delay);
-            fn();
-          });
+  getEventBase()->runInEventBaseThread(
+      [fn = std::move(fn), scheduleTime, this]() mutable {
+        auto delay = std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - scheduleTime)
+                         .count();
+        stats_tracker_->callbackDelayAvg.addSample(delay);
+        fn();
+      });
   return true;
 }
 
@@ -260,8 +259,7 @@ void AsyncMysqlClient::cleanupCompletedOperations() {
            << ", after: " << pending_operations_.size();
 }
 
-folly::SemiFuture<ConnectResult>
-AsyncMysqlClient::connectSemiFuture(
+folly::SemiFuture<ConnectResult> AsyncMysqlClient::connectSemiFuture(
     const string& host,
     int port,
     const string& database_name,
@@ -323,6 +321,53 @@ std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
   return std::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
 }
 
+#if MYSQL_VERSION_ID >= 80017
+static inline MysqlHandler::Status toHandlerStatus(net_async_status status) {
+  if (status == NET_ASYNC_ERROR) {
+    return MysqlHandler::Status::ERROR;
+  } else if (status == NET_ASYNC_COMPLETE) {
+    return MysqlHandler::Status::DONE;
+  } else {
+    return MysqlHandler::Status::PENDING;
+  }
+}
+
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::tryConnect(
+    MYSQL* mysql,
+    const ConnectionOptions& /*opts*/,
+    const ConnectionKey& conn_key,
+    int flags) {
+  return toHandlerStatus(mysql_real_connect_nonblocking(
+      mysql,
+      conn_key.host.c_str(),
+      conn_key.user.c_str(),
+      conn_key.password.c_str(),
+      conn_key.db_name.c_str(),
+      conn_key.port,
+      nullptr,
+      flags));
+}
+
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::runQuery(MYSQL* mysql, folly::StringPiece queryStmt) {
+  return toHandlerStatus(
+      mysql_real_query_nonblocking(mysql, queryStmt.begin(), queryStmt.size()));
+}
+
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::nextResult(MYSQL* mysql) {
+  return toHandlerStatus(mysql_next_result_nonblocking(mysql));
+}
+
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::fetchRow(MYSQL_RES* res, MYSQL_ROW& row) {
+  auto status = toHandlerStatus(mysql_fetch_row_nonblocking(res, &row));
+  DCHECK_NE(status, ERROR); // Should never be an error
+  return status;
+}
+
+MYSQL_RES* AsyncMysqlClient::AsyncMysqlHandler::getResult(MYSQL* mysql) {
+  return mysql_use_result(mysql);
+}
+#endif
+
 std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     MYSQL* raw_conn,
     const string& host,
@@ -330,12 +375,18 @@ std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     const string& database_name,
     const string& user,
     const string& password) {
+#if MYSQL_VERSION_ID < 80017
   CHECK_THROW(
       raw_conn->async_op_status == ASYNC_OP_UNSET, InvalidConnectionException);
+#endif
   auto conn = createConnection(
       ConnectionKey(host, port, database_name, user, password), raw_conn);
   conn->socketHandler()->changeHandlerFD(
+#if MYSQL_VERSION_ID < 80017
       folly::NetworkSocket::fromFd(mysql_get_file_descriptor(raw_conn)));
+#else
+      folly::NetworkSocket::fromFd(mysql_get_socket_descriptor(raw_conn)));
+#endif
   return conn;
 }
 
@@ -506,8 +557,7 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
     vector<Query>&& args) {
-  return toFuture(
-      multiQuerySemiFuture(std::move(conn), std::move(args)));
+  return toFuture(multiQuerySemiFuture(std::move(conn), std::move(args)));
 }
 
 template <>
