@@ -171,6 +171,7 @@ void Operation::timeoutTriggered() {
 }
 
 Operation* Operation::run() {
+  start_time_ = chrono::steady_clock::now();
   if (pre_operation_callback_) {
     CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
     pre_operation_callback_(*this);
@@ -187,7 +188,6 @@ Operation* Operation::run() {
     CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
     state_ = OperationState::Pending;
   }
-  start_time_ = chrono::steady_clock::now();
   return specializedRun();
 }
 
@@ -426,6 +426,9 @@ void ConnectOperation::attemptFailed(OperationResult result) {
     return;
   }
 
+  // We need to update end_time_ here because the logging function uses this
+  // in calculating duration time.
+  end_time_ = std::chrono::steady_clock::now();
   logConnectCompleted(result);
 
   conn()->socketHandler()->unregisterHandler();
