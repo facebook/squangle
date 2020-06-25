@@ -204,9 +204,7 @@ class ConnectionOptions {
     return ssl_options_provider_.get();
   }
 
-  ConnectionOptions& setAttribute(
-      const string& attr,
-      const string& value) {
+  ConnectionOptions& setAttribute(const string& attr, const string& value) {
     attributes_[attr] = value;
     return *this;
   }
@@ -588,6 +586,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   ChainedCallback pre_operation_callback_;
   ChainedCallback post_operation_callback_;
+
  private:
   folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;

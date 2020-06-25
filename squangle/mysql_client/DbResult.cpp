@@ -77,7 +77,6 @@ ConnectResult::ConnectResult(
     : DbResult(std::move(conn), result, conn_key, elapsed_time),
       num_attempts_(num_attempts) {}
 
-
 QueryResult::QueryResult(int query_num)
     : query_num_(query_num),
       partial_(true),
@@ -179,7 +178,9 @@ folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
 
 void StreamedQueryResult::checkStoredException() {
   if (exception_wrapper_) {
-    SCOPE_EXIT { exception_wrapper_ = {}; };
+    SCOPE_EXIT {
+      exception_wrapper_ = {};
+    };
     exception_wrapper_.throw_exception();
   }
 }
@@ -294,8 +295,7 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
       // Recursion to get `wait` and double check the stream.
       return fetchOneRow(result);
     }
-    return folly::Optional<EphemeralRow>(
-        operation_->rowStream()->consumeRow());
+    return folly::Optional<EphemeralRow>(operation_->rowStream()->consumeRow());
   }
 
   if (state_ == State::ReadResult) {
@@ -393,7 +393,7 @@ MultiQueryStreamHandler::MultiQueryStreamHandler(
   // yet invoked nextQuery on it or if the operation
   // is done()
   CHECK(other.state_ == State::RunQuery || other.operation_->done());
-  operation_ =  std::move(other.operation_);
+  operation_ = std::move(other.operation_);
   other.operation_ = nullptr;
 }
 
@@ -411,6 +411,6 @@ EphemeralRowFields* StreamedQueryResult::getRowFields() const {
                                     << "query end";
   return stream_handler_->operation_->rowStream()->getEphemeralRowFields();
 }
-}
-}
-}
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

@@ -146,12 +146,12 @@ class ConnectResult : public DbResult {
       Duration elapsed_time,
       uint32_t num_attempts);
 
- uint32_t numAttempts() const {
-   return num_attempts_;
- }
+  uint32_t numAttempts() const {
+    return num_attempts_;
+  }
 
  private:
-   uint32_t num_attempts_;
+  uint32_t num_attempts_;
 };
 
 template <typename SingleMultiResult>
@@ -558,8 +558,7 @@ class MultiQueryStreamHandler {
   // to retrieve the first query's result. Its safe to do this only before the
   // first invocation of nextQuery or after all queries are done.
   MultiQueryStreamHandler(MultiQueryStreamHandler&& other) noexcept;
-  MultiQueryStreamHandler& operator=(
-      MultiQueryStreamHandler&& other) {
+  MultiQueryStreamHandler& operator=(MultiQueryStreamHandler&& other) {
     if (this != &other) {
       this->~MultiQueryStreamHandler();
       new (this) MultiQueryStreamHandler(std::move(other));
@@ -616,8 +615,8 @@ class MultiQueryStreamHandler {
 
 typedef FetchResult<std::vector<QueryResult>> DbMultiQueryResult;
 typedef FetchResult<QueryResult> DbQueryResult;
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_ROW_H
