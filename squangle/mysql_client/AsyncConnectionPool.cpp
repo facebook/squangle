@@ -803,11 +803,7 @@ void ConnectPoolOperation::connectionCallback(
   }
 
   conn()->socketHandler()->changeHandlerFD(folly::NetworkSocket::fromFd(
-#if MYSQL_VERSION_ID < 80017
-      mysql_get_file_descriptor(mysql_conn->mysql())));
-#else
       mysql_get_socket_descriptor(mysql_conn->mysql())));
-#endif
 
   conn()->setMysqlConnectionHolder(std::move(mysql_conn));
   conn()->setConnectionOptions(getConnectionOptions());

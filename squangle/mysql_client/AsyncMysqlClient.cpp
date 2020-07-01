@@ -321,7 +321,6 @@ std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
   return std::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
 }
 
-#if MYSQL_VERSION_ID >= 80017
 static inline MysqlHandler::Status toHandlerStatus(net_async_status status) {
   if (status == NET_ASYNC_ERROR) {
     return MysqlHandler::Status::ERROR;
@@ -366,7 +365,6 @@ MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::fetchRow(MYSQL_RES* re
 MYSQL_RES* AsyncMysqlClient::AsyncMysqlHandler::getResult(MYSQL* mysql) {
   return mysql_use_result(mysql);
 }
-#endif
 
 std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     MYSQL* raw_conn,
@@ -375,18 +373,10 @@ std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     const string& database_name,
     const string& user,
     const string& password) {
-#if MYSQL_VERSION_ID < 80017
-  CHECK_THROW(
-      raw_conn->async_op_status == ASYNC_OP_UNSET, InvalidConnectionException);
-#endif
   auto conn = createConnection(
       ConnectionKey(host, port, database_name, user, password), raw_conn);
   conn->socketHandler()->changeHandlerFD(
-#if MYSQL_VERSION_ID < 80017
-      folly::NetworkSocket::fromFd(mysql_get_file_descriptor(raw_conn)));
-#else
       folly::NetworkSocket::fromFd(mysql_get_socket_descriptor(raw_conn)));
-#endif
   return conn;
 }
 

@@ -98,26 +98,9 @@ class MysqlHandler {
   enum Status {
     PENDING,
     DONE,
-#if MYSQL_VERSION_ID >= 80017
     ERROR,
-#endif
   };
   virtual ~MysqlHandler() = default;
-#if MYSQL_VERSION_ID < 80017
-  virtual bool
-  initConnect(MYSQL* mysql, const ConnectionKey& key, int flags) = 0;
-  virtual Status connect(
-      MYSQL* mysql,
-      int& error,
-      const ConnectionOptions& opts,
-      const ConnectionKey& key,
-      int flags) = 0;
-  virtual Status
-  runQuery(MYSQL* mysql, folly::StringPiece queryStmt, int& error) = 0;
-  virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
-  virtual Status nextResult(MYSQL* mysql, int& error) = 0;
-  virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
-#else
   virtual Status tryConnect(
       MYSQL* mysql,
       const ConnectionOptions& opts,
@@ -127,7 +110,6 @@ class MysqlHandler {
   virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
   virtual Status nextResult(MYSQL* mysql) = 0;
   virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
-#endif
 };
 
 class MysqlClientBase {
@@ -408,52 +390,6 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // implementation of MysqlHandler interface
   class AsyncMysqlHandler : public MysqlHandler {
-#if MYSQL_VERSION_ID < 80017
-    bool initConnect(MYSQL* mysql, const ConnectionKey& conn_key, int flags)
-        override {
-      const bool res = mysql_real_connect_nonblocking_init(
-          mysql,
-          conn_key.host.c_str(),
-          conn_key.user.c_str(),
-          conn_key.password.c_str(),
-          conn_key.db_name.c_str(),
-          conn_key.port,
-          nullptr,
-          flags);
-      return res;
-    }
-    Status connect(
-        MYSQL* mysql,
-        int& error,
-        const ConnectionOptions&,
-        const ConnectionKey&,
-        int) override {
-      return toHandlerStatus(mysql_real_connect_nonblocking_run(mysql, &error));
-    }
-    Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt, int& error)
-        override {
-      return toHandlerStatus(mysql_real_query_nonblocking(
-          mysql, queryStmt.begin(), queryStmt.size(), &error));
-    }
-    Status nextResult(MYSQL* mysql, int& error) override {
-      return toHandlerStatus(mysql_next_result_nonblocking(mysql, &error));
-    }
-    Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override {
-      return toHandlerStatus(mysql_fetch_row_nonblocking(res, &row));
-    }
-    MYSQL_RES* getResult(MYSQL* mysql) override {
-      return mysql_use_result(mysql);
-    }
-
-   private:
-    Status toHandlerStatus(net_async_status status) {
-      if (status != NET_ASYNC_COMPLETE) {
-        return PENDING;
-      } else {
-        return DONE;
-      }
-    }
-#else
     Status tryConnect(
         MYSQL* mysql,
         const ConnectionOptions& /*opts*/,
@@ -463,7 +399,6 @@ class AsyncMysqlClient : public MysqlClientBase {
     Status nextResult(MYSQL* mysql) override;
     Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override;
     MYSQL_RES* getResult(MYSQL* mysql) override;
-#endif
   } mysql_handler_;
 
   // Private methods, primarily used by Operations and its subclasses.

@@ -15,13 +15,7 @@
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 #include <folly/portability/GFlags.h>
-// TODO (jkedgar): Remove mysql.h here when fully switched to 8.0.17 since it
-// gets included via mysql_async.h  We need to include it here so that
-// MYSQL_VERSION_ID gets defined.
-#include <mysql.h>
-#if MYSQL_VERSION_ID >= 80017
 #include <mysql_async.h>
-#endif
 #include <wangle/client/ssl/SSLSession.h>
 
 #include "squangle/base/ExceptionUtil.h"
@@ -103,14 +97,10 @@ void Operation::waitForSocketActionable() {
 
   MYSQL* mysql = conn()->mysql();
   uint16_t event_mask = 0;
-#if MYSQL_VERSION_ID < 80017
-  auto async_blocking_state = mysql->net.async_blocking_state;
-#else
   NET_ASYNC* net_async = NET_ASYNC_DATA(&mysql->net);
   // net_async can be null during some stages of connecting
   auto async_blocking_state =
       net_async ? net_async->async_blocking_state : NET_NONBLOCKING_CONNECT;
-#endif
   switch (async_blocking_state) {
     case NET_NONBLOCKING_READ:
       event_mask |= folly::EventHandler::READ;
@@ -476,11 +466,7 @@ void ConnectOperation::specializedRunImpl() {
     CHECK(*compression_lib != MYSQL_COMPRESSION_ZSTD)
         << "ZSTD is not yet supported";
     mysql_options(mysql, MYSQL_OPT_COMPRESS, nullptr);
-#if MYSQL_VERSION_ID < 80017
-    mysql_options(mysql, MYSQL_OPT_COMP_LIB, (void*)(*compression_lib));
-#else
     mysql_options(mysql, MYSQL_OPT_COMP_LIB, (void*)&(*compression_lib));
-#endif
   }
 
   auto provider = conn_options_.getSSLOptionsProviderPtr();
@@ -490,13 +476,6 @@ void ConnectOperation::specializedRunImpl() {
     }
   }
 
-#if MYSQL_VERSION_ID < 80017
-  if (!client()->getMysqlHandler().initConnect(mysql, conn_key_, flags_)) {
-    setAsyncClientError("mysql_real_connect_nonblocking_init failed");
-    attemptFailed(OperationResult::Failed);
-    return;
-  }
-#endif
   conn()->socketHandler()->setOperation(this);
 
   // connect is immediately "ready" to do one loop
@@ -516,52 +495,6 @@ ConnectOperation::~ConnectOperation() {
 
 void ConnectOperation::socketActionable() {
   DCHECK(isInEventBaseThread());
-#if MYSQL_VERSION_ID < 80017
-  int error;
-  auto& handler = conn()->client()->getMysqlHandler();
-  MYSQL* mysql = conn()->mysql();
-  auto status = handler.connect(mysql, error, conn_options_, conn_key_, flags_);
-  auto fd = mysql_get_file_descriptor(mysql);
-  if (status == MysqlHandler::DONE) {
-    if (error == 0) {
-      if (fd <= 0) {
-        LOG(ERROR) << "Unexpected invalid file descriptor on completed, "
-                   << "errorless connect.  fd=" << fd;
-        setAsyncClientError(
-            "mysql_get_file_descriptor returned an invalid "
-            "descriptor");
-        attemptFailed(OperationResult::Failed);
-        return;
-      } else {
-        conn()->socketHandler()->changeHandlerFD(
-            folly::NetworkSocket::fromFd(fd));
-        conn()->mysqlConnection()->connectionOpened();
-        attemptSucceeded(OperationResult::Succeeded);
-        return;
-      }
-    } else {
-      snapshotMysqlErrors();
-      attemptFailed(OperationResult::Failed);
-      return;
-    }
-  } else {
-    if (fd <= 0) {
-      LOG(ERROR) << "Unexpected invalid file descriptor on completed, "
-                 << "pending connect.  fd=" << fd;
-      setAsyncClientError(
-          "mysql_get_file_descriptor returned an invalid "
-          "descriptor");
-      attemptFailed(OperationResult::Failed);
-      return;
-    } else {
-      conn()->socketHandler()->changeHandlerFD(
-          folly::NetworkSocket::fromFd(fd));
-      waitForSocketActionable();
-      return;
-    }
-  }
-  LOG(DFATAL) << "should not reach here";
-#else
   auto& handler = conn()->client()->getMysqlHandler();
   MYSQL* mysql = conn()->mysql();
   auto status = handler.tryConnect(mysql, conn_options_, conn_key_, flags_);
@@ -589,7 +522,6 @@ void ConnectOperation::socketActionable() {
       waitForSocketActionable();
     }
   }
-#endif
 }
 
 void ConnectOperation::specializedTimeoutTriggered() {
@@ -863,24 +795,13 @@ void FetchOperation::socketActionable() {
     //                       results.
     //  - InitFetch: no errors during results request, so we initiate fetch.
     if (active_fetch_action_ == FetchAction::StartQuery) {
-#if MYSQL_VERSION_ID < 80017
-      int error = 0;
-#endif
       auto status = MysqlHandler::PENDING;
 
       if (query_executed_) {
         ++num_current_query_;
-#if MYSQL_VERSION_ID < 80017
-        status = handler.nextResult(mysql, error);
-#else
         status = handler.nextResult(mysql);
-#endif
       } else {
-#if MYSQL_VERSION_ID < 80017
-        status = handler.runQuery(mysql, rendered_query_, error);
-#else
         status = handler.runQuery(mysql, rendered_query_);
-#endif
       }
 
       if (status == MysqlHandler::PENDING) {
@@ -892,11 +813,7 @@ void FetchOperation::socketActionable() {
       current_affected_rows_ = 0;
       current_recv_gtid_ = std::string();
       query_executed_ = true;
-#if MYSQL_VERSION_ID < 80017
-      if (error) {
-#else
       if (status == MysqlHandler::ERROR) {
-#endif
         active_fetch_action_ = FetchAction::CompleteQuery;
       } else {
         active_fetch_action_ = FetchAction::InitFetch;
