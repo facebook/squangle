@@ -35,6 +35,7 @@ enum class OperationType {
   MultiQueryStream,
   Connect,
   PoolConnect,
+  Locator,
   TestDatabase
 };
 
@@ -175,6 +176,8 @@ class DBLoggerBase {
         return "Connect";
       case OperationType::PoolConnect:
         return "PoolConnect";
+      case OperationType::Locator:
+        return "Locator";
       case OperationType::TestDatabase:
         return "TestDatabase";
     }
