@@ -93,6 +93,7 @@ QueryResult::QueryResult(QueryResult&& other) noexcept
       num_rows_affected_(other.num_rows_affected_),
       last_insert_id_(other.last_insert_id_),
       recv_gtid_(std::move(other.recv_gtid_)),
+      resp_attrs_(std::move(other.resp_attrs_)),
       operation_result_(other.operation_result_),
       row_blocks_(std::move(other.row_blocks_)) {
   other.row_blocks_.clear();
@@ -108,6 +109,7 @@ QueryResult& QueryResult::operator=(QueryResult&& other) {
     num_rows_affected_ = other.num_rows_affected_;
     last_insert_id_ = other.last_insert_id_;
     recv_gtid_ = std::move(other.recv_gtid_);
+    resp_attrs_ = std::move(other.resp_attrs_);
     operation_result_ = other.operation_result_;
 
     row_blocks_ = std::move(other.row_blocks_);
@@ -195,10 +197,12 @@ void StreamedQueryResult::checkAccessToResult() {
 void StreamedQueryResult::setResult(
     int64_t affected_rows,
     int64_t last_insert_id,
-    const string& recv_gtid) {
+    const string& recv_gtid,
+    const RespAttrs& resp_attrs) {
   num_affected_rows_ = affected_rows;
   last_insert_id_ = last_insert_id;
   recv_gtid_ = recv_gtid;
+  resp_attrs_ = resp_attrs;
 }
 
 void StreamedQueryResult::setException(folly::exception_wrapper ex) {
@@ -335,7 +339,8 @@ void MultiQueryStreamHandler::handleQueryEnded(StreamedQueryResult* result) {
   result->setResult(
       operation_->currentAffectedRows(),
       operation_->currentLastInsertId(),
-      operation_->currentRecvGtid());
+      operation_->currentRecvGtid(),
+      operation_->currentRespAttrs());
   result->freeHandler();
   resumeOperation();
 }

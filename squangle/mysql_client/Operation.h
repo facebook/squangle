@@ -767,6 +767,8 @@ class ConnectOperation : public Operation {
 // state.
 class FetchOperation : public Operation {
  public:
+  using RespAttrs = std::unordered_map<std::string, std::string>;
+
   ~FetchOperation() override = default;
   void mustSucceed() override;
 
@@ -845,6 +847,7 @@ class FetchOperation : public Operation {
   uint64_t currentLastInsertId();
   uint64_t currentAffectedRows();
   const std::string& currentRecvGtid();
+  const RespAttrs& currentRespAttrs();
 
   bool noIndexUsed() const {
     return no_index_used_;
@@ -915,6 +918,9 @@ class FetchOperation : public Operation {
   bool isStreamAccessAllowed();
   bool isPaused();
 
+  // Read the response attributes
+  RespAttrs readResponseAttributes();
+
   // Asynchronously kill a currently running query, returns
   // before the query is killed
   void killRunningQuery();
@@ -936,6 +942,7 @@ class FetchOperation : public Operation {
   uint64_t current_affected_rows_ = 0;
   uint64_t current_last_insert_id_ = 0;
   std::string current_recv_gtid_;
+  RespAttrs current_resp_attrs_;
 
   // When the Fetch gets paused, active fetch action moves to `WaitForConsumer`
   // and the action that got paused gets saved so tat `resume` can set it

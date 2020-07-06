@@ -208,6 +208,7 @@ class FetchResult : public DbResult {
 // }
 class QueryResult {
  public:
+  using RespAttrs = std::unordered_map<std::string, std::string>;
   class Iterator;
 
   explicit QueryResult(int queryNum);
@@ -320,6 +321,15 @@ class QueryResult {
     recv_gtid_ = recv_gtid;
   }
 
+  // Current response attributes
+  const RespAttrs& responseAttributes() const {
+    return resp_attrs_;
+  }
+
+  void setResponseAttributes(RespAttrs resp_attrs) {
+    resp_attrs_ = std::move(resp_attrs);
+  }
+
   // This can be called for complete or partial results. It's going to return
   // the total of rows stored in the QueryResult.
   size_t numRows() const {
@@ -415,6 +425,7 @@ class QueryResult {
   uint64_t num_rows_affected_;
   uint64_t last_insert_id_;
   std::string recv_gtid_;
+  RespAttrs resp_attrs_;
 
   OperationResult operation_result_;
 
@@ -445,6 +456,13 @@ class StreamedQueryResult {
     // Will throw exception if there was an error
     checkAccessToResult();
     return recv_gtid_;
+  }
+
+  using RespAttrs = std::unordered_map<std::string, std::string>;
+  const RespAttrs& responseAttributes() {
+    // Will throw exception if there was an error
+    checkAccessToResult();
+    return resp_attrs_;
   }
 
   class Iterator;
@@ -504,7 +522,8 @@ class StreamedQueryResult {
   void setResult(
       int64_t affected_rows,
       int64_t last_insert_id,
-      const std::string& recv_gtid);
+      const std::string& recv_gtid,
+      const RespAttrs& resp_attrs);
   void setException(folly::exception_wrapper ex);
   void freeHandler();
 
@@ -524,6 +543,7 @@ class StreamedQueryResult {
   int64_t num_affected_rows_ = -1;
   int64_t last_insert_id_ = 0;
   std::string recv_gtid_;
+  RespAttrs resp_attrs_;
 
   folly::exception_wrapper exception_wrapper_;
 };

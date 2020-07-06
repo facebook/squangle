@@ -765,9 +765,59 @@ const std::string& FetchOperation::currentRecvGtid() {
   return current_recv_gtid_;
 }
 
+const FetchOperation::RespAttrs& FetchOperation::currentRespAttrs() {
+  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  return current_resp_attrs_;
+}
+
 FetchOperation::RowStream* FetchOperation::rowStream() {
   CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
   return current_row_stream_.get_pointer();
+}
+
+static folly::Optional<std::pair<std::string, std::string>>
+readFirstResponseAtribute(MYSQL* mysql) {
+  size_t len;
+  const char* data;
+
+  if (!mysql_session_track_get_first(
+          mysql, SESSION_TRACK_RESP_ATTR, &data, &len)) {
+    auto key = std::string(data, len);
+    if (!mysql_session_track_get_next(
+            mysql, SESSION_TRACK_RESP_ATTR, &data, &len)) {
+      return std::make_pair(std::move(key), std::string(data, len));
+    }
+  }
+
+  return folly::none;
+}
+
+static folly::Optional<std::pair<std::string, std::string>>
+readNextResponseAtribute(MYSQL* mysql) {
+  size_t len;
+  const char* data;
+
+  if (!mysql_session_track_get_next(
+          mysql, SESSION_TRACK_RESP_ATTR, &data, &len)) {
+    auto key = std::string(data, len);
+    if (!mysql_session_track_get_next(
+            mysql, SESSION_TRACK_RESP_ATTR, &data, &len)) {
+      return std::make_pair(std::move(key), std::string(data, len));
+    }
+  }
+
+  return folly::none;
+}
+
+FetchOperation::RespAttrs FetchOperation::readResponseAttributes() {
+  RespAttrs attrs;
+  MYSQL* mysql = conn()->mysql();
+  for (auto attr = readFirstResponseAtribute(mysql); attr;
+       attr = readNextResponseAtribute(mysql)) {
+    attrs[std::move(attr->first)] = std::move(attr->second);
+  }
+
+  return attrs;
 }
 
 void FetchOperation::socketActionable() {
@@ -910,6 +960,7 @@ void FetchOperation::socketActionable() {
                 mysql, SESSION_TRACK_GTIDS, &data, &length)) {
           current_recv_gtid_ = std::string(data, length);
         }
+        current_resp_attrs_ = readResponseAttributes();
         more_results = mysql_more_results(mysql);
         active_fetch_action_ = more_results ? FetchAction::StartQuery
                                             : FetchAction::CompleteOperation;
@@ -1263,6 +1314,7 @@ void QueryOperation::notifyQuerySuccess(bool more_results) {
   query_result_->setNumRowsAffected(FetchOperation::currentAffectedRows());
   query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
   query_result_->setRecvGtid(FetchOperation::currentRecvGtid());
+  query_result_->setResponseAttributes(FetchOperation::currentRespAttrs());
 
   query_result_->setPartial(false);
 
@@ -1335,6 +1387,7 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
       FetchOperation::currentAffectedRows());
   current_query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
   current_query_result_->setRecvGtid(FetchOperation::currentRecvGtid());
+  current_query_result_->setResponseAttributes(FetchOperation::currentRespAttrs());
 
   if (buffered_query_callback_) {
     buffered_query_callback_(
