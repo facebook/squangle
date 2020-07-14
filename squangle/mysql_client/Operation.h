@@ -246,6 +246,31 @@ class ConnectionOptions {
     return max_attempts_;
   }
 
+  // Sets the differentiated service code point (DSCP) on the underlying
+  // connection, which has the effect of embedding it into outgoing packet ip
+  // headers. The value may be used to classify and prioritize said traffic.
+  //
+  // Note: A DSCP value is 6 bits and is packed into an 8 bit field. Users must
+  // specify the unpacked (unshifted) 6-bit value.
+  //
+  // Note: This implementation only supports IPv6.
+  //
+  // Also known as "Quality of Service" (QoS), "Type of Service", "Class of
+  // Service" (COS).
+  //
+  // See also RFC 2474 [0] and RFC 3542 6.5 (IPv6 sockopt) [1]
+  // [0]: https://tools.ietf.org/html/rfc2474
+  // [1]: https://tools.ietf.org/html/rfc3542#section-6.5
+  ConnectionOptions& setDscp(uint8_t dscp) {
+    CHECK_THROW((dscp & 0b11000000) == 0, std::invalid_argument);
+    dscp_ = dscp;
+    return *this;
+  }
+
+  uint8_t getDscp() const {
+    return dscp_;
+  }
+
   // If this is not set, but regular timeout was, the TotalTimeout for the
   // operation will be the number of attempts times the primary timeout.
   // Set this if you have strict timeout needs.
@@ -268,6 +293,7 @@ class ConnectionOptions {
   std::unordered_map<string, string> attributes_;
   folly::Optional<mysql_compression_lib> compression_lib_;
   uint32_t max_attempts_ = 1;
+  uint8_t dscp_ = 0;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -675,6 +701,15 @@ class ConnectOperation : public Operation {
   // Sets the number of attempts this operation will try to acquire a mysql
   // connection.
   ConnectOperation* setConnectAttempts(uint32_t max_attempts);
+
+  // Sets the DSCP (QoS) value associated with this connection
+  //
+  // See Also ConnectionOptions::setDscp
+  ConnectOperation* setDscp(uint8_t dscp);
+
+  uint8_t getDscp() const {
+    return conn_options_.getDscp();
+  }
 
   uint32_t attemptsMade() const {
     return attempts_made_;

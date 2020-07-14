@@ -52,6 +52,9 @@ std::string ConnectionOptions::getDisplayString() const {
   parts.push_back(folly::sformat("query timeout={}us", query_timeout_.count()));
   parts.push_back(folly::sformat("total timeout={}us", total_timeout_.count()));
   parts.push_back(folly::sformat("conn attempts={}", max_attempts_));
+  if (dscp_ != 0) {
+    parts.push_back(folly::sformat("outbound dscp={}", dscp_));
+  }
   if (ssl_options_provider_ != nullptr) {
     parts.push_back(folly::sformat(
         "SSL options provider={}", (void*)ssl_options_provider_.get()));
@@ -340,6 +343,7 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setDefaultQueryTimeout(conn_opts.getQueryTimeout());
   setAttributes(conn_opts.getAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
+  setDscp(conn_opts.getDscp());
   setTotalTimeout(conn_opts.getTotalTimeout());
   setCompression(conn_opts.getCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
@@ -374,6 +378,13 @@ ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
   conn_options_.setConnectAttempts(max_attempts);
   return this;
 }
+
+ConnectOperation* ConnectOperation::setDscp(uint8_t dscp) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  conn_options_.setDscp(dscp);
+  return this;
+}
+
 ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
     bool killOnQueryTimeout) {
   CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
@@ -512,8 +523,21 @@ void ConnectOperation::socketActionable() {
           "descriptor");
       attemptFailed(OperationResult::Failed);
     } else if (status == MysqlHandler::DONE) {
-      conn()->socketHandler()->changeHandlerFD(
-          folly::NetworkSocket::fromFd(fd));
+      auto socket = folly::NetworkSocket::fromFd(fd);
+      if (int dsf = conn_options_.getDscp(); dsf != 0) {
+        // DS field (QOS/TOS level) is 8 bits with DSCP packed into the most
+        // significant 6 bits.
+        dsf <<= 2;
+        // assuming ipv6 ip layer
+        if (folly::netops::setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS, &dsf, sizeof(dsf))) {
+          std::string error = "setsockopt failed: " + folly::errnoStr(errno);
+          LOG(ERROR) << error;
+          setAsyncClientError(error);
+          attemptFailed(OperationResult::Failed);
+          return;
+        }
+      }
+      conn()->socketHandler()->changeHandlerFD(socket);
       conn()->mysqlConnection()->connectionOpened();
       attemptSucceeded(OperationResult::Succeeded);
     } else {
