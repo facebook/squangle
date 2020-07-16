@@ -1352,17 +1352,17 @@ void QueryOperation::notifyFailure(OperationResult result) {
 }
 
 void QueryOperation::notifyOperationCompleted(OperationResult result) {
-  query_result_->setOperationResult(result);
+  if (!buffered_query_callback_) {
+    return;
+  }
 
+  // Nothing that changes the non-callback state is safe to be done here.
   auto reason =
       (result == OperationResult::Succeeded ? QueryCallbackReason::Success
                                             : QueryCallbackReason::Failure);
-
-  if (buffered_query_callback_) {
-    buffered_query_callback_(*this, query_result_.get(), reason);
-    // Release callback since no other callbacks will be made
-    buffered_query_callback_ = nullptr;
-  }
+  buffered_query_callback_(*this, query_result_.get(), reason);
+  // Release callback since no other callbacks will be made
+  buffered_query_callback_ = nullptr;
 }
 
 MultiQueryOperation::MultiQueryOperation(
@@ -1428,16 +1428,12 @@ void MultiQueryOperation::notifyOperationCompleted(OperationResult result) {
     return;
   }
   // Nothing that changes the non-callback state is safe to be done here.
-  current_query_result_->setOperationResult(result);
   auto reason =
       (result == OperationResult::Succeeded ? QueryCallbackReason::Success
                                             : QueryCallbackReason::Failure);
-  // If there was a callback, it fires now.
-  if (buffered_query_callback_) {
-    buffered_query_callback_(*this, current_query_result_.get(), reason);
-    // Release callback since no other callbacks will be made
-    buffered_query_callback_ = nullptr;
-  }
+  buffered_query_callback_(*this, current_query_result_.get(), reason);
+  // Release callback since no other callbacks will be made
+  buffered_query_callback_ = nullptr;
 }
 
 MultiQueryOperation::~MultiQueryOperation() {}
