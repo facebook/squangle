@@ -15,8 +15,8 @@
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 #include <folly/portability/GFlags.h>
+#include <folly/ssl/OpenSSLPtrTypes.h>
 #include <mysql_async.h>
-#include <wangle/client/ssl/SSLSession.h>
 
 #include "squangle/base/ExceptionUtil.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"

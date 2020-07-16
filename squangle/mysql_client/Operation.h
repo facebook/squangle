@@ -53,7 +53,7 @@
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventHandler.h>
 #include <folly/io/async/SSLContext.h>
-#include <wangle/client/ssl/SSLSession.h>
+#include <folly/ssl/OpenSSLPtrTypes.h>
 #include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/DbResult.h"
@@ -761,7 +761,7 @@ class ConnectOperation : public Operation {
 
   bool shouldCompleteOperation(OperationResult result);
 
-  wangle::SSLSessionPtr getSSLSession();
+  folly::ssl::SSLSessionUniquePtr getSSLSession();
 
   uint32_t attempts_made_ = 0;
   bool killOnQueryTimeout_ = false;

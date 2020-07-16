@@ -3,7 +3,7 @@
 #pragma once
 
 #include <mysql.h>
-#include <wangle/client/ssl/SSLSession.h>
+#include <folly/ssl/OpenSSLPtrTypes.h>
 
 namespace folly {
 class SSLContext;
@@ -27,7 +27,7 @@ class SSLOptionsProviderBase {
   virtual SSL_SESSION* getSSLSession() = 0;
 
   // this function is called when an SSL connection is successfully established
-  virtual void storeSSLSession(wangle::SSLSessionPtr ssl_session) = 0;
+  virtual void storeSSLSession(folly::ssl::SSLSessionUniquePtr ssl_session) = 0;
 
   // Set the SSL Options on the MYSQL object.
   // Returns true if set was successful.
