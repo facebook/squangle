@@ -19,7 +19,7 @@ QueryCallback resultAppender(const QueryAppenderCallback& callback) {
   // QueryAppenderCallback
   auto* rowBlocks = new vector<RowBlock>();
   return [callback, rowBlocks](
-      QueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
+             QueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
     if (reason == QueryCallbackReason::RowsFetched) {
       rowBlocks->push_back(res->stealCurrentRowBlock());
     } else {
@@ -38,7 +38,9 @@ MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback) {
   auto* rowBlocks = new vector<RowBlock>();
   auto* allResults = new vector<QueryResult>();
   return [callback, rowBlocks, allResults](
-      MultiQueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
+             MultiQueryOperation& op,
+             QueryResult* res,
+             QueryCallbackReason reason) {
     if (reason == QueryCallbackReason::RowsFetched) {
       rowBlocks->push_back(res->stealCurrentRowBlock());
     } else if (reason == QueryCallbackReason::QueryBoundary) {

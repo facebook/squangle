@@ -51,8 +51,7 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
     auto mysql = mysql_;
     auto client = client_;
     // Close our connection in the thread from which it was created.
-    if (!client_->runInThread(
-            [mysql, client]() { mysql_close(mysql); })) {
+    if (!client_->runInThread([mysql, client]() { mysql_close(mysql); })) {
       LOG(DFATAL)
           << "Mysql connection couldn't be closed: error in folly::EventBase";
     }

@@ -20,7 +20,9 @@ class ExponentialMovingAverage {
   explicit ExponentialMovingAverage(double smootingFactor);
   void addSample(double sample);
 
-  double value() const { return currentValue_; }
+  double value() const {
+    return currentValue_;
+  }
 
  private:
   double smoothingFactor_ = 0;
@@ -190,9 +192,13 @@ class PoolStats {
   }
 
   // How many times the pool had a connection ready in the cache
-  uint64_t numPoolHits() { return pool_hits_.load(std::memory_order_relaxed); }
+  uint64_t numPoolHits() {
+    return pool_hits_.load(std::memory_order_relaxed);
+  }
 
-  void incrPoolHits() { pool_hits_.fetch_add(1, std::memory_order_relaxed); }
+  void incrPoolHits() {
+    pool_hits_.fetch_add(1, std::memory_order_relaxed);
+  }
 
   // how many times the pool didn't have a connection right in cache
   uint64_t numPoolMisses() {
@@ -210,7 +216,7 @@ class PoolStats {
   std::atomic<uint64_t> pool_hits_;
   std::atomic<uint64_t> pool_misses_;
 };
-}
-} // facebook::db
+} // namespace db
+} // namespace facebook
 
 #endif // COMMON_DB_CLIENT_STATS_H

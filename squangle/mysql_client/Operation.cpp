@@ -529,7 +529,8 @@ void ConnectOperation::socketActionable() {
         // significant 6 bits.
         dsf <<= 2;
         // assuming ipv6 ip layer
-        if (folly::netops::setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS, &dsf, sizeof(dsf))) {
+        if (folly::netops::setsockopt(
+                socket, IPPROTO_IPV6, IPV6_TCLASS, &dsf, sizeof(dsf))) {
           std::string error = "setsockopt failed: " + folly::errnoStr(errno);
           LOG(ERROR) << error;
           setAsyncClientError(error);
@@ -1411,7 +1412,8 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
       FetchOperation::currentAffectedRows());
   current_query_result_->setLastInsertId(FetchOperation::currentLastInsertId());
   current_query_result_->setRecvGtid(FetchOperation::currentRecvGtid());
-  current_query_result_->setResponseAttributes(FetchOperation::currentRespAttrs());
+  current_query_result_->setResponseAttributes(
+      FetchOperation::currentRespAttrs());
 
   if (buffered_query_callback_) {
     buffered_query_callback_(

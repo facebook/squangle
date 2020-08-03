@@ -347,16 +347,21 @@ MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::tryConnect(
       flags));
 }
 
-MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::runQuery(MYSQL* mysql, folly::StringPiece queryStmt) {
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::runQuery(
+    MYSQL* mysql,
+    folly::StringPiece queryStmt) {
   return toHandlerStatus(
       mysql_real_query_nonblocking(mysql, queryStmt.begin(), queryStmt.size()));
 }
 
-MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::nextResult(MYSQL* mysql) {
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::nextResult(
+    MYSQL* mysql) {
   return toHandlerStatus(mysql_next_result_nonblocking(mysql));
 }
 
-MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::fetchRow(MYSQL_RES* res, MYSQL_ROW& row) {
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::fetchRow(
+    MYSQL_RES* res,
+    MYSQL_ROW& row) {
   auto status = toHandlerStatus(mysql_fetch_row_nonblocking(res, &row));
   DCHECK_NE(status, ERROR); // Should never be an error
   return status;
@@ -482,7 +487,8 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
   ret->connection()->mysql_client_->addOperation(ret);
   ret->connection()->socket_handler_.setOperation(ret.get());
   ret->pre_operation_callback_ = ret->connection()->stealPreOperationCallback();
-  ret->post_operation_callback_ = ret->connection()->stealPostOperationCallback();
+  ret->post_operation_callback_ =
+      ret->connection()->stealPostOperationCallback();
   return ret;
 }
 
