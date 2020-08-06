@@ -1164,7 +1164,8 @@ void FetchOperation::specializedCompleteOperation() {
         rows_received_,
         total_result_size_,
         no_index_used_,
-        attributes_);
+        attributes_,
+        readResponseAttributes());
     client()->logQuerySuccess(logging_data, *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
@@ -1181,7 +1182,9 @@ void FetchOperation::specializedCompleteOperation() {
             rendered_query_.toString(),
             rows_received_,
             total_result_size_,
-            no_index_used_),
+            no_index_used_,
+            {},
+            readResponseAttributes()),
         reason,
         mysql_errno(),
         mysql_error(),

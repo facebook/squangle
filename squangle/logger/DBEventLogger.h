@@ -97,6 +97,8 @@ struct QueryLoggingData : CommonLoggingData {
       uint64_t resultSize = 0,
       bool noIndexUsed = false,
       const std::unordered_map<std::string, std::string>& queryAttributes =
+          std::unordered_map<std::string, std::string>(),
+      std::unordered_map<std::string, std::string> responseAttributes =
           std::unordered_map<std::string, std::string>())
       : CommonLoggingData(op, duration),
         queries_executed(queries),
@@ -104,13 +106,15 @@ struct QueryLoggingData : CommonLoggingData {
         rows_received(rows),
         result_size(resultSize),
         no_index_used(noIndexUsed),
-        attributes(queryAttributes) {}
+        query_attributes(queryAttributes),
+        response_attributes(std::move(responseAttributes)) {}
   int queries_executed;
   std::string query;
   int rows_received;
   uint64_t result_size;
   bool no_index_used;
-  std::unordered_map<std::string, std::string> attributes;
+  std::unordered_map<std::string, std::string> query_attributes;
+  std::unordered_map<std::string, std::string> response_attributes;
 };
 
 // Base class for logging events of db client apis. This should be used as an
