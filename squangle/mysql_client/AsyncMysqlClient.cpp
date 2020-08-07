@@ -176,11 +176,18 @@ void AsyncMysqlClient::setDBCounterForTesting(
 void MysqlClientBase::logQuerySuccess(
     const db::QueryLoggingData& logging_data,
     const Connection& conn) {
-  stats()->incrSucceededQueries();
+  auto conn_context = conn.getConnectionContext();
+  if (conn_context) {
+    stats()->incrSucceededQueries(
+        conn_context->getNormalValue("shardmap"),
+        conn_context->getNormalValue("endpoint_type"));
+  } else {
+    stats()->incrSucceededQueries(folly::none, folly::none);
+  }
+
   if (db_logger_) {
     db_logger_->logQuerySuccess(
-        logging_data,
-        makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
+        logging_data, makeSquangleLoggingData(conn.getKey(), conn_context));
   }
 }
 
@@ -190,14 +197,23 @@ void MysqlClientBase::logQueryFailure(
     unsigned int mysqlErrno,
     const std::string& error,
     const Connection& conn) {
-  stats()->incrFailedQueries();
+  auto conn_context = conn.getConnectionContext();
+  if (conn_context) {
+    stats()->incrFailedQueries(
+        conn_context->getNormalValue("shardmap"),
+        conn_context->getNormalValue("endpoint_type"),
+        mysqlErrno);
+  } else {
+    stats()->incrFailedQueries(folly::none, folly::none, mysqlErrno);
+  }
+
   if (db_logger_) {
     db_logger_->logQueryFailure(
         logging_data,
         reason,
         mysqlErrno,
         error,
-        makeSquangleLoggingData(conn.getKey(), conn.getConnectionContext()));
+        makeSquangleLoggingData(conn.getKey(), conn_context));
   }
 }
 
@@ -221,7 +237,15 @@ void MysqlClientBase::logConnectionFailure(
     unsigned int mysqlErrno,
     const std::string& error,
     const db::ConnectionContextBase* connection_context) {
-  stats()->incrFailedConnections();
+  if (connection_context) {
+    stats()->incrFailedConnections(
+        connection_context->getNormalValue("shardmap"),
+        connection_context->getNormalValue("endpoint_type"),
+        mysqlErrno);
+  } else {
+    stats()->incrFailedConnections(folly::none, folly::none, mysqlErrno);
+  }
+
   if (db_logger_) {
     db_logger_->logConnectionFailure(
         logging_data,

@@ -15,6 +15,7 @@
 #include <chrono>
 
 #include "squangle/base/ConnectionKey.h"
+#include "squangle/logger/DBEventLogger.h"
 
 namespace facebook {
 namespace common {
@@ -104,6 +105,11 @@ class MysqlConnectionHolder {
     last_activity_time_ = last_activity_time;
   }
 
+  void setConnectionContext(
+      std::unique_ptr<db::ConnectionContextBase> conn_context) {
+    conn_context_ = std::move(conn_context);
+  }
+
   // Useful for removing the raw mysql connection and leaving this class to be
   // destroyed without closing it
   MYSQL* stealMysql() {
@@ -126,6 +132,7 @@ class MysqlConnectionHolder {
   // notification of completed operations.
   MYSQL* mysql_;
   const ConnectionKey conn_key_;
+  std::unique_ptr<db::ConnectionContextBase> conn_context_;
   Timepoint creation_time_;
   Timepoint last_activity_time_;
   bool connection_opened_ = false;
@@ -137,8 +144,8 @@ class MysqlConnectionHolder {
   MysqlConnectionHolder() = delete;
   MysqlConnectionHolder(const MysqlConnectionHolder&) = delete;
 };
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_CONNECTION_H

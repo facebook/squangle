@@ -539,6 +539,10 @@ void ConnectOperation::socketActionable() {
         }
       }
       conn()->socketHandler()->changeHandlerFD(socket);
+      if (connection_context_) {
+        conn()->mysqlConnection()->setConnectionContext(
+            connection_context_->copy());
+      }
       conn()->mysqlConnection()->connectionOpened();
       attemptSucceeded(OperationResult::Succeeded);
     } else {

@@ -10,6 +10,7 @@
 #ifndef COMMON_DB_CLIENT_STATS_H
 #define COMMON_DB_CLIENT_STATS_H
 
+#include <folly/Optional.h>
 #include <atomic>
 
 namespace facebook {
@@ -47,19 +48,31 @@ class DBCounterBase {
   virtual ~DBCounterBase() {}
 
   // opened connections
-  virtual void incrOpenedConnections() = 0;
+  virtual void incrOpenedConnections(
+      const folly::Optional<std::string>& shardmap,
+      const folly::Optional<std::string>& endpointType) = 0;
 
   // closed connections
-  virtual void incrClosedConnections() = 0;
+  virtual void incrClosedConnections(
+      const folly::Optional<std::string>& shardmap,
+      const folly::Optional<std::string>& endpointType) = 0;
 
   // failed connections
-  virtual void incrFailedConnections() = 0;
+  virtual void incrFailedConnections(
+      const folly::Optional<std::string>& shardmap,
+      const folly::Optional<std::string>& endpointType,
+      unsigned int mysql_errno) = 0;
 
   // query failures
-  virtual void incrFailedQueries() = 0;
+  virtual void incrFailedQueries(
+      const folly::Optional<std::string>& shardmap,
+      const folly::Optional<std::string>& endpointType,
+      unsigned int mysql_errno) = 0;
 
   // query successes
-  virtual void incrSucceededQueries() = 0;
+  virtual void incrSucceededQueries(
+      const folly::Optional<std::string>& shardmap,
+      const folly::Optional<std::string>& endpointType) = 0;
 
   // ssl connections
   virtual void incrSSLConnections() = 0;
@@ -87,7 +100,9 @@ class SimpleDbCounter : public DBCounterBase {
     return opened_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrOpenedConnections() override {
+  void incrOpenedConnections(
+      const folly::Optional<std::string>& /* unused */,
+      const folly::Optional<std::string>& /* unused */) override {
     opened_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -96,7 +111,9 @@ class SimpleDbCounter : public DBCounterBase {
     return closed_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrClosedConnections() override {
+  void incrClosedConnections(
+      const folly::Optional<std::string>& /* unused */,
+      const folly::Optional<std::string>& /* unused */) override {
     closed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -105,7 +122,10 @@ class SimpleDbCounter : public DBCounterBase {
     return failed_connections_.load(std::memory_order_relaxed);
   }
 
-  void incrFailedConnections() override {
+  void incrFailedConnections(
+      const folly::Optional<std::string>& /* unused */,
+      const folly::Optional<std::string>& /* unused */,
+      unsigned int /* unused */) override {
     failed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -114,7 +134,10 @@ class SimpleDbCounter : public DBCounterBase {
     return failed_queries_.load(std::memory_order_relaxed);
   }
 
-  void incrFailedQueries() override {
+  void incrFailedQueries(
+      const folly::Optional<std::string>& /* unused */,
+      const folly::Optional<std::string>& /* unused */,
+      unsigned int /* unused */) override {
     failed_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -123,7 +146,9 @@ class SimpleDbCounter : public DBCounterBase {
     return succeeded_queries_.load(std::memory_order_relaxed);
   }
 
-  void incrSucceededQueries() override {
+  void incrSucceededQueries(
+      const folly::Optional<std::string>& /* unused */,
+      const folly::Optional<std::string>& /* unused */) override {
     succeeded_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 

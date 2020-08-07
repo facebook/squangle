@@ -24,6 +24,7 @@ MysqlConnectionHolder::MysqlConnectionHolder(
     : client_(client),
       mysql_(mysql),
       conn_key_(conn_key),
+      conn_context_(nullptr),
       connection_opened_(already_open),
       can_reuse_(true) {
   client_->activeConnectionAdded(&conn_key_);
@@ -34,12 +35,16 @@ MysqlConnectionHolder::MysqlConnectionHolder(
     std::unique_ptr<MysqlConnectionHolder> from_holder)
     : client_(from_holder->client_),
       conn_key_(from_holder->conn_key_),
+      conn_context_(nullptr),
       creation_time_(from_holder->creation_time_),
       last_activity_time_(from_holder->last_activity_time_),
       connection_opened_(from_holder->connection_opened_),
       can_reuse_(from_holder->can_reuse_) {
   mysql_ = from_holder->stealMysql();
   client_->activeConnectionAdded(&conn_key_);
+  if (from_holder->conn_context_) {
+    conn_context_ = from_holder->conn_context_->copy();
+  }
 }
 
 bool MysqlConnectionHolder::inTransaction() {
@@ -56,7 +61,13 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
           << "Mysql connection couldn't be closed: error in folly::EventBase";
     }
     if (connection_opened_) {
-      client_->stats()->incrClosedConnections();
+      if (conn_context_) {
+        client_->stats()->incrClosedConnections(
+            conn_context_->getNormalValue("shardmap"),
+            conn_context_->getNormalValue("endpoint_type"));
+      } else {
+        client_->stats()->incrClosedConnections(folly::none, folly::none);
+      }
     }
   }
   client_->activeConnectionRemoved(&conn_key_);
@@ -65,8 +76,16 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
 void MysqlConnectionHolder::connectionOpened() {
   connection_opened_ = true;
   last_activity_time_ = std::chrono::steady_clock::now();
-  client_->stats()->incrOpenedConnections();
+
+  if (conn_context_) {
+    client_->stats()->incrOpenedConnections(
+        conn_context_->getNormalValue("shardmap"),
+        conn_context_->getNormalValue("endpoint_type"));
+  } else {
+    client_->stats()->incrOpenedConnections(folly::none, folly::none);
+  }
 }
-}
-}
-} // namespace facebook::common::mysql_client
+
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
