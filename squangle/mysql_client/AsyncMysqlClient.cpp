@@ -221,9 +221,6 @@ void MysqlClientBase::logConnectionSuccess(
     const db::CommonLoggingData& logging_data,
     const ConnectionKey& conn_key,
     const db::ConnectionContextBase* connection_context) {
-  if (connection_context && connection_context->isSslConnection) {
-    stats()->incrSSLConnections();
-  }
   if (db_logger_) {
     db_logger_->logConnectionSuccess(
         logging_data, makeSquangleLoggingData(&conn_key, connection_context));
