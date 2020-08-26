@@ -121,13 +121,17 @@ folly::dynamic Row::getDynamic(size_t l) const {
       case MYSQL_TYPE_INT24:
       case MYSQL_TYPE_ENUM:
       case MYSQL_TYPE_YEAR:
+        if (row_block_->getFieldFlags(l) & UNSIGNED_FLAG) {
+          return folly::dynamic(
+              row_block_->getField<unsigned long>(row_number_, l));
+        }
         return folly::dynamic(row_block_->getField<long>(row_number_, l));
 
       // folly::dynamic::Type::STRING
       default:
         return folly::dynamic(row_block_->getField<string>(row_number_, l));
     }
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     // If we failed to parse (NULL int, etc), try again as a string
     return folly::dynamic(row_block_->getField<string>(row_number_, l));
   }
@@ -287,6 +291,6 @@ std::chrono::system_clock::time_point parseDateTime(
   chrono_time = chrono_time + std::chrono::microseconds(microseconds);
   return chrono_time;
 }
-}
-}
-} // namespace facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
