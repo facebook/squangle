@@ -557,26 +557,32 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
       chrono::steady_clock::now() - start_time_);
 
+  // mysql_get_connect_stage is a non-standard fb specific to get the
+  // current internal stage of the nonblocking connection
+  enum connect_stage stage = mysql_get_connect_stage(conn()->mysql());
   // Check for an overloaded EventBase
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out (took %lu ms)",
+        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms)",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
         host().c_str(),
         port(),
+        connectStageString(stage).c_str(),
         delta.count());
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out"
+        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms)"
         " (loop stalled, avg loop time %ld ms)",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
         host().c_str(),
         port(),
+        connectStageString(stage).c_str(),
+        delta.count(),
         std::lround(avgLoopTimeUs / 1000.0));
     setAsyncClientError(msg, "Connect timed out (loop stalled)");
   }
@@ -1561,6 +1567,39 @@ folly::StringPiece FetchOperation::toString(FetchAction action) {
   LOG(DFATAL) << "unable to convert result to string: "
               << static_cast<int>(action);
   return "Unknown result";
+}
+
+// enum connect_stage is defined in mysql at include/mysql_com.h
+// and this provides a way to log the string version of this enum
+folly::fbstring Operation::connectStageString(connect_stage stage) {
+  static const folly::F14FastMap<connect_stage, fbstring> stageToStringMap = {
+      {connect_stage::CONNECT_STAGE_INVALID, "CONNECT_STAGE_INVALID"},
+      {connect_stage::CONNECT_STAGE_NOT_STARTED, "CONNECT_STAGE_NOT_STARTED"},
+      {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
+       "CONNECT_STAGE_NET_BEGIN_CONNECT"},
+      {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
+       "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
+      {connect_stage::CONNECT_STAGE_READ_GREETING,
+       "CONNECT_STAGE_READ_GREETING"},
+      {connect_stage::CONNECT_STAGE_PARSE_HANDSHAKE,
+       "CONNECT_STAGE_PARSE_HANDSHAKE"},
+      {connect_stage::CONNECT_STAGE_ESTABLISH_SSL,
+       "CONNECT_STAGE_ESTABLISH_SSL"},
+      {connect_stage::CONNECT_STAGE_AUTHENTICATE, "CONNECT_STAGE_AUTHENTICATE"},
+      {connect_stage::CONNECT_STAGE_PREP_SELECT_DATABASE,
+       "CONNECT_STAGE_PREP_SELECT_DATABASE"},
+      {connect_stage::CONNECT_STAGE_PREP_INIT_COMMANDS,
+       "CONNECT_STAGE_PREP_INIT_COMMANDS"},
+      {connect_stage::CONNECT_STAGE_SEND_ONE_INIT_COMMAND,
+       "CONNECT_STAGE_SEND_ONE_INIT_COMMAND"},
+      {connect_stage::CONNECT_STAGE_COMPLETE, "CONNECT_STAGE_COMPLETE"},
+  };
+
+  try {
+    return stageToStringMap.at(stage);
+  } catch (const std::out_of_range& /* ex */) {
+    return folly::sformat("Unexpected connect_stage: {}", (int)stage);
+  }
 }
 
 std::unique_ptr<Connection> blockingConnectHelper(

@@ -373,6 +373,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   static folly::StringPiece toString(QueryCallbackReason reason);
   static folly::StringPiece toString(StreamState state);
 
+  static folly::fbstring connectStageString(connect_stage stage);
+
   // An Operation can have a folly::dynamic associated with it.  This
   // can represent anything the caller wants to track and is primarily
   // useful in the callback.  Typically this would be a string or
