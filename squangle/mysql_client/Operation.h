@@ -194,7 +194,7 @@ class ConnectionOptions {
     return *this;
   }
 
-  Duration getConnectTcpTimeout() const {
+  const folly::Optional<Duration>& getConnectTcpTimeout() const {
     return connection_tcp_timeout_;
   }
 
@@ -304,7 +304,7 @@ class ConnectionOptions {
 
  private:
   Duration connection_timeout_;
-  Duration connection_tcp_timeout_;
+  folly::Optional<Duration> connection_tcp_timeout_;
   Duration total_timeout_;
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;

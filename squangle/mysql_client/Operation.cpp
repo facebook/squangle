@@ -23,12 +23,10 @@
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
 
-// ADITJ: Set it to 300ms once tcp timeout is enabled in all regions
-// Currently default it to high value of 10s, which basically makes this
-// timeout ineffective unless set explicitly using conn options
+// Default timeout of 0 is no-op for connect tcp timeout
 DEFINE_int64(
     async_mysql_connect_tcp_timeout_micros,
-    10 * 1000 * 1000,
+    0,
     "default timeout, in micros, for mysql connect");
 
 DEFINE_int64(
@@ -49,7 +47,6 @@ namespace chrono = std::chrono;
 
 ConnectionOptions::ConnectionOptions()
     : connection_timeout_(FLAGS_async_mysql_connect_timeout_micros),
-      connection_tcp_timeout_(FLAGS_async_mysql_connect_tcp_timeout_micros),
       total_timeout_(FLAGS_async_mysql_timeout_micros * 2),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
@@ -358,7 +355,6 @@ ConnectOperation::ConnectOperation(
 ConnectOperation* ConnectOperation::setConnectionOptions(
     const ConnectionOptions& conn_opts) {
   setTimeout(conn_opts.getTimeout());
-  setTcpTimeout(conn_opts.getConnectTcpTimeout());
   setDefaultQueryTimeout(conn_opts.getQueryTimeout());
   setAttributes(conn_opts.getAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
@@ -366,6 +362,9 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setTotalTimeout(conn_opts.getTotalTimeout());
   setCompression(conn_opts.getCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
+  if (conn_opts.getConnectTcpTimeout()) {
+    setTcpTimeout(*conn_opts.getConnectTcpTimeout());
+  }
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
   }
@@ -516,15 +515,19 @@ void ConnectOperation::specializedRunImpl() {
 
   conn()->socketHandler()->setOperation(this);
 
+  // If the tcp timeout value is not set in conn options, use the default value
   uint timeoutInMs = chrono::duration_cast<chrono::milliseconds>(
-                         conn_options_.getConnectTcpTimeout())
+                         conn_options_.getConnectTcpTimeout().value_or(Duration(
+                             FLAGS_async_mysql_connect_tcp_timeout_micros)))
                          .count();
   // Set the connect timeout in mysql options and also on tcp_timeout_handler if
   // event base is set. Sync implmenation of MysqlClientBase may not have it
-  // set.
-  mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT_MS, &timeoutInMs);
-  if (isEventBaseSet()) {
-    tcp_timeout_handler_.scheduleTimeout(timeoutInMs);
+  // set. If the timeout is set to 0, skip setting any timeout
+  if (timeoutInMs != 0) {
+    mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT_MS, &timeoutInMs);
+    if (isEventBaseSet()) {
+      tcp_timeout_handler_.scheduleTimeout(timeoutInMs);
+    }
   }
 
   // connect is immediately "ready" to do one loop
