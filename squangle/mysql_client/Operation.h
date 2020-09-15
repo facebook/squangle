@@ -90,6 +90,9 @@ enum class StreamState;
 // Simplify some std::chrono types.
 typedef std::chrono::time_point<std::chrono::steady_clock> Timepoint;
 
+// Simple name for mysql internal connect stage enum
+typedef enum connect_stage MySqlConnectStage;
+
 // Callbacks for connecting and querying, respectively.  A
 // ConnectCallback is invoked when a connection succeeds or fails.  A
 // QueryCallback is called for each row block (see Row.h) as well as
@@ -179,6 +182,20 @@ class ConnectionOptions {
 
   Duration getTimeout() const {
     return connection_timeout_;
+  }
+
+  // This time out is used for each connect attempt and this is the maximum
+  // time allowed for client<->server tcp handshake. This timeout allows client
+  // to failfast in case the MYSQL server is not reachable, where we don't want
+  // to wait for the entire connection_timeout_ which also includes time buffer
+  // for ssl and MYSQL protocol exchange
+  ConnectionOptions& setConnectTcpTimeout(Duration dur) {
+    connection_tcp_timeout_ = dur;
+    return *this;
+  }
+
+  Duration getConnectTcpTimeout() const {
+    return connection_tcp_timeout_;
   }
 
   ConnectionOptions& setQueryTimeout(Duration dur) {
@@ -287,6 +304,7 @@ class ConnectionOptions {
 
  private:
   Duration connection_timeout_;
+  Duration connection_tcp_timeout_;
   Duration total_timeout_;
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
@@ -581,6 +599,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   };
 
   bool isInEventBaseThread();
+  bool isEventBaseSet();
 
   bool isCancelledOnRun() const {
     return cancel_on_run_;
@@ -631,6 +650,26 @@ class Operation : public std::enable_shared_from_this<Operation> {
   friend class Connection;
   friend class SyncConnection;
   friend class ConnectionSocketHandler;
+};
+
+// Timeout used for controlling early timeout of just the tcp handshake phase
+// before doing heavy lifting like ssl and other mysql protocol for connection
+// establishment
+class ConnectTcpTimeoutHandler : public folly::AsyncTimeout {
+ public:
+  ConnectTcpTimeoutHandler(
+      folly::EventBase* base,
+      ConnectOperation* connect_operation)
+      : folly::AsyncTimeout(base), op_(connect_operation) {}
+
+  void timeoutExpired() noexcept override;
+
+ private:
+  ConnectOperation* op_;
+
+  ConnectTcpTimeoutHandler() = delete;
+  ConnectTcpTimeoutHandler(const ConnectTcpTimeoutHandler&) = delete;
+  ConnectTcpTimeoutHandler& operator=(const ConnectTcpTimeoutHandler&) = delete;
 };
 
 // An operation representing a pending connection.  Constructed via
@@ -688,6 +727,12 @@ class ConnectOperation : public Operation {
   // Each connect attempt will take at most this timeout to retry to acquire
   // the connection.
   ConnectOperation* setTimeout(Duration timeout);
+
+  // This timeout allows for clients to fail fast when tcp handshake
+  // latency is high . This method allows to override the tcp timeout connection
+  // options. These timeouts can either be set directly or by passing in
+  // connection options.
+  ConnectOperation* setTcpTimeout(Duration timeout);
 
   ConnectOperation* setUserData(folly::dynamic val) {
     Operation::setUserData(std::move(val));
@@ -757,6 +802,9 @@ class ConnectOperation : public Operation {
   void specializedTimeoutTriggered() override;
   void specializedCompleteOperation() override;
 
+  // Called when tcp timeout is triggered
+  void tcpConnectTimeoutTriggered();
+
   // Removes the Client ref, it can be called by child classes without needing
   // to add them as friend classes of AsyncMysqlClient
   virtual void removeClientReference();
@@ -779,15 +827,28 @@ class ConnectOperation : public Operation {
 
   void maybeStoreSSLSession();
 
+  // Implementation of timeout handling for tcpTimeout and overall connect
+  // timeout
+  void timeoutHandler(bool isTcpTimeout);
+
+  bool isDoneWithTcpHandShake();
+
   const ConnectionKey conn_key_;
 
   int flags_;
 
   ConnectCallback connect_callback_;
   bool active_in_client_;
+  ConnectTcpTimeoutHandler tcp_timeout_handler_;
+
+  // Mysql internal connect stage which handles the async tcp handshake
+  // completion between client and server
+  static constexpr MySqlConnectStage tcpCompletionStage_ =
+      MySqlConnectStage::CONNECT_STAGE_NET_COMPLETE_CONNECT;
 
   friend class AsyncMysqlClient;
   friend class MysqlClientBase;
+  friend class ConnectTcpTimeoutHandler;
 };
 
 // A fetching operation (query or multiple queries) use the same primary

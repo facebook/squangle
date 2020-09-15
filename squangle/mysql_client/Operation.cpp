@@ -23,6 +23,14 @@
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/SSLOptionsProviderBase.h"
 
+// ADITJ: Set it to 300ms once tcp timeout is enabled in all regions
+// Currently default it to high value of 10s, which basically makes this
+// timeout ineffective unless set explicitly using conn options
+DEFINE_int64(
+    async_mysql_connect_tcp_timeout_micros,
+    10 * 1000 * 1000,
+    "default timeout, in micros, for mysql connect");
+
 DEFINE_int64(
     async_mysql_connect_timeout_micros,
     1030 * 1000,
@@ -41,6 +49,7 @@ namespace chrono = std::chrono;
 
 ConnectionOptions::ConnectionOptions()
     : connection_timeout_(FLAGS_async_mysql_connect_timeout_micros),
+      connection_tcp_timeout_(FLAGS_async_mysql_connect_tcp_timeout_micros),
       total_timeout_(FLAGS_async_mysql_timeout_micros * 2),
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
@@ -91,6 +100,10 @@ Operation::Operation(ConnectionProxy&& safe_conn)
 
 bool Operation::isInEventBaseThread() {
   return connection()->isInEventBaseThread();
+}
+
+bool Operation::isEventBaseSet() {
+  return connection()->getEventBase() != nullptr;
 }
 
 Operation::~Operation() {}
@@ -326,6 +339,10 @@ void Operation::setPostOperationCallback(ChainedCallback chainedCallback) {
       std::move(post_operation_callback_), std::move(chainedCallback));
 }
 
+void ConnectTcpTimeoutHandler::timeoutExpired() noexcept {
+  op_->tcpConnectTimeoutTriggered();
+}
+
 ConnectOperation::ConnectOperation(
     MysqlClientBase* mysql_client,
     ConnectionKey conn_key)
@@ -333,13 +350,15 @@ ConnectOperation::ConnectOperation(
           mysql_client->createConnection(conn_key, nullptr)))),
       conn_key_(conn_key),
       flags_(CLIENT_MULTI_STATEMENTS),
-      active_in_client_(true) {
+      active_in_client_(true),
+      tcp_timeout_handler_(mysql_client->getEventBase(), this) {
   mysql_client->activeConnectionAdded(&conn_key_);
 }
 
 ConnectOperation* ConnectOperation::setConnectionOptions(
     const ConnectionOptions& conn_opts) {
   setTimeout(conn_opts.getTimeout());
+  setTcpTimeout(conn_opts.getConnectTcpTimeout());
   setDefaultQueryTimeout(conn_opts.getQueryTimeout());
   setAttributes(conn_opts.getAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
@@ -368,6 +387,12 @@ ConnectOperation* ConnectOperation::setTimeout(Duration timeout) {
   Operation::setTimeout(timeout);
   return this;
 }
+
+ConnectOperation* ConnectOperation::setTcpTimeout(Duration timeout) {
+  conn_options_.setConnectTcpTimeout(timeout);
+  return this;
+}
+
 ConnectOperation* ConnectOperation::setTotalTimeout(Duration total_timeout) {
   conn_options_.setTotalTimeout(total_timeout);
   Operation::setTimeout(min(timeout_, total_timeout));
@@ -432,6 +457,8 @@ void ConnectOperation::attemptFailed(OperationResult result) {
   end_time_ = std::chrono::steady_clock::now();
   logConnectCompleted(result);
 
+  tcp_timeout_handler_.cancelTimeout();
+
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
   conn()->close();
@@ -489,6 +516,17 @@ void ConnectOperation::specializedRunImpl() {
 
   conn()->socketHandler()->setOperation(this);
 
+  uint timeoutInMs = chrono::duration_cast<chrono::milliseconds>(
+                         conn_options_.getConnectTcpTimeout())
+                         .count();
+  // Set the connect timeout in mysql options and also on tcp_timeout_handler if
+  // event base is set. Sync implmenation of MysqlClientBase may not have it
+  // set.
+  mysql_options(mysql, MYSQL_OPT_CONNECT_TIMEOUT_MS, &timeoutInMs);
+  if (isEventBaseSet()) {
+    tcp_timeout_handler_.scheduleTimeout(timeoutInMs);
+  }
+
   // connect is immediately "ready" to do one loop
   socketActionable();
 }
@@ -513,6 +551,11 @@ void ConnectOperation::socketActionable() {
     snapshotMysqlErrors();
     attemptFailed(OperationResult::Failed);
   } else {
+    if (isDoneWithTcpHandShake() && tcp_timeout_handler_.isScheduled()) {
+      // cancel tcp connect timeout
+      tcp_timeout_handler_.cancelTimeout();
+    }
+
     auto fd = mysql_get_socket_descriptor(mysql);
     if (fd <= 0) {
       LOG(ERROR) << "Unexpected invalid socket descriptor on completed, "
@@ -553,7 +596,23 @@ void ConnectOperation::socketActionable() {
   }
 }
 
+bool ConnectOperation::isDoneWithTcpHandShake() {
+  enum connect_stage stage = mysql_get_connect_stage(conn()->mysql());
+  return stage > tcpCompletionStage_;
+}
+
 void ConnectOperation::specializedTimeoutTriggered() {
+  timeoutHandler(false);
+}
+
+void ConnectOperation::tcpConnectTimeoutTriggered() {
+  if (!isDoneWithTcpHandShake()) {
+    timeoutHandler(true);
+  }
+  // else  do nothing since we have made progress
+}
+
+void ConnectOperation::timeoutHandler(bool isTcpTimeout) {
   auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
       chrono::steady_clock::now() - start_time_);
 
@@ -564,18 +623,19 @@ void ConnectOperation::specializedTimeoutTriggered() {
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms)",
+        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms). TcpTimeout:%d",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
         host().c_str(),
         port(),
         connectStageString(stage).c_str(),
-        delta.count());
+        delta.count(),
+        (isTcpTimeout ? 1 : 0));
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
         "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms)"
-        " (loop stalled, avg loop time %ld ms)",
+        " (loop stalled, avg loop time %ld ms).  TcpTimeout:%d",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
@@ -583,7 +643,8 @@ void ConnectOperation::specializedTimeoutTriggered() {
         port(),
         connectStageString(stage).c_str(),
         delta.count(),
-        std::lround(avgLoopTimeUs / 1000.0));
+        std::lround(avgLoopTimeUs / 1000.0),
+        (isTcpTimeout ? 1 : 0));
     setAsyncClientError(msg, "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
@@ -647,6 +708,9 @@ void ConnectOperation::specializedCompleteOperation() {
       connection_context_) {
     connection_context_->endpointVersion = conn()->serverInfo();
   }
+
+  // Cancel tcp timeout
+  tcp_timeout_handler_.cancelTimeout();
 
   logConnectCompleted(result_);
 
