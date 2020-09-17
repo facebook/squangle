@@ -734,6 +734,10 @@ class ConnectOperation : public Operation {
   // connection options.
   ConnectOperation* setTcpTimeout(Duration timeout);
 
+  const folly::Optional<Duration>&  getTcpTimeout() const {
+    return conn_options_.getConnectTcpTimeout();
+  }
+
   ConnectOperation* setUserData(folly::dynamic val) {
     Operation::setUserData(std::move(val));
     return this;
