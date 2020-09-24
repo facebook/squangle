@@ -65,6 +65,6 @@ void OperationBatch::markFailure() {
   std::lock_guard<std::mutex> lock(*mutex_);
   successful_ = false;
 }
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

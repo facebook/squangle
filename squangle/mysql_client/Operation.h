@@ -733,7 +733,7 @@ class ConnectOperation : public Operation {
   // connection options.
   ConnectOperation* setTcpTimeout(Duration timeout);
 
-  const folly::Optional<Duration>&  getTcpTimeout() const {
+  const folly::Optional<Duration>& getTcpTimeout() const {
     return conn_options_.getConnectTcpTimeout();
   }
 

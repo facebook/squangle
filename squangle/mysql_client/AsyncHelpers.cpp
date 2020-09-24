@@ -54,6 +54,6 @@ MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback) {
     }
   };
 }
-}
-}
-}
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook

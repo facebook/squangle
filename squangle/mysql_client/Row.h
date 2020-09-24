@@ -30,18 +30,18 @@
 
 #include <folly/Conv.h>
 #include <folly/Format.h>
-#include <folly/hash/Hash.h>
 #include <folly/Range.h>
 #include <folly/dynamic.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
+#include <folly/hash/Hash.h>
 
 namespace facebook {
 namespace common {
 namespace mysql_client {
 
 using folly::StringPiece;
-using std::vector;
 using std::string;
+using std::vector;
 
 class RowBlock;
 
@@ -501,8 +501,8 @@ T Row::getWithDefault(const L& l, const T d) const {
   }
   return get<T>(l);
 }
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_ROW_H

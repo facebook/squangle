@@ -31,8 +31,8 @@ typedef std::function<
 QueryCallback resultAppender(const QueryAppenderCallback& callback);
 
 MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback);
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_HELPER

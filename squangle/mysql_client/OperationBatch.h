@@ -77,8 +77,8 @@ class OperationBatch {
   // Indicator of the success of the batch
   bool successful_;
 };
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 #endif // COMMON_ASYNC_MYSQL_OPERATION_BATCH_H

@@ -43,13 +43,15 @@ class ConnectionKey {
 
   bool operator==(const ConnectionKey& rhs) const;
 
-  bool operator!=(const ConnectionKey& rhs) const { return !(*this == rhs); }
+  bool operator!=(const ConnectionKey& rhs) const {
+    return !(*this == rhs);
+  }
 
   std::string getDisplayString() const;
 };
-}
-}
-} // facebook::common::mysql_client
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
 
 // make default template of unordered_map/unordered_set works for ConnectionKey
 namespace std {
@@ -60,4 +62,4 @@ struct hash<facebook::common::mysql_client::ConnectionKey> {
     return k.hash;
   }
 };
-} // std
+} // namespace std

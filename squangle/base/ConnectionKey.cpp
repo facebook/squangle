@@ -49,6 +49,6 @@ std::string ConnectionKey::getDisplayString() const {
   return folly::sformat(
       "{} [{}] ({}@{}:{})", db_name, special_tag, user, host, port);
 }
-}
-}
-}
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
