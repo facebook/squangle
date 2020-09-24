@@ -26,7 +26,7 @@ License
 -------
 
 SQuangLe is BSD-licensed. We also provide an additional patent grant. Please
-see the LICENSE and PATENTS files.
+see the LICENSE file.
 
 Contributing
 ------------
