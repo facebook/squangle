@@ -1,3 +1,13 @@
+/*
+ *  Copyright (c) 2016, Facebook, Inc.
+ *  All rights reserved.
+ *
+ *  This source code is licensed under the BSD-style license found in the
+ *  LICENSE file in the root directory of this source tree. An additional grant
+ *  of patent rights can be found in the PATENTS file in the same directory.
+ *
+ */
+
 #include <folly/Benchmark.h>
 #include <unordered_map>
 #include <vector>
@@ -8,8 +18,8 @@ using namespace facebook::common::mysql_client;
 using folly::runBenchmarks;
 using folly::StringPiece;
 using std::string;
-using std::vector;
 using std::unordered_map;
+using std::vector;
 
 const int kCount = 20000;
 const int kNumericCount = 20000;
