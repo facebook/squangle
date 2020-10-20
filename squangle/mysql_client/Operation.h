@@ -816,6 +816,10 @@ class ConnectOperation : public Operation {
 
   folly::ssl::SSLSessionUniquePtr getSSLSession();
 
+  // Implementation of timeout handling for tcpTimeout and overall connect
+  // timeout
+  void timeoutHandler(bool isTcpTimeout, bool isPool = false);
+
   uint32_t attempts_made_ = 0;
   bool killOnQueryTimeout_ = false;
   ConnectionOptions conn_options_;
@@ -829,10 +833,6 @@ class ConnectOperation : public Operation {
   void logConnectCompleted(OperationResult result);
 
   void maybeStoreSSLSession();
-
-  // Implementation of timeout handling for tcpTimeout and overall connect
-  // timeout
-  void timeoutHandler(bool isTcpTimeout);
 
   bool isDoneWithTcpHandShake();
 

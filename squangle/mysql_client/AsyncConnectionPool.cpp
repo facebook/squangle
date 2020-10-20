@@ -789,7 +789,7 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     }
   }
 
-  ConnectOperation::specializedTimeoutTriggered();
+  ConnectOperation::timeoutHandler(false, true);
 }
 
 void ConnectPoolOperation::connectionCallback(

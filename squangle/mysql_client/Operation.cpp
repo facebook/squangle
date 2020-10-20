@@ -614,36 +614,44 @@ void ConnectOperation::tcpConnectTimeoutTriggered() {
   // else  do nothing since we have made progress
 }
 
-void ConnectOperation::timeoutHandler(bool isTcpTimeout) {
+void ConnectOperation::timeoutHandler(
+    bool isTcpTimeout,
+    bool isPoolConnection) {
   auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
       chrono::steady_clock::now() - start_time_);
 
-  // mysql_get_connect_stage is a non-standard fb specific to get the
-  // current internal stage of the nonblocking connection
-  enum connect_stage stage = mysql_get_connect_stage(conn()->mysql());
+  std::string timeoutStage = "N/A";
+  if (!isPoolConnection) {
+    // mysql_get_connect_stage is a non-standard fb specific to get the
+    // current internal stage of the nonblocking connection
+    enum connect_stage stage = mysql_get_connect_stage(conn()->mysql());
+    timeoutStage = connectStageString(stage);
+  }
   // Check for an overloaded EventBase
   auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
   if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms). TcpTimeout:%d",
+        "[%d](%s) Connect%s to %s:%d timed out at stage %s (took %lu ms). TcpTimeout:%d",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
+        isPoolConnection ? "Pool" : "",
         host().c_str(),
         port(),
-        connectStageString(stage).c_str(),
+        timeoutStage.c_str(),
         delta.count(),
         (isTcpTimeout ? 1 : 0));
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
     auto msg = folly::stringPrintf(
-        "[%d](%s) Connect to %s:%d timed out at stage %s (took %lu ms)"
+        "[%d](%s) Connect%s to %s:%d timed out at stage %s (took %lu ms)"
         " (loop stalled, avg loop time %ld ms).  TcpTimeout:%d",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
+        isPoolConnection ? "Pool" : "",
         host().c_str(),
         port(),
-        connectStageString(stage).c_str(),
+        timeoutStage.c_str(),
         delta.count(),
         std::lround(avgLoopTimeUs / 1000.0),
         (isTcpTimeout ? 1 : 0));
