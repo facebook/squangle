@@ -301,6 +301,15 @@ class ConnectionOptions {
 
   std::string getDisplayString() const;
 
+  ConnectionOptions& setSniServerName(const std::string& sniName) {
+    sni_servername = sniName;
+    return *this;
+  }
+
+  const folly::Optional<std::string>& getSniServerName() const {
+    return sni_servername;
+  }
+
  private:
   Duration connection_timeout_;
   folly::Optional<Duration> connection_tcp_timeout_;
@@ -311,6 +320,7 @@ class ConnectionOptions {
   folly::Optional<mysql_compression_lib> compression_lib_;
   uint32_t max_attempts_ = 1;
   uint8_t dscp_ = 0;
+  folly::Optional<std::string> sni_servername;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -710,6 +720,7 @@ class ConnectOperation : public Operation {
     connection_context_ = std::move(e);
     return this;
   }
+  ConnectOperation* setSniServerName(const std::string & sni_servername);
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);

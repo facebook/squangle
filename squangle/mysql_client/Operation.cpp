@@ -364,6 +364,9 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   if (conn_opts.getConnectTcpTimeout()) {
     setTcpTimeout(*conn_opts.getConnectTcpTimeout());
   }
+  if (conn_opts.getSniServerName()) {
+    setSniServerName(*conn_opts.getSniServerName());
+  }
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
   }
@@ -377,6 +380,13 @@ const ConnectionOptions& ConnectOperation::getConnectionOptions() const {
 ConnectOperation* ConnectOperation::setDefaultQueryTimeout(Duration t) {
   CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
   conn_options_.setQueryTimeout(t);
+  return this;
+}
+
+ConnectOperation* ConnectOperation::setSniServerName(
+    const std::string& sni_servername) {
+  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  conn_options_.setSniServerName(sni_servername);
   return this;
 }
 
@@ -510,6 +520,14 @@ void ConnectOperation::specializedRunImpl() {
     if (connection_context_) {
       connection_context_->isSslConnection = true;
     }
+  }
+
+  // Set sni field for ssl connection
+  if (conn_options_.getSniServerName()) {
+    mysql_options(
+        mysql,
+        MYSQL_OPT_TLS_SNI_SERVERNAME,
+        (*conn_options_.getSniServerName()).c_str());
   }
 
   conn()->socketHandler()->setOperation(this);
