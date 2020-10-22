@@ -883,6 +883,10 @@ class Connection {
       return newCallback;
     }
 
+    if (!newCallback) {
+      return orgCallback;
+    }
+
     return [orgCallback = std::move(orgCallback),
             newCallback = std::move(newCallback)](Operation& op) mutable {
       orgCallback(op);
