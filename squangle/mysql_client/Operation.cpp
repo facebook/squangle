@@ -42,6 +42,10 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
+namespace {
+const std::string kQueryChecksumKey = "checksum";
+}
+
 namespace chrono = std::chrono;
 
 ConnectionOptions::ConnectionOptions()
@@ -792,6 +796,11 @@ FetchOperation::FetchOperation(
 FetchOperation::FetchOperation(ConnectionProxy&& conn, MultiQuery&& multi_query)
     : Operation(std::move(conn)), queries_(std::move(multi_query)) {}
 
+FetchOperation* FetchOperation::setUseChecksum(bool useChecksum) noexcept {
+  use_checksum_ = useChecksum;
+  return this;
+}
+
 bool FetchOperation::isStreamAccessAllowed() {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();
@@ -816,8 +825,20 @@ void FetchOperation::specializedRunImpl() {
 
     mysql_options(mysql, MYSQL_OPT_QUERY_ATTR_RESET, 0);
     for (const auto& [key, value] : attributes_) {
-      mysql_options4(
-          mysql, MYSQL_OPT_QUERY_ATTR_ADD, key.c_str(), value.c_str());
+      if (!setQueryAttribute(key, value)) {
+        setAsyncClientError(folly::sformat(
+            "Failed to set query attribute: {} = {}", key, value));
+        completeOperation(OperationResult::Failed);
+        return;
+      }
+    }
+
+    if (use_checksum_ || conn()->getConnectionOptions().getUseChecksum()) {
+      if (!setQueryAttribute(kQueryChecksumKey, "ON")) {
+        setAsyncClientError("Failed to set checksum = ON");
+        completeOperation(OperationResult::Failed);
+        return;
+      }
     }
     socketActionable();
   } catch (std::invalid_argument& e) {
@@ -825,6 +846,16 @@ void FetchOperation::specializedRunImpl() {
         string("Unable to parse Query: ") + e.what(), "Unable to parse Query");
     completeOperation(OperationResult::Failed);
   }
+}
+
+bool FetchOperation::setQueryAttribute(
+    const std::string& key,
+    const std::string& value) {
+  return mysql_options4(
+             conn()->mysql(),
+             MYSQL_OPT_QUERY_ATTR_ADD,
+             key.c_str(),
+             value.c_str()) == 0;
 }
 
 FetchOperation::RowStream::RowStream(
@@ -1270,6 +1301,7 @@ void FetchOperation::specializedCompleteOperation() {
         rows_received_,
         total_result_size_,
         no_index_used_,
+        use_checksum_,
         attributes_,
         readResponseAttributes());
     client()->logQuerySuccess(logging_data, *conn().get());
@@ -1289,6 +1321,7 @@ void FetchOperation::specializedCompleteOperation() {
             rows_received_,
             total_result_size_,
             no_index_used_,
+            use_checksum_,
             {},
             readResponseAttributes()),
         reason,

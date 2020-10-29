@@ -95,6 +95,7 @@ struct QueryLoggingData : CommonLoggingData {
       int rows,
       uint64_t resultSize = 0,
       bool noIndexUsed = false,
+      bool useChecksum = false,
       const std::unordered_map<std::string, std::string>& queryAttributes =
           std::unordered_map<std::string, std::string>(),
       std::unordered_map<std::string, std::string> responseAttributes =
@@ -105,6 +106,7 @@ struct QueryLoggingData : CommonLoggingData {
         rows_received(rows),
         result_size(resultSize),
         no_index_used(noIndexUsed),
+        use_checksum(useChecksum),
         query_attributes(queryAttributes),
         response_attributes(std::move(responseAttributes)) {}
   int queries_executed;
@@ -112,6 +114,7 @@ struct QueryLoggingData : CommonLoggingData {
   int rows_received;
   uint64_t result_size;
   bool no_index_used;
+  bool use_checksum;
   std::unordered_map<std::string, std::string> query_attributes;
   std::unordered_map<std::string, std::string> response_attributes;
 };

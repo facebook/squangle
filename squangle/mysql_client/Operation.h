@@ -249,6 +249,15 @@ class ConnectionOptions {
     return compression_lib_;
   }
 
+  ConnectionOptions& setUseChecksum(bool useChecksum) noexcept {
+    use_checksum_ = useChecksum;
+    return *this;
+  }
+
+  FOLLY_NODISCARD bool getUseChecksum() const noexcept {
+    return use_checksum_;
+  }
+
   // Sets the amount of attempts that will be tried in order to acquire the
   // connection. Each attempt will take at maximum the given timeout. To set
   // a global timeout that the operation shouldn't take more than, use
@@ -318,6 +327,7 @@ class ConnectionOptions {
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<string, string> attributes_;
   folly::Optional<mysql_compression_lib> compression_lib_;
+  bool use_checksum_ = false;
   uint32_t max_attempts_ = 1;
   uint8_t dscp_ = 0;
   folly::Optional<std::string> sni_servername;
@@ -903,6 +913,8 @@ class FetchOperation : public Operation {
     return total_result_size_;
   }
 
+  FetchOperation* setUseChecksum(bool useChecksum) noexcept;
+
   // This class encapsulates the operations and access to the MySQL ResultSet.
   // When the consumer receives a notification for RowsFetched, it should
   // consume `rowStream`:
@@ -1025,6 +1037,9 @@ class FetchOperation : public Operation {
  private:
   friend class MultiQueryStreamHandler;
   void specializedRunImpl();
+
+  bool setQueryAttribute(const std::string& key, const std::string& value);
+
   void resumeImpl();
   // Checks if the current thread has access to stream, or result data.
   bool isStreamAccessAllowed();
@@ -1041,6 +1056,7 @@ class FetchOperation : public Operation {
   folly::Optional<RowStream> current_row_stream_;
   bool query_executed_ = false;
   bool no_index_used_ = false;
+  bool use_checksum_ = false;
   // TODO: Rename `executed` to `succeeded`
   int num_queries_executed_ = 0;
   // During a `notify` call, the consumer might want to know the index of the
