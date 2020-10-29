@@ -259,6 +259,15 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
   return nullptr;
 }
 
+// Information about why this operation failed.
+int MultiQueryStreamHandler::mysql_errno() const {
+  return operation_->mysql_errno();
+}
+
+const string& MultiQueryStreamHandler::mysql_error() const {
+  return operation_->mysql_error();
+}
+
 void MultiQueryStreamHandler::streamCallback(
     FetchOperation* op,
     StreamState op_state) {
@@ -375,6 +384,10 @@ void MultiQueryStreamHandler::checkStreamedQueryResult(
 
 std::string MultiQueryStreamHandler::toString(State state) {
   switch (state) {
+    case State::RunQuery:
+      return "RunQuery";
+    case State::WaitForInitResult:
+      return "WaitForInitResult";
     case State::InitResult:
       return "InitResult";
     case State::ReadRows:
@@ -386,7 +399,7 @@ std::string MultiQueryStreamHandler::toString(State state) {
     case State::OperationFailed:
       return "OperationFailed";
     default:
-      LOG(DFATAL) << "Illegal state";
+      LOG(DFATAL) << "Illegal state" << (int64_t)state;
   }
   return "Unknown";
 }

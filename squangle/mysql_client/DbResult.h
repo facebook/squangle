@@ -591,6 +591,9 @@ class MultiQueryStreamHandler {
 
   std::unique_ptr<Connection> releaseConnection();
 
+  int mysql_errno() const;
+  const string& mysql_error() const;
+
  private:
   friend class Connection;
   friend class StreamedQueryResult;
