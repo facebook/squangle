@@ -1301,7 +1301,7 @@ void FetchOperation::specializedCompleteOperation() {
         rows_received_,
         total_result_size_,
         no_index_used_,
-        use_checksum_,
+        use_checksum_ || conn()->getConnectionOptions().getUseChecksum(),
         attributes_,
         readResponseAttributes());
     client()->logQuerySuccess(logging_data, *conn().get());
@@ -1321,7 +1321,7 @@ void FetchOperation::specializedCompleteOperation() {
             rows_received_,
             total_result_size_,
             no_index_used_,
-            use_checksum_,
+            use_checksum_ || conn()->getConnectionOptions().getUseChecksum(),
             {},
             readResponseAttributes()),
         reason,
