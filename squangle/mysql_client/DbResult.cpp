@@ -259,6 +259,11 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
   return nullptr;
 }
 
+std::string MultiQueryStreamHandler::escapeString(
+    folly::StringPiece str) const {
+  return operation_->connection()->escapeString(str);
+}
+
 // Information about why this operation failed.
 int MultiQueryStreamHandler::mysql_errno() const {
   return operation_->mysql_errno();

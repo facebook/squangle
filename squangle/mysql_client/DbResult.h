@@ -591,6 +591,8 @@ class MultiQueryStreamHandler {
 
   std::unique_ptr<Connection> releaseConnection();
 
+  std::string escapeString(folly::StringPiece str) const;
+
   int mysql_errno() const;
   const string& mysql_error() const;
 
