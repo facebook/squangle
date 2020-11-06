@@ -179,8 +179,13 @@ class Query {
   //
   // This is provided so that non-Facebook users of the HHVM extension have
   // a familiar API.
+  // template <typename string>
+  // static string escapeString(MYSQL* conn, const string& unescaped) {
+  //   return escapeString<string>(conn, folly::StringPiece(unescaped));
+  // }
+
   template <typename string>
-  static string escapeString(MYSQL* conn, const string& unescaped) {
+  static string escapeString(MYSQL* conn, folly::StringPiece unescaped) {
     string escaped;
     escaped.resize((2 * unescaped.size()) + 1);
     size_t escaped_size = mysql_real_escape_string(
