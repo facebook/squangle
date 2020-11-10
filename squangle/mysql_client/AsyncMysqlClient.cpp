@@ -280,33 +280,33 @@ void AsyncMysqlClient::cleanupCompletedOperations() {
 }
 
 folly::SemiFuture<ConnectResult> AsyncMysqlClient::connectSemiFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   return toSemiFuture(beginConnection(host, port, database_name, user, password)
                           ->setConnectionOptions(conn_opts));
 }
 
 folly::Future<ConnectResult> AsyncMysqlClient::connectFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   return toFuture(
       connectSemiFuture(host, port, database_name, user, password, conn_opts));
 }
 
 std::unique_ptr<Connection> AsyncMysqlClient::connect(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   auto op = beginConnection(host, port, database_name, user, password);
   op->setConnectionOptions(conn_opts);
@@ -316,11 +316,11 @@ std::unique_ptr<Connection> AsyncMysqlClient::connect(
 }
 
 std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password) {
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password) {
   return beginConnection(
       ConnectionKey(host, port, database_name, user, password));
 }
@@ -393,11 +393,11 @@ MYSQL_RES* AsyncMysqlClient::AsyncMysqlHandler::getResult(MYSQL* mysql) {
 
 std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
     MYSQL* raw_conn,
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password) {
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password) {
   auto conn = createConnection(
       ConnectionKey(host, port, database_name, user, password), raw_conn);
   conn->socketHandler()->changeHandlerFD(
@@ -422,13 +422,13 @@ Connection::Connection(
 }
 
 bool Connection::isSSL() const {
-  CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+  CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
   return mysql_connection_->mysql()->client_flag & CLIENT_SSL;
 }
 
 void Connection::initMysqlOnly() {
   DCHECK(isInEventBaseThread());
-  CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
+  CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
   mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
       mysql_client_, mysql_init(nullptr), conn_key_);
   mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
@@ -494,8 +494,8 @@ template <typename QueryType, typename QueryArg>
 std::shared_ptr<QueryType> Connection::beginAnyQuery(
     Operation::ConnectionProxy&& conn_proxy,
     QueryArg&& query) {
-  CHECK_THROW(conn_proxy.get(), InvalidConnectionException);
-  CHECK_THROW(conn_proxy.get()->ok(), InvalidConnectionException);
+  CHECK_THROW(conn_proxy.get(), db::InvalidConnectionException);
+  CHECK_THROW(conn_proxy.get()->ok(), db::InvalidConnectionException);
   conn_proxy.get()->checkOperationInProgress();
   auto ret =
       std::make_shared<QueryType>(std::move(conn_proxy), std::move(query));
@@ -557,7 +557,7 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
 
 folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     std::unique_ptr<Connection> conn,
-    vector<Query>&& args,
+    std::vector<Query>&& args,
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   op->setAttributes(std::move(options.getAttributes()));
@@ -572,7 +572,7 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
 
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
     std::unique_ptr<Connection> conn,
-    vector<Query>&& args) {
+    std::vector<Query>&& args) {
   return toFuture(multiQuerySemiFuture(std::move(conn), std::move(args)));
 }
 
@@ -733,7 +733,7 @@ void ConnectionSocketHandler::handlerReady(uint16_t /*events*/) noexcept {
   CHECK_THROW(
       op_->state_ != OperationState::Completed &&
           op_->state_ != OperationState::Unstarted,
-      OperationStateException);
+      db::OperationStateException);
 
   if (op_->state() == OperationState::Cancelling) {
     op_->cancel();

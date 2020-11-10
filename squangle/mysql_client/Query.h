@@ -89,10 +89,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using folly::dynamic;
-using folly::fbstring;
-using folly::StringPiece;
-
 using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
 using AliasedQualifiedColumn =
     std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
@@ -125,7 +121,8 @@ class Query {
  public:
   // Query can be constructed with or without params.
   // By default we deep copy the query text
-  explicit Query(const StringPiece query_text) : query_text_(query_text) {}
+  explicit Query(const folly::StringPiece query_text)
+      : query_text_(query_text) {}
 
   explicit Query(QueryText&& query_text) : query_text_(std::move(query_text)) {}
 
@@ -140,8 +137,8 @@ class Query {
 
   // Parameters will be coerced into folly::dynamic.
   template <typename... Args>
-  /* implicit */ Query(const StringPiece query_text, Args&&... args);
-  Query(const StringPiece query_text, std::vector<QueryArgument> params);
+  /* implicit */ Query(const folly::StringPiece query_text, Args&&... args);
+  Query(const folly::StringPiece query_text, std::vector<QueryArgument> params);
 
   void append(const Query& query2);
   void append(Query&& query2);
@@ -163,7 +160,9 @@ class Query {
   }
 
   // If you need to construct a raw query, use this evil function.
-  static Query unsafe(const StringPiece query_text, bool shallowCopy = false) {
+  static Query unsafe(
+      const folly::StringPiece query_text,
+      bool shallowCopy = false) {
     Query ret{shallowCopy ? QueryText::makeShallow(query_text)
                           : QueryText{query_text}};
     ret.allowUnsafeEvilQueries();
@@ -401,11 +400,11 @@ class QueryArgument {
       value_;
 
  public:
-  /* implicit */ QueryArgument(StringPiece val);
+  /* implicit */ QueryArgument(folly::StringPiece val);
   /* implicit */ QueryArgument(char const* val);
   /* implicit */ QueryArgument(const std::string& string_value);
-  /* implicit */ QueryArgument(const fbstring& val);
-  /* implicit */ QueryArgument(fbstring&& val);
+  /* implicit */ QueryArgument(const folly::fbstring& val);
+  /* implicit */ QueryArgument(folly::fbstring&& val);
   /* implicit */ QueryArgument(Query q);
 
   template <
@@ -480,7 +479,7 @@ class QueryArgument {
 };
 
 template <typename... Args>
-Query::Query(const StringPiece query_text, Args&&... args)
+Query::Query(const folly::StringPiece query_text, Args&&... args)
     : query_text_(query_text), unsafe_query_(false), params_() {
   params_.reserve(sizeof...(args));
   unpack(std::forward<Args>(args)...);

@@ -196,7 +196,7 @@ void StreamedQueryResult::checkAccessToResult() {
 void StreamedQueryResult::setResult(
     int64_t affected_rows,
     int64_t last_insert_id,
-    const string& recv_gtid,
+    const std::string& recv_gtid,
     const RespAttrs& resp_attrs) {
   num_affected_rows_ = affected_rows;
   last_insert_id_ = last_insert_id;
@@ -248,8 +248,9 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
     return operation_->releaseConnection();
   }
 
-  exception_wrapper_ = folly::make_exception_wrapper<OperationStateException>(
-      "Trying to release connection without consuming stream");
+  exception_wrapper_ =
+      folly::make_exception_wrapper<db::OperationStateException>(
+          "Trying to release connection without consuming stream");
   LOG(DFATAL) << "Releasing the Connection without reading result. Read stream"
               << " content or delete stream result. Current state "
               << toString(state_) << ".";
@@ -269,7 +270,7 @@ int MultiQueryStreamHandler::mysql_errno() const {
   return operation_->mysql_errno();
 }
 
-const string& MultiQueryStreamHandler::mysql_error() const {
+const std::string& MultiQueryStreamHandler::mysql_error() const {
   return operation_->mysql_error();
 }
 

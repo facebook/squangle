@@ -28,17 +28,17 @@ namespace mysql_client {
 typedef std::pair<folly::fbstring, QueryArgument> ArgPair;
 
 // fbstring constructors
-QueryArgument::QueryArgument(StringPiece val)
-    : value_(fbstring(val.data(), val.size())) {}
+QueryArgument::QueryArgument(folly::StringPiece val)
+    : value_(folly::fbstring(val.data(), val.size())) {}
 
-QueryArgument::QueryArgument(char const* val) : value_(fbstring(val)) {}
+QueryArgument::QueryArgument(char const* val) : value_(folly::fbstring(val)) {}
 
 QueryArgument::QueryArgument(const std::string& string_value)
-    : value_(fbstring(string_value)) {}
+    : value_(folly::fbstring(string_value)) {}
 
-QueryArgument::QueryArgument(const fbstring& val) : value_(val) {}
+QueryArgument::QueryArgument(const folly::fbstring& val) : value_(val) {}
 
-QueryArgument::QueryArgument(fbstring&& val) : value_(std::move(val)) {}
+QueryArgument::QueryArgument(folly::fbstring&& val) : value_(std::move(val)) {}
 
 QueryArgument::QueryArgument(double double_val) : value_(double_val) {}
 
@@ -50,7 +50,7 @@ QueryArgument::QueryArgument(std::vector<QueryArgument> arg_list)
 
 QueryArgument::QueryArgument() : value_(std::vector<ArgPair>()) {}
 
-QueryArgument::QueryArgument(StringPiece param1, QueryArgument param2)
+QueryArgument::QueryArgument(folly::StringPiece param1, QueryArgument param2)
     : value_(std::vector<ArgPair>()) {
   getPairs().emplace_back(ArgPair(param1.str(), param2));
 }
@@ -99,7 +99,7 @@ bool QueryArgument::isThreeTuple() const {
 }
 
 QueryArgument&& QueryArgument::operator()(
-    StringPiece q1,
+    folly::StringPiece q1,
     const QueryArgument& q2) {
   getPairs().emplace_back(ArgPair(q1.str(), q2));
   return std::move(*this);
@@ -113,21 +113,21 @@ QueryArgument&& QueryArgument::operator()(
 }
 
 namespace { // anonymous namespace to prevent class shadowing
-struct FbStringConverter : public boost::static_visitor<fbstring> {
-  fbstring operator()(const double& operand) const {
-    return folly::to<fbstring>(operand);
+struct FbStringConverter : public boost::static_visitor<folly::fbstring> {
+  folly::fbstring operator()(const double& operand) const {
+    return folly::to<folly::fbstring>(operand);
   }
-  fbstring operator()(const bool& operand) const {
-    return folly::to<fbstring>(operand);
+  folly::fbstring operator()(const bool& operand) const {
+    return folly::to<folly::fbstring>(operand);
   }
-  fbstring operator()(const int64_t& operand) const {
-    return folly::to<fbstring>(operand);
+  folly::fbstring operator()(const int64_t& operand) const {
+    return folly::to<folly::fbstring>(operand);
   }
-  fbstring operator()(const fbstring& operand) const {
-    return folly::to<fbstring>(operand);
+  folly::fbstring operator()(const folly::fbstring& operand) const {
+    return folly::to<folly::fbstring>(operand);
   }
   template <typename T>
-  fbstring operator()(const T& /*operand*/) const {
+  folly::fbstring operator()(const T& /*operand*/) const {
     throw std::invalid_argument(
         "Only allowed type conversions are Int, Double, Bool and String");
   }
@@ -156,7 +156,7 @@ const Query& QueryArgument::getQuery() const {
 }
 
 const folly::fbstring& QueryArgument::getString() const {
-  return boost::get<fbstring>(value_);
+  return boost::get<folly::fbstring>(value_);
 }
 
 const std::vector<QueryArgument>& QueryArgument::getList() const {
@@ -182,7 +182,7 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
   // Convert to basic values and get type
   if (param.isObject()) {
     // List of pairs
-    std::vector<dynamic> keys(param.keys().begin(), param.keys().end());
+    std::vector<folly::dynamic> keys(param.keys().begin(), param.keys().end());
     std::sort(keys.begin(), keys.end());
     value_ = std::vector<ArgPair>();
 
@@ -201,7 +201,7 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
       v.emplace_back(QueryArgument(val));
     }
   } else if (param.isString()) {
-    value_ = fbstring(param.getString());
+    value_ = folly::fbstring(param.getString());
   } else if (param.isBool()) {
     value_ = param.asBool();
   } else if (param.isDouble()) {
@@ -217,7 +217,9 @@ std::vector<ArgPair>& QueryArgument::getPairs() {
   return boost::get<std::vector<ArgPair>>(value_);
 }
 
-Query::Query(const StringPiece query_text, std::vector<QueryArgument> params)
+Query::Query(
+    const folly::StringPiece query_text,
+    std::vector<QueryArgument> params)
     : query_text_(query_text), unsafe_query_(false), params_(params) {}
 
 Query::~Query() {}
@@ -265,7 +267,10 @@ void appendColumnTableName(folly::fbstring* s, const QueryArgument& d) {
 }
 
 // Raise an exception with, hopefully, a helpful error message.
-void parseError(const StringPiece s, size_t offset, const StringPiece message) {
+void parseError(
+    const folly::StringPiece s,
+    size_t offset,
+    const folly::StringPiece message) {
   const std::string msg =
       folly::format(
           "Parse error at offset {}: {}, query: {}", offset, message, s)
@@ -275,10 +280,10 @@ void parseError(const StringPiece s, size_t offset, const StringPiece message) {
 
 // Raise an exception for format string/value mismatches
 void formatStringParseError(
-    StringPiece query_text,
+    folly::StringPiece query_text,
     size_t offset,
     char format_specifier,
-    StringPiece value_type) {
+    folly::StringPiece value_type) {
   parseError(
       query_text,
       offset,
@@ -290,12 +295,14 @@ void formatStringParseError(
 
 // Consume the next x bytes from s, updating offset, and raising an
 // exception if there aren't sufficient bytes left.
-StringPiece advance(const StringPiece s, size_t* offset, size_t num) {
+folly::StringPiece
+advance(const folly::StringPiece s, size_t* offset, size_t num) {
   if (s.size() <= *offset + num) {
     parseError(s, *offset, "unexpected end of string");
   }
   *offset += num;
-  return StringPiece(s.data() + *offset - num + 1, s.data() + *offset + 1);
+  return folly::StringPiece(
+      s.data() + *offset - num + 1, s.data() + *offset + 1);
 }
 
 // Escape a string (or copy it through unmodified if no connection is
@@ -364,7 +371,7 @@ void Query::appendValue(
       formatStringParseError(querySp, offset, type, "int");
     }
     if (type == 'u') {
-      s->append(folly::to<fbstring>(static_cast<uint64_t>(d.getInt())));
+      s->append(folly::to<folly::fbstring>(static_cast<uint64_t>(d.getInt())));
     } else {
       s->append(d.asString());
     }
@@ -461,7 +468,7 @@ folly::fbstring Query::render(
   }
 
   auto offset = querySp.find_first_of(";'\"`");
-  if (offset != StringPiece::npos) {
+  if (offset != folly::StringPiece::npos) {
     parseError(querySp, offset, "Saw dangerous characters in SQL query");
   }
 
@@ -509,7 +516,7 @@ folly::fbstring Query::render(
     } else if (c == 'T' || c == 'C') {
       appendColumnTableName(&ret, param);
     } else if (c == '=') {
-      StringPiece type = advance(querySp, &idx, 1);
+      folly::StringPiece type = advance(querySp, &idx, 1);
       if (type != "d" && type != "s" && type != "f" && type != "u" &&
           type != "m") {
         parseError(querySp, idx, "expected %=d, %=c, %=s, %=u, or %=m");
@@ -558,7 +565,7 @@ folly::fbstring Query::render(
         }
       }
     } else if (c == 'L') {
-      StringPiece type = advance(querySp, &idx, 1);
+      folly::StringPiece type = advance(querySp, &idx, 1);
       if (type == "O" || type == "A") {
         ret.append("(");
         const char* sep = (type == "O") ? " OR " : " AND ";

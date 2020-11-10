@@ -76,10 +76,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using facebook::db::InvalidConnectionException;
-using std::string;
-using std::unordered_map;
-
 class AsyncMysqlClient;
 class SyncMysqlClient;
 class Operation;
@@ -117,19 +113,19 @@ class MysqlClientBase {
 
   virtual std::unique_ptr<Connection> adoptConnection(
       MYSQL* conn,
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password);
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password);
 
   // Initiate a connection to a database.  This is the main entrypoint.
   std::shared_ptr<ConnectOperation> beginConnection(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password);
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password);
 
   std::shared_ptr<ConnectOperation> beginConnection(ConnectionKey conn_key);
 
@@ -243,22 +239,22 @@ class AsyncMysqlClient : public MysqlClientBase {
   static std::shared_ptr<AsyncMysqlClient> defaultClient();
 
   FOLLY_NODISCARD folly::SemiFuture<ConnectResult> connectSemiFuture(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   [[deprecated(
       "Replaced by the SemiFuture APIs, use SemiFutures and pass an executor")]] FOLLY_NODISCARD
       folly::Future<ConnectResult>
       connectFuture(
-          const string& host,
+          const std::string& host,
           int port,
-          const string& database_name,
-          const string& user,
-          const string& password,
+          const std::string& database_name,
+          const std::string& user,
+          const std::string& password,
           const ConnectionOptions& conn_opts = ConnectionOptions());
 
   // Synchronous call to acquire a connection, the caller thread will be blocked
@@ -266,11 +262,11 @@ class AsyncMysqlClient : public MysqlClientBase {
   // In case the we fail to acquire the connection, MysqlException will be
   // thrown.
   FOLLY_NODISCARD std::unique_ptr<Connection> connect(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   // Stop accepting new queries and connections.
@@ -451,7 +447,7 @@ class AsyncMysqlClient : public MysqlClientBase {
   // ConnectionOperations.  This is used for draining and destruction;
   // ~AsyncMysqlClient blocks until this value becomes zero.
   uint32_t active_connection_counter_ = 0;
-  unordered_map<ConnectionKey, uint32_t> connection_references_;
+  std::unordered_map<ConnectionKey, uint32_t> connection_references_;
   // Protects the look ups and writes to both counters
   std::mutex counters_mutex_;
   std::condition_variable active_connections_closed_cv_;
@@ -583,7 +579,7 @@ class Connection {
   static std::shared_ptr<QueryOperation> beginQuery(
       std::shared_ptr<QueryOperation>& op,
       Args&&... args) {
-    CHECK_THROW(op->done(), OperationStateException);
+    CHECK_THROW(op->done(), db::OperationStateException);
     auto conn = std::move(op->releaseConnection());
     op = beginQuery(std::move(conn), std::forward<Args>(args)...);
     return op;
@@ -672,28 +668,28 @@ class Connection {
 
   // set last successful query time to MysqlConnectionHolder
   void setLastActivityTime(Timepoint last_activity_time) {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     mysql_connection_->setLastActivityTime(last_activity_time);
   }
 
   Timepoint getLastActivityTime() const {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return mysql_connection_->getLastActivityTime();
   }
 
   // Returns the MySQL server version. If the connection has been closed
   // an error is generated.
-  string serverInfo() const {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+  std::string serverInfo() const {
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     auto ret = mysql_get_server_info(mysql_connection_->mysql());
-    return string(ret);
+    return std::string(ret);
   }
 
   // Returns whether or not the SSL session was reused from a previous
   // connection.
   // If the connection isn't SSL, it will return false as well.
   bool sslSessionReused() const {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return mysql_get_ssl_session_reused(mysql_connection_->mysql());
   }
 
@@ -706,30 +702,30 @@ class Connection {
   // This is provided so that non-Facebook users of the HHVM extension have
   // a familiar API.
   std::string escapeString(folly::StringPiece unescaped) {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return Query::escapeString<std::string>(mysql_connection_->mysql(), unescaped);
   }
 
   // Returns the number of errors, warnings, and notes generated during
   // execution of the previous SQL statement
   int warningCount() const {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return mysql_warning_count(mysql_connection_->mysql());
   }
 
-  const string& host() const {
+  const std::string& host() const {
     return conn_key_.host;
   }
   int port() const {
     return conn_key_.port;
   }
-  const string& user() const {
+  const std::string& user() const {
     return conn_key_.user;
   }
-  const string& database() const {
+  const std::string& database() const {
     return conn_key_.db_name;
   }
-  const string& password() const {
+  const std::string& password() const {
     return conn_key_.password;
   }
 
@@ -784,7 +780,7 @@ class Connection {
   }
 
   bool inTransaction() {
-    CHECK_THROW(mysql_connection_ != nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return mysql_connection_->inTransaction();
   }
 
@@ -914,9 +910,10 @@ class Connection {
 
   void setMysqlConnectionHolder(
       std::unique_ptr<MysqlConnectionHolder> mysql_connection) {
-    CHECK_THROW(mysql_connection_ == nullptr, InvalidConnectionException);
+    CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
     CHECK_THROW(
-        conn_key_ == *mysql_connection->getKey(), InvalidConnectionException);
+        conn_key_ == *mysql_connection->getKey(),
+        db::InvalidConnectionException);
     mysql_connection_ = std::move(mysql_connection);
   }
 
@@ -930,7 +927,7 @@ class Connection {
 
   void checkOperationInProgress() {
     if (operation_in_progress_) {
-      throw InvalidConnectionException(
+      throw db::InvalidConnectionException(
           "Attempting to run parallel queries in same connection");
     }
   }

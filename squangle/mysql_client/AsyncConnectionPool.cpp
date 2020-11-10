@@ -135,23 +135,23 @@ void AsyncConnectionPool::shutdown() {
 }
 
 folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   return connectSemiFuture(
       host, port, database_name, user, password, "", conn_opts);
 }
 
 folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
-    const string& special_tag,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
+    const std::string& special_tag,
     const ConnectionOptions& conn_opts) {
   return toSemiFuture(
       beginConnection(host, port, database_name, user, password, special_tag)
@@ -159,34 +159,34 @@ folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
 }
 
 folly::Future<ConnectResult> AsyncConnectionPool::connectFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   return connectFuture(
       host, port, database_name, user, password, "", conn_opts);
 }
 
 folly::Future<ConnectResult> AsyncConnectionPool::connectFuture(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
-    const string& special_tag,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
+    const std::string& special_tag,
     const ConnectionOptions& conn_opts) {
   return toFuture(connectSemiFuture(
       host, port, database_name, user, password, special_tag));
 }
 
 std::unique_ptr<Connection> AsyncConnectionPool::connect(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
     const ConnectionOptions& conn_opts) {
   auto op = beginConnection(host, port, database_name, user, password);
   op->setConnectionOptions(conn_opts);
@@ -195,12 +195,12 @@ std::unique_ptr<Connection> AsyncConnectionPool::connect(
 }
 
 std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(
-    const string& host,
+    const std::string& host,
     int port,
-    const string& database_name,
-    const string& user,
-    const string& password,
-    const string& special_tag) {
+    const std::string& database_name,
+    const std::string& user,
+    const std::string& password,
+    const std::string& special_tag) {
   std::shared_ptr<ConnectPoolOperation> ret;
   {
     std::unique_lock<std::mutex> lock(shutdown_mutex_);
@@ -463,7 +463,7 @@ void AsyncConnectionPool::tryRequestNewConnection(
     try {
       connOp->run();
       addOpeningConn(pool_key);
-    } catch (OperationStateException& e) {
+    } catch (db::OperationStateException& e) {
       LOG(ERROR) << "Client is drain or dying, cannot ask for more connections";
     }
   }
@@ -551,7 +551,7 @@ void AsyncConnectionPool::ConnStorage::failOperations(
     const PoolKey& pool_key,
     OperationResult op_result,
     int mysql_errno,
-    const string& mysql_error) {
+    const std::string& mysql_error) {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   PoolOpList& list = waitList_[pool_key];
@@ -825,7 +825,7 @@ void ConnectPoolOperation::connectionCallback(
 void ConnectPoolOperation::failureCallback(
     OperationResult failure,
     int mysql_errno,
-    const string& mysql_error) {
+    const std::string& mysql_error) {
   mysql_errno_ = mysql_errno;
   mysql_error_ = mysql_error;
   attemptFailed(failure);

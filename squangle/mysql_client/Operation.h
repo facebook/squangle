@@ -63,8 +63,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using facebook::db::OperationStateException;
-
 class MysqlHandler;
 class MysqlClientBase;
 class QueryResult;
@@ -108,9 +106,6 @@ typedef std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>
 typedef std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>
     MultiQueryCallback;
-
-using std::string;
-using std::vector;
 
 enum class SquangleErrno : uint16_t {
   SQ_ERRNO_CONN_TIMEOUT = 7000,
@@ -220,18 +215,20 @@ class ConnectionOptions {
     return ssl_options_provider_.get();
   }
 
-  ConnectionOptions& setAttribute(const string& attr, const string& value) {
+  ConnectionOptions& setAttribute(
+      const std::string& attr,
+      const std::string& value) {
     attributes_[attr] = value;
     return *this;
   }
 
   // MySQL 5.6 connection attributes.  Sent at time of connect.
-  const std::unordered_map<string, string>& getAttributes() const {
+  const std::unordered_map<std::string, std::string>& getAttributes() const {
     return attributes_;
   }
 
   ConnectionOptions& setAttributes(
-      const std::unordered_map<string, string>& attributes) {
+      const std::unordered_map<std::string, std::string>& attributes) {
     for (auto& [key, value] : attributes) {
       attributes_[key] = value;
     }
@@ -325,7 +322,7 @@ class ConnectionOptions {
   Duration total_timeout_;
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
-  std::unordered_map<string, string> attributes_;
+  std::unordered_map<std::string, std::string> attributes_;
   folly::Optional<mysql_compression_lib> compression_lib_;
   bool use_checksum_ = false;
   uint32_t max_attempts_ = 1;
@@ -346,7 +343,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Set a timeout; otherwise FLAGS_async_mysql_timeout_micros is
   // used.
   Operation* setTimeout(Duration timeout) {
-    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state_ == OperationState::Unstarted, db::OperationStateException);
     timeout_ = timeout;
     return this;
   }
@@ -366,7 +364,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   }
 
   // host and port we are connected to (or will be connected to).
-  const string& host() const;
+  const std::string& host() const;
   int port() const;
 
   // Try to cancel a pending operation.  This is inherently racey with
@@ -385,10 +383,10 @@ class Operation : public std::enable_shared_from_this<Operation> {
   int mysql_errno() const {
     return mysql_errno_;
   }
-  const string& mysql_error() const {
+  const std::string& mysql_error() const {
     return mysql_error_;
   }
-  const string& mysql_normalize_error() const {
+  const std::string& mysql_normalize_error() const {
     return mysql_normalize_error_;
   }
 
@@ -431,7 +429,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   Operation* setAttributes(
       const std::unordered_map<std::string, std::string>& attributes) {
-    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state() == OperationState::Unstarted, db::OperationStateException);
     for (const auto& [key, value] : attributes) {
       attributes_[key] = value;
     }
@@ -440,7 +439,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   Operation* setAttributes(
       std::unordered_map<std::string, std::string>&& attributes) {
-    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state() == OperationState::Unstarted, db::OperationStateException);
     for (auto& [key, value] : attributes) {
       attributes_[key] = std::move(value);
     }
@@ -448,12 +448,13 @@ class Operation : public std::enable_shared_from_this<Operation> {
   }
 
   Operation* setAttribute(const std::string& key, const std::string& value) {
-    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state() == OperationState::Unstarted, db::OperationStateException);
     attributes_[key] = value;
     return this;
   }
 
-  const std::unordered_map<string, string>& getAttributes() const {
+  const std::unordered_map<std::string, std::string>& getAttributes() const {
     return attributes_;
   }
 
@@ -469,12 +470,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return start_time_;
   }
   Timepoint endTime() const {
-    CHECK_THROW(state_ == OperationState::Completed, OperationStateException);
+    CHECK_THROW(
+        state_ == OperationState::Completed, db::OperationStateException);
     return end_time_;
   }
 
   Duration elapsed() const {
-    CHECK_THROW(state_ == OperationState::Completed, OperationStateException);
+    CHECK_THROW(
+        state_ == OperationState::Completed, db::OperationStateException);
     return std::chrono::duration_cast<std::chrono::microseconds>(
         end_time_ - start_time_);
   }
@@ -501,13 +504,15 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Flag internal async client errors; this always becomes a MySQL
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
-  void setAsyncClientError(StringPiece msg, StringPiece normalizeMsg = "");
+  void setAsyncClientError(
+      folly::StringPiece msg,
+      folly::StringPiece normalizeMsg = "");
 
   // Same as above, but specify the error code.
   void setAsyncClientError(
       int mysql_errno,
-      StringPiece msg,
-      StringPiece normalizeMsg = "");
+      folly::StringPiece msg,
+      folly::StringPiece normalizeMsg = "");
 
   virtual db::OperationType getOperationType() const = 0;
 
@@ -639,8 +644,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Errors that may have occurred.
   int mysql_errno_;
-  string mysql_error_;
-  string mysql_normalize_error_;
+  std::string mysql_error_;
+  std::string mysql_normalize_error_;
 
   // Connection or query attributes (depending on the Operation type)
   std::unordered_map<std::string, std::string> attributes_;
@@ -701,10 +706,10 @@ class ConnectOperation : public Operation {
     connect_callback_ = cb;
   }
 
-  const string& database() const {
+  const std::string& database() const {
     return conn_key_.db_name;
   }
-  const string& user() const {
+  const std::string& user() const {
     return conn_key_.user;
   }
 
@@ -726,14 +731,16 @@ class ConnectOperation : public Operation {
   ConnectOperation* setDefaultQueryTimeout(Duration t);
   ConnectOperation* setConnectionContext(
       std::unique_ptr<db::ConnectionContextBase>&& e) {
-    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state_ == OperationState::Unstarted, db::OperationStateException);
     connection_context_ = std::move(e);
     return this;
   }
-  ConnectOperation* setSniServerName(const std::string & sni_servername);
+  ConnectOperation* setSniServerName(const std::string& sni_servername);
 
   db::ConnectionContextBase* getConnectionContext() {
-    CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state_ == OperationState::Unstarted, db::OperationStateException);
     return connection_context_.get();
   }
 
@@ -898,18 +905,20 @@ class FetchOperation : public Operation {
   // query, the query itself, but for multiquery, all queries
   // combined).
   folly::fbstring getExecutedQuery() const {
-    CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state_ != OperationState::Unstarted, db::OperationStateException);
     return rendered_query_.to<folly::fbstring>();
   }
 
   // Number of queries that succeed to execute
   int numQueriesExecuted() {
-    CHECK_THROW(state_ != OperationState::Pending, OperationStateException);
+    CHECK_THROW(state_ != OperationState::Pending, db::OperationStateException);
     return num_queries_executed_;
   }
 
   uint64_t resultSize() const {
-    CHECK_THROW(state_ != OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state_ != OperationState::Unstarted, db::OperationStateException);
     return total_result_size_;
   }
 
@@ -1172,12 +1181,12 @@ class QueryOperation : public FetchOperation {
   // Steal all rows.  Only valid if there is no callback.  Inefficient
   // for large result sets.
   QueryResult&& stealQueryResult() {
-    CHECK_THROW(ok(), OperationStateException);
+    CHECK_THROW(ok(), db::OperationStateException);
     return std::move(*query_result_);
   }
 
   const QueryResult& queryResult() const {
-    CHECK_THROW(ok(), OperationStateException);
+    CHECK_THROW(ok(), db::OperationStateException);
     return *query_result_;
   }
 
@@ -1188,11 +1197,11 @@ class QueryOperation : public FetchOperation {
 
   // Steal all rows.  Only valid if there is no callback.  Inefficient
   // for large result sets.
-  vector<RowBlock>&& stealRows() {
+  std::vector<RowBlock>&& stealRows() {
     return query_result_->stealRows();
   }
 
-  const vector<RowBlock>& rows() const {
+  const std::vector<RowBlock>& rows() const {
     return query_result_->rows();
   }
 
@@ -1269,14 +1278,14 @@ class MultiQueryOperation : public FetchOperation {
   // for large result sets.
   // Only call after the query has finished, don't use it inside callbacks
   std::vector<QueryResult>&& stealQueryResults() {
-    CHECK_THROW(done(), OperationStateException);
+    CHECK_THROW(done(), db::OperationStateException);
     return std::move(query_results_);
   }
 
   // Only call this after the query has finished and don't use it inside
   // callbacks
-  const vector<QueryResult>& queryResults() const {
-    CHECK_THROW(done(), OperationStateException);
+  const std::vector<QueryResult>& queryResults() const {
+    CHECK_THROW(done(), db::OperationStateException);
     return query_results_;
   }
 

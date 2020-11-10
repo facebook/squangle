@@ -20,10 +20,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using folly::StringPiece;
-using std::string;
-using std::unordered_map;
-
 class MysqlClientBase;
 class AsyncConnectionPool;
 
@@ -41,19 +37,19 @@ class MysqlConnectionHolder {
 
   // Closes the connection in hold
   virtual ~MysqlConnectionHolder();
-  const string& host() const {
+  const std::string& host() const {
     return conn_key_.host;
   }
   int port() const {
     return conn_key_.port;
   }
-  const string& user() const {
+  const std::string& user() const {
     return conn_key_.user;
   }
-  const string& database() const {
+  const std::string& database() const {
     return conn_key_.db_name;
   }
-  const string& password() const {
+  const std::string& password() const {
     return conn_key_.password;
   }
   MYSQL* mysql() const {

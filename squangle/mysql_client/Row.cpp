@@ -18,8 +18,8 @@ std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
   if (num_fields_ == 0) {
     return nullptr;
   }
-  std::vector<string> field_names;
-  std::vector<string> table_names;
+  std::vector<std::string> field_names;
+  std::vector<std::string> table_names;
   folly::StringKeyedUnorderedMap<int> field_name_map;
   std::vector<uint64_t> mysql_field_flags;
   std::vector<enum_field_types> mysql_field_types;
@@ -41,10 +41,10 @@ std::shared_ptr<RowFields> EphemeralRowFields::makeBufferedFields() const {
       std::move(mysql_field_types));
 }
 
-StringPiece EphemeralRow::operator[](size_t col) const {
+folly::StringPiece EphemeralRow::operator[](size_t col) const {
   DCHECK_LT(col, row_fields_->numFields());
   auto length = field_lengths_[col];
-  return StringPiece(mysql_row_[col], mysql_row_[col] + length);
+  return folly::StringPiece(mysql_row_[col], mysql_row_[col] + length);
 }
 
 bool EphemeralRow::isNull(size_t col) const {
@@ -73,19 +73,19 @@ size_t Row::size() const {
   return row_block_->numFields();
 }
 
-StringPiece Row::operator[](size_t col) const {
-  return row_block_->getField<StringPiece>(row_number_, col);
+folly::StringPiece Row::operator[](size_t col) const {
+  return row_block_->getField<folly::StringPiece>(row_number_, col);
 }
 
-StringPiece Row::operator[](StringPiece field) const {
-  return row_block_->getField<StringPiece>(row_number_, field);
+folly::StringPiece Row::operator[](folly::StringPiece field) const {
+  return row_block_->getField<folly::StringPiece>(row_number_, field);
 }
 
 bool Row::isNull(size_t col) const {
   return row_block_->isNull(row_number_, col);
 }
 
-bool Row::isNull(StringPiece field) const {
+bool Row::isNull(folly::StringPiece field) const {
   return row_block_->isNull(row_number_, field);
 }
 
@@ -97,7 +97,7 @@ auto Row::end() const -> Iterator {
   return Iterator(this, size());
 }
 
-folly::dynamic Row::getDynamic(StringPiece l) const {
+folly::dynamic Row::getDynamic(folly::StringPiece l) const {
   return getDynamic(row_block_->fieldIndex(l));
 }
 
@@ -128,19 +128,20 @@ folly::dynamic Row::getDynamic(size_t l) const {
 
       // folly::dynamic::Type::STRING
       default:
-        return folly::dynamic(row_block_->getField<string>(row_number_, l));
+        return folly::dynamic(
+            row_block_->getField<std::string>(row_number_, l));
     }
   } catch (const std::exception& e) {
     // If we failed to parse (NULL int, etc), try again as a string
-    return folly::dynamic(row_block_->getField<string>(row_number_, l));
+    return folly::dynamic(row_block_->getField<std::string>(row_number_, l));
   }
 }
 
 template <>
-StringPiece RowBlock::getField(size_t row, size_t field_num) const {
+folly::StringPiece RowBlock::getField(size_t row, size_t field_num) const {
   size_t entry = row * row_fields_info_->numFields() + field_num;
   if (null_values_[entry]) {
-    return StringPiece(nullptr, nullptr);
+    return folly::StringPiece(nullptr, nullptr);
   }
 
   size_t field_size;
@@ -152,22 +153,22 @@ StringPiece RowBlock::getField(size_t row, size_t field_num) const {
   }
 
   return field_size != 0
-      ? StringPiece(&buffer_[field_offsets_[entry]], field_size)
-      : StringPiece();
+      ? folly::StringPiece(&buffer_[field_offsets_[entry]], field_size)
+      : folly::StringPiece();
 }
 
 template <>
 std::chrono::system_clock::time_point RowBlock::getField(
     size_t row,
     size_t field_num) const {
-  auto field_value = getField<StringPiece>(row, field_num);
+  auto field_value = getField<folly::StringPiece>(row, field_num);
   return parseDateTime(field_value, getFieldType(field_num));
 }
 
 template <>
 std::chrono::microseconds RowBlock::getField(size_t row, size_t field_num)
     const {
-  auto field_value = getField<StringPiece>(row, field_num);
+  auto field_value = getField<folly::StringPiece>(row, field_num);
   return parseTimeOnly(field_value, getFieldType(field_num));
 }
 
@@ -176,11 +177,11 @@ time_t RowBlock::getField(size_t row, size_t field_num) const {
   if (isDate(row, field_num)) {
     return getDateField(row, field_num);
   }
-  return folly::to<time_t>(getField<StringPiece>(row, field_num));
+  return folly::to<time_t>(getField<folly::StringPiece>(row, field_num));
 }
 
 time_t RowBlock::getDateField(size_t row, size_t field_num) const {
-  auto field_value = getField<StringPiece>(row, field_num);
+  auto field_value = getField<folly::StringPiece>(row, field_num);
   auto chrono_time = parseDateTime(field_value, getFieldType(field_num));
   time_t field_timet = std::chrono::system_clock::to_time_t(chrono_time);
   if (field_timet == -1) {
@@ -190,7 +191,7 @@ time_t RowBlock::getDateField(size_t row, size_t field_num) const {
 }
 
 std::chrono::microseconds parseTimeOnly(
-    StringPiece mysql_time,
+    folly::StringPiece mysql_time,
     enum_field_types field_type) {
   static re2::RE2 time_pattern(
       "([-]?\\d{1,3}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,6}))?");
@@ -220,7 +221,7 @@ std::chrono::microseconds parseTimeOnly(
 }
 
 std::chrono::system_clock::time_point parseDateTime(
-    StringPiece datetime,
+    folly::StringPiece datetime,
     enum_field_types date_type) {
   const int TM_YEAR_BASE = 1900;
 

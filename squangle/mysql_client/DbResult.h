@@ -22,9 +22,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using facebook::db::Exception;
-using facebook::db::OperationStateException;
-
 enum class OperationResult;
 
 // Basic info about the Operation and connection info, everything that is
@@ -50,7 +47,7 @@ class OperationResultBase {
 // This exception represents a basic mysql error, either during a connection
 // opening or querying, when it times out or a mysql error happened
 // (invalid host or query, disconnected during query, etc)
-class MysqlException : public Exception, public OperationResultBase {
+class MysqlException : public db::Exception, public OperationResultBase {
  public:
   MysqlException(
       OperationResult failure_type,
@@ -252,7 +249,8 @@ class QueryResult {
   // Only call this if you are in a callback and really want the Rows.
   // If you want to iterate through rows just use the iterator class here.
   RowBlock& currentRowBlock() {
-    CHECK_THROW(partial() && row_blocks_.size() == 1, OperationStateException);
+    CHECK_THROW(
+        partial() && row_blocks_.size() == 1, db::OperationStateException);
     return row_blocks_[0];
   }
 
@@ -262,7 +260,8 @@ class QueryResult {
   // moved to the new location.
   // If you want to iterate through rows just use the iterator class here.
   RowBlock stealCurrentRowBlock() {
-    CHECK_THROW(partial() && row_blocks_.size() == 1, OperationStateException);
+    CHECK_THROW(
+        partial() && row_blocks_.size() == 1, db::OperationStateException);
     RowBlock ret(std::move(row_blocks_[0]));
     row_blocks_.clear();
     return ret;
@@ -273,17 +272,17 @@ class QueryResult {
   // location of your preference and the RowBlocks are going to be moved to
   // the new location as well. If you want to iterate through rows just use the
   // iterator class here.
-  vector<RowBlock>&& stealRows() {
+  std::vector<RowBlock>&& stealRows() {
     return std::move(row_blocks_);
   }
 
   // Only call this if the fetch operation has ended.
   // If you want to iterate through rows just use the iterator class here.
-  const vector<RowBlock>& rows() const {
+  const std::vector<RowBlock>& rows() const {
     return row_blocks_;
   }
 
-  void setRowBlocks(vector<RowBlock>&& row_blocks) {
+  void setRowBlocks(std::vector<RowBlock>&& row_blocks) {
     num_rows_ = 0;
     row_blocks_ = std::move(row_blocks);
     for (const auto& block : row_blocks_) {
@@ -316,7 +315,7 @@ class QueryResult {
     return recv_gtid_;
   }
 
-  void setRecvGtid(const string& recv_gtid) {
+  void setRecvGtid(const std::string& recv_gtid) {
     recv_gtid_ = recv_gtid;
   }
 
@@ -353,7 +352,7 @@ class QueryResult {
                        const Row> {
    public:
     Iterator(
-        const vector<RowBlock>* row_block_vector,
+        const std::vector<RowBlock>* row_block_vector,
         size_t block_number,
         size_t row_number_in_block)
         : row_block_vector_(row_block_vector),
@@ -380,7 +379,7 @@ class QueryResult {
     }
 
    private:
-    const vector<RowBlock>* row_block_vector_;
+    const std::vector<RowBlock>* row_block_vector_;
     size_t current_block_number_;
     size_t current_row_in_block_;
   };
@@ -428,7 +427,7 @@ class QueryResult {
 
   OperationResult operation_result_;
 
-  vector<RowBlock> row_blocks_;
+  std::vector<RowBlock> row_blocks_;
 };
 
 class FetchOperation;
@@ -451,7 +450,7 @@ class StreamedQueryResult {
     return last_insert_id_;
   }
 
-  const string& recvGtid() {
+  const std::string& recvGtid() {
     // Will throw exception if there was an error
     checkAccessToResult();
     return recv_gtid_;
@@ -594,7 +593,7 @@ class MultiQueryStreamHandler {
   std::string escapeString(folly::StringPiece str) const;
 
   int mysql_errno() const;
-  const string& mysql_error() const;
+  const std::string& mysql_error() const;
 
  private:
   friend class Connection;

@@ -179,7 +179,8 @@ void Operation::timeoutTriggered() {
 Operation* Operation::run() {
   start_time_ = chrono::steady_clock::now();
   if (pre_operation_callback_) {
-    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state() == OperationState::Unstarted, db::OperationStateException);
     pre_operation_callback_(*this);
   }
   {
@@ -191,7 +192,8 @@ Operation* Operation::run() {
           this, &Operation::completeOperation, OperationResult::Cancelled);
       return this;
     }
-    CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+    CHECK_THROW(
+        state() == OperationState::Unstarted, db::OperationStateException);
     state_ = OperationState::Pending;
   }
   return specializedRun();
@@ -207,7 +209,7 @@ void Operation::completeOperation(OperationResult result) {
       state_ == OperationState::Pending ||
           state_ == OperationState::Cancelling ||
           state_ == OperationState::Unstarted,
-      OperationStateException);
+      db::OperationStateException);
   completeOperationInner(result);
 }
 
@@ -248,7 +250,7 @@ std::unique_ptr<Connection>&& Operation::releaseConnection() {
   CHECK_THROW(
       state_ == OperationState::Completed ||
           state_ == OperationState::Unstarted,
-      OperationStateException);
+      db::OperationStateException);
   return std::move(conn_proxy_.releaseConnection());
 }
 
@@ -261,7 +263,9 @@ void Operation::snapshotMysqlErrors() {
   }
 }
 
-void Operation::setAsyncClientError(StringPiece msg, StringPiece normalizeMsg) {
+void Operation::setAsyncClientError(
+    folly::StringPiece msg,
+    folly::StringPiece normalizeMsg) {
   if (normalizeMsg.empty()) {
     normalizeMsg = msg;
   }
@@ -272,8 +276,8 @@ void Operation::setAsyncClientError(StringPiece msg, StringPiece normalizeMsg) {
 
 void Operation::setAsyncClientError(
     int mysql_errno,
-    StringPiece msg,
-    StringPiece normalizeMsg) {
+    folly::StringPiece msg,
+    folly::StringPiece normalizeMsg) {
   if (normalizeMsg.empty()) {
     normalizeMsg = msg;
   }
@@ -294,7 +298,7 @@ std::shared_ptr<Operation> Operation::getSharedPointer() {
   return shared_from_this();
 }
 
-const string& Operation::host() const {
+const std::string& Operation::host() const {
   return conn()->host();
 }
 int Operation::port() const {
@@ -302,7 +306,7 @@ int Operation::port() const {
 }
 
 void Operation::setObserverCallback(ObserverCallback obs_cb) {
-  CHECK_THROW(state_ == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(state_ == OperationState::Unstarted, db::OperationStateException);
   // allow more callbacks to be set
   if (observer_callback_) {
     auto old_obs_cb = observer_callback_;
@@ -386,14 +390,16 @@ const ConnectionOptions& ConnectOperation::getConnectionOptions() const {
 }
 
 ConnectOperation* ConnectOperation::setDefaultQueryTimeout(Duration t) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setQueryTimeout(t);
   return this;
 }
 
 ConnectOperation* ConnectOperation::setSniServerName(
     const std::string& sni_servername) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setSniServerName(sni_servername);
   return this;
 }
@@ -415,32 +421,37 @@ ConnectOperation* ConnectOperation::setTotalTimeout(Duration total_timeout) {
   return this;
 }
 ConnectOperation* ConnectOperation::setConnectAttempts(uint32_t max_attempts) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setConnectAttempts(max_attempts);
   return this;
 }
 
 ConnectOperation* ConnectOperation::setDscp(uint8_t dscp) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setDscp(dscp);
   return this;
 }
 
 ConnectOperation* ConnectOperation::setKillOnQueryTimeout(
     bool killOnQueryTimeout) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   killOnQueryTimeout_ = killOnQueryTimeout;
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProviderBase(
     std::unique_ptr<SSLOptionsProviderBase> /*ssl_options_provider*/) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   LOG(ERROR) << "Using deprecated function";
   return this;
 }
 ConnectOperation* ConnectOperation::setSSLOptionsProvider(
     std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider) {
-  CHECK_THROW(state() == OperationState::Unstarted, OperationStateException);
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setSSLOptionsProvider(ssl_options_provider);
   return this;
 }
@@ -843,7 +854,8 @@ void FetchOperation::specializedRunImpl() {
     socketActionable();
   } catch (std::invalid_argument& e) {
     setAsyncClientError(
-        string("Unable to parse Query: ") + e.what(), "Unable to parse Query");
+        std::string("Unable to parse Query: ") + e.what(),
+        "Unable to parse Query");
     completeOperation(OperationResult::Failed);
   }
 }
@@ -885,7 +897,7 @@ bool FetchOperation::RowStream::hasNext() {
 }
 
 bool FetchOperation::RowStream::slurp() {
-  CHECK_THROW(mysql_query_result_ != nullptr, OperationStateException);
+  CHECK_THROW(mysql_query_result_ != nullptr, db::OperationStateException);
   if (current_row_.has_value() || query_finished_) {
     return true;
   }
@@ -913,27 +925,27 @@ void FetchOperation::setFetchAction(FetchAction action) {
 }
 
 uint64_t FetchOperation::currentLastInsertId() {
-  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_last_insert_id_;
 }
 
 uint64_t FetchOperation::currentAffectedRows() {
-  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_affected_rows_;
 }
 
 const std::string& FetchOperation::currentRecvGtid() {
-  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_recv_gtid_;
 }
 
 const FetchOperation::RespAttrs& FetchOperation::currentRespAttrs() {
-  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_resp_attrs_;
 }
 
 FetchOperation::RowStream* FetchOperation::rowStream() {
-  CHECK_THROW(isStreamAccessAllowed(), OperationStateException);
+  CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_row_stream_.get_pointer();
 }
 
@@ -1176,7 +1188,7 @@ void FetchOperation::pauseForConsumer() {
 }
 
 void FetchOperation::resumeImpl() {
-  CHECK_THROW(isPaused(), OperationStateException);
+  CHECK_THROW(isPaused(), db::OperationStateException);
 
   // We should only allow pauses during fetch or between queries.
   // If we come back as RowsFetched and the stream has completed the query,
@@ -1701,28 +1713,31 @@ folly::StringPiece FetchOperation::toString(FetchAction action) {
 // enum connect_stage is defined in mysql at include/mysql_com.h
 // and this provides a way to log the string version of this enum
 folly::fbstring Operation::connectStageString(connect_stage stage) {
-  static const folly::F14FastMap<connect_stage, fbstring> stageToStringMap = {
-      {connect_stage::CONNECT_STAGE_INVALID, "CONNECT_STAGE_INVALID"},
-      {connect_stage::CONNECT_STAGE_NOT_STARTED, "CONNECT_STAGE_NOT_STARTED"},
-      {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
-       "CONNECT_STAGE_NET_BEGIN_CONNECT"},
-      {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
-       "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
-      {connect_stage::CONNECT_STAGE_READ_GREETING,
-       "CONNECT_STAGE_READ_GREETING"},
-      {connect_stage::CONNECT_STAGE_PARSE_HANDSHAKE,
-       "CONNECT_STAGE_PARSE_HANDSHAKE"},
-      {connect_stage::CONNECT_STAGE_ESTABLISH_SSL,
-       "CONNECT_STAGE_ESTABLISH_SSL"},
-      {connect_stage::CONNECT_STAGE_AUTHENTICATE, "CONNECT_STAGE_AUTHENTICATE"},
-      {connect_stage::CONNECT_STAGE_PREP_SELECT_DATABASE,
-       "CONNECT_STAGE_PREP_SELECT_DATABASE"},
-      {connect_stage::CONNECT_STAGE_PREP_INIT_COMMANDS,
-       "CONNECT_STAGE_PREP_INIT_COMMANDS"},
-      {connect_stage::CONNECT_STAGE_SEND_ONE_INIT_COMMAND,
-       "CONNECT_STAGE_SEND_ONE_INIT_COMMAND"},
-      {connect_stage::CONNECT_STAGE_COMPLETE, "CONNECT_STAGE_COMPLETE"},
-  };
+  static const folly::F14FastMap<connect_stage, folly::fbstring>
+      stageToStringMap = {
+          {connect_stage::CONNECT_STAGE_INVALID, "CONNECT_STAGE_INVALID"},
+          {connect_stage::CONNECT_STAGE_NOT_STARTED,
+           "CONNECT_STAGE_NOT_STARTED"},
+          {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
+           "CONNECT_STAGE_NET_BEGIN_CONNECT"},
+          {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
+           "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
+          {connect_stage::CONNECT_STAGE_READ_GREETING,
+           "CONNECT_STAGE_READ_GREETING"},
+          {connect_stage::CONNECT_STAGE_PARSE_HANDSHAKE,
+           "CONNECT_STAGE_PARSE_HANDSHAKE"},
+          {connect_stage::CONNECT_STAGE_ESTABLISH_SSL,
+           "CONNECT_STAGE_ESTABLISH_SSL"},
+          {connect_stage::CONNECT_STAGE_AUTHENTICATE,
+           "CONNECT_STAGE_AUTHENTICATE"},
+          {connect_stage::CONNECT_STAGE_PREP_SELECT_DATABASE,
+           "CONNECT_STAGE_PREP_SELECT_DATABASE"},
+          {connect_stage::CONNECT_STAGE_PREP_INIT_COMMANDS,
+           "CONNECT_STAGE_PREP_INIT_COMMANDS"},
+          {connect_stage::CONNECT_STAGE_SEND_ONE_INIT_COMMAND,
+           "CONNECT_STAGE_SEND_ONE_INIT_COMMAND"},
+          {connect_stage::CONNECT_STAGE_COMPLETE, "CONNECT_STAGE_COMPLETE"},
+      };
 
   try {
     return stageToStringMap.at(stage);

@@ -17,7 +17,7 @@ namespace mysql_client {
 
 void OperationBatch::add(std::shared_ptr<Operation> op) {
   CHECK_THROW(
-      op->state() == OperationState::Unstarted, OperationStateException);
+      op->state() == OperationState::Unstarted, db::OperationStateException);
   {
     std::lock_guard<std::mutex> lock(*mutex_);
     num_living_operations_++;

@@ -25,7 +25,7 @@ namespace mysql_client {
 typedef std::function<void(QueryOperation&, QueryResult, QueryCallbackReason)>
     QueryAppenderCallback;
 typedef std::function<
-    void(MultiQueryOperation&, vector<QueryResult>, QueryCallbackReason)>
+    void(MultiQueryOperation&, std::vector<QueryResult>, QueryCallbackReason)>
     MultiQueryAppenderCallback;
 
 QueryCallback resultAppender(const QueryAppenderCallback& callback);

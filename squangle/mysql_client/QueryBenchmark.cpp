@@ -103,8 +103,8 @@ void vectorDynamic(int count) {
         "String value",
         10,
         2.0,
-        dynamic::object("key", 10),
-        dynamic::object("key", 10))));
+        folly::dynamic::object("key", 10),
+        folly::dynamic::object("key", 10))));
   }
 }
 
@@ -136,7 +136,7 @@ void keyPairQueryArgument(int count) {
 
 void simpleConversionDynamic(int /*count*/) {
   folly::dynamic q_int(10), q_double(2.0), q_string("hey, I'm Pusheen"),
-      q_pair(dynamic::object("col1", "Leaving la vila loca"));
+      q_pair(folly::dynamic::object("col1", "Leaving la vila loca"));
 
   for (int i = 0; i < kCount; ++i) {
     uint64_t ii = q_int.isInt() ? q_int.getInt() : 0;

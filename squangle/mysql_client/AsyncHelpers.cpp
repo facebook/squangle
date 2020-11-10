@@ -16,7 +16,7 @@ namespace mysql_client {
 QueryCallback resultAppender(const QueryAppenderCallback& callback) {
   // rowBlocks is deleted when the appended RowBlocks are passed to
   // QueryAppenderCallback
-  auto* rowBlocks = new vector<RowBlock>();
+  auto* rowBlocks = new std::vector<RowBlock>();
   return [callback, rowBlocks](
              QueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
     if (reason == QueryCallbackReason::RowsFetched) {
@@ -34,8 +34,8 @@ QueryCallback resultAppender(const QueryAppenderCallback& callback) {
 }
 
 MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback) {
-  auto* rowBlocks = new vector<RowBlock>();
-  auto* allResults = new vector<QueryResult>();
+  auto* rowBlocks = new std::vector<RowBlock>();
+  auto* allResults = new std::vector<QueryResult>();
   return [callback, rowBlocks, allResults](
              MultiQueryOperation& op,
              QueryResult* res,

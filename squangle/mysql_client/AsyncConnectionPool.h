@@ -41,11 +41,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using db::PoolStats;
-using folly::StringPiece;
-using std::string;
-using std::unordered_map;
-
 class ConnectPoolOperation;
 class AsyncConnectionPool;
 class PoolKey;
@@ -252,45 +247,45 @@ class AsyncConnectionPool
   ~AsyncConnectionPool();
 
   folly::SemiFuture<ConnectResult> connectSemiFuture(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   folly::SemiFuture<ConnectResult> connectSemiFuture(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
-      const string& special_tag,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
+      const std::string& special_tag,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   folly::Future<ConnectResult> connectFuture(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   folly::Future<ConnectResult> connectFuture(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
-      const string& special_tag,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
+      const std::string& special_tag,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   std::unique_ptr<Connection> connect(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
       const ConnectionOptions& conn_opts = ConnectionOptions());
 
   // Returns a ConnectPoolOperation that will abstract the wait for the client
@@ -298,12 +293,12 @@ class AsyncConnectionPool
   // In shutting down mode, this will return a cancelled operation
   // (same as the client).
   std::shared_ptr<ConnectOperation> beginConnection(
-      const string& host,
+      const std::string& host,
       int port,
-      const string& database_name,
-      const string& user,
-      const string& password,
-      const string& special_tag = "");
+      const std::string& database_name,
+      const std::string& user,
+      const std::string& password,
+      const std::string& special_tag = "");
 
   // Returns the client that this pool is using
   std::shared_ptr<AsyncMysqlClient> getMysqlClient() {
@@ -322,7 +317,7 @@ class AsyncConnectionPool
   // and proceed without the pool.
   void shutdown();
 
-  PoolStats* stats() {
+  db::PoolStats* stats() {
     return &pool_stats_;
   }
 
@@ -439,7 +434,7 @@ class AsyncConnectionPool
         const PoolKey& pool_key,
         OperationResult op_result,
         int mysql_errno,
-        const string& mysql_error);
+        const std::string& mysql_error);
 
     // Returns a connection for the given ConnectionKey. The connection will be
     // removed from the queue. Depending on the policy, it will give the oldest
@@ -475,8 +470,8 @@ class AsyncConnectionPool
     // async client in the draining process in case the operation has already
     // been discarded by the creator before got a connection. This also serves
     // to avoid giving them connections
-    unordered_map<PoolKey, MysqlConnectionList, PoolKeyHash> stock_;
-    unordered_map<PoolKey, PoolOpList, PoolKeyHash> waitList_;
+    std::unordered_map<PoolKey, MysqlConnectionList, PoolKeyHash> stock_;
+    std::unordered_map<PoolKey, PoolOpList, PoolKeyHash> waitList_;
 
     size_t conn_limit_;
     Duration max_idle_time_;
@@ -506,11 +501,11 @@ class AsyncConnectionPool
 
   uint32_t num_open_connections_ = 0;
   // Counts the number of open connections for a given connectionKey
-  unordered_map<PoolKey, uint64_t, PoolKeyHash> open_connections_;
+  std::unordered_map<PoolKey, uint64_t, PoolKeyHash> open_connections_;
   // Same as above but for connections that we are still opening
   // This one doesn't need locking, only accessed by client thread
   uint32_t num_pending_connections_ = 0;
-  unordered_map<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
+  std::unordered_map<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
 
   // Used in the destructor to wait cleanup_timer_ be called. It's required by
   // `shutdown_condvar_`
@@ -525,7 +520,7 @@ class AsyncConnectionPool
   std::weak_ptr<AsyncConnectionPool> self_pointer_;
 
   // Counters for connections created, cache hits and misses, etc.
-  PoolStats pool_stats_;
+  db::PoolStats pool_stats_;
 
   AsyncConnectionPool(const AsyncConnectionPool&) = delete;
   AsyncConnectionPool& operator=(const AsyncConnectionPool&) = delete;
@@ -562,7 +557,7 @@ class ConnectPoolOperation : public ConnectOperation {
   void failureCallback(
       OperationResult failure,
       int mysql_errno,
-      const string& mysql_error);
+      const std::string& mysql_error);
 
   std::weak_ptr<AsyncConnectionPool> pool_;
 

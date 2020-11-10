@@ -39,10 +39,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using folly::StringPiece;
-using std::string;
-using std::vector;
-
 class RowBlock;
 
 // A row of returned data.  This makes the columns available either
@@ -68,25 +64,25 @@ class Row {
   T getWithDefault(const L& l, const T d) const;
 
   folly::dynamic getDynamic(size_t l) const;
-  folly::dynamic getDynamic(StringPiece l) const;
+  folly::dynamic getDynamic(folly::StringPiece l) const;
 
   // Vector-like and map-like access.  Note the above about ambiguity
   // for map access when column names conflict.
   size_t size() const;
-  StringPiece operator[](size_t col) const;
-  StringPiece operator[](StringPiece field) const;
+  folly::StringPiece operator[](size_t col) const;
+  folly::StringPiece operator[](folly::StringPiece field) const;
 
   // Is the field nullable?
   bool isNull(size_t col) const;
-  bool isNull(StringPiece field) const;
+  bool isNull(folly::StringPiece field) const;
 
   // Our very simple iterator.  Just barely enough to support
   // range-based for loops.
   class Iterator : public boost::iterator_facade<
                        Iterator,
-                       const StringPiece,
+                       const folly::StringPiece,
                        boost::single_pass_traversal_tag,
-                       const StringPiece> {
+                       const folly::StringPiece> {
    public:
     Iterator(const Row* row, size_t column_number)
         : row_(row), current_column_number_(column_number) {}
@@ -94,9 +90,9 @@ class Row {
     void increment() {
       ++current_column_number_;
     }
-    const StringPiece dereference() const {
+    const folly::StringPiece dereference() const {
       CHECK(current_column_number_ < row_->size());
-      return row_->get<StringPiece>(current_column_number_);
+      return row_->get<folly::StringPiece>(current_column_number_);
     }
     bool equal(const Iterator& other) const {
       return (
@@ -122,8 +118,8 @@ class RowFields {
  public:
   RowFields(
       folly::StringKeyedUnorderedMap<int>&& field_name_map,
-      std::vector<string>&& field_names,
-      std::vector<string>&& table_names,
+      std::vector<std::string>&& field_names,
+      std::vector<std::string>&& table_names,
       std::vector<uint64_t>&& mysql_field_flags,
       std::vector<enum_field_types>&& mysql_field_types)
       : num_fields_(field_names.size()),
@@ -138,7 +134,7 @@ class RowFields {
   }
 
   // Ditto, but by name.
-  enum_field_types getFieldType(StringPiece field_name) const {
+  enum_field_types getFieldType(folly::StringPiece field_name) const {
     return mysql_field_types_[fieldIndex(field_name)];
   }
 
@@ -148,23 +144,23 @@ class RowFields {
   }
 
   // Ditto, but by name.
-  uint64_t getFieldFlags(StringPiece field_name) const {
+  uint64_t getFieldFlags(folly::StringPiece field_name) const {
     return mysql_field_flags_[fieldIndex(field_name)];
   }
 
   // Check if the row contains the field name.
-  bool containsFieldName(StringPiece field_name) const {
+  bool containsFieldName(folly::StringPiece field_name) const {
     return field_name_map_.find(field_name) != field_name_map_.end();
   }
 
   // What is the name of the i'th column in the result set?
-  StringPiece fieldName(size_t i) const {
+  folly::StringPiece fieldName(size_t i) const {
     return field_names_[i];
   }
 
   // What is the name of the table (or alias) for the i'th column in the
   // result set?
-  StringPiece tableName(size_t i) const {
+  folly::StringPiece tableName(size_t i) const {
     return table_names_[i];
   }
 
@@ -174,7 +170,7 @@ class RowFields {
   }
 
   // Given a field_name, return the numeric column number, or die trying.
-  size_t fieldIndex(StringPiece field_name) const {
+  size_t fieldIndex(folly::StringPiece field_name) const {
     auto it = field_name_map_.find(field_name);
     if (it == field_name_map_.end()) {
       throw std::out_of_range(
@@ -186,8 +182,8 @@ class RowFields {
  private:
   size_t num_fields_;
   const folly::StringKeyedUnorderedMap<int> field_name_map_;
-  const vector<string> field_names_;
-  const vector<string> table_names_;
+  const std::vector<std::string> field_names_;
+  const std::vector<std::string> table_names_;
   const std::vector<uint64_t> mysql_field_flags_;
   const std::vector<enum_field_types> mysql_field_types_;
 
@@ -195,11 +191,11 @@ class RowFields {
 };
 
 std::chrono::system_clock::time_point parseDateTime(
-    StringPiece datetime,
+    folly::StringPiece datetime,
     enum_field_types date_type);
 
 std::chrono::microseconds parseTimeOnly(
-    StringPiece mysql_time,
+    folly::StringPiece mysql_time,
     enum_field_types field_type);
 
 // A RowBlock holds the raw data from part of a MySQL result set.  It
@@ -235,7 +231,7 @@ class RowBlock {
   // Like above, but converting to the specified type T (using
   // folly::to<T>(StringPiece)).
   template <typename T>
-  T getField(size_t row, StringPiece field_name) const;
+  T getField(size_t row, folly::StringPiece field_name) const;
 
   // Is this field NULL?
   bool isNull(size_t row, size_t field_num) const {
@@ -243,7 +239,7 @@ class RowBlock {
   }
 
   // Ditto, but by name.
-  bool isNull(size_t row, StringPiece field_name) const {
+  bool isNull(size_t row, folly::StringPiece field_name) const {
     return isNull(row, row_fields_info_->fieldIndex(field_name));
   }
 
@@ -253,7 +249,7 @@ class RowBlock {
   }
 
   // Ditto, but by name.
-  enum_field_types getFieldType(StringPiece field_name) const {
+  enum_field_types getFieldType(folly::StringPiece field_name) const {
     return row_fields_info_->getFieldType(field_name);
   }
 
@@ -263,7 +259,7 @@ class RowBlock {
   }
 
   // Ditto, but by name.
-  uint64_t getFieldFlags(StringPiece field_name) const {
+  uint64_t getFieldFlags(folly::StringPiece field_name) const {
     return row_fields_info_->getFieldFlags(field_name);
   }
 
@@ -276,12 +272,12 @@ class RowBlock {
     return row_fields_info_.get();
   }
   // What is the name of the i'th column in the result set?
-  StringPiece fieldName(size_t i) const {
+  folly::StringPiece fieldName(size_t i) const {
     return row_fields_info_->fieldName(i);
   }
 
   // What is the index of the column labeled n
-  size_t fieldIndex(StringPiece n) const {
+  size_t fieldIndex(folly::StringPiece n) const {
     return row_fields_info_->fieldIndex(n);
   }
 
@@ -345,7 +341,7 @@ class RowBlock {
   void finishRow() {
     CHECK_EQ(0, field_offsets_.size() % row_fields_info_->numFields());
   }
-  void appendValue(const StringPiece value) {
+  void appendValue(const folly::StringPiece value) {
     field_offsets_.push_back(buffer_.size());
     null_values_.push_back(false);
     buffer_.insert(buffer_.end(), value.begin(), value.end());
@@ -378,9 +374,9 @@ class RowBlock {
   // field_offsets_[N * num_fields + M] and extends to
   // field_offsets_[N * num_fields + M + 1] (or the end of the
   // buffer for the last row/column).
-  vector<char> buffer_;
-  vector<bool> null_values_;
-  vector<size_t> field_offsets_;
+  std::vector<char> buffer_;
+  std::vector<bool> null_values_;
+  std::vector<size_t> field_offsets_;
 
   // field_name_map_ and field_names_ are owned by the RowFields shared between
   // RowBlocks of same query
@@ -439,7 +435,7 @@ class EphemeralRow {
         row_fields_(row_fields) {}
 
   // Beginning simple, just give the basic indexing.
-  StringPiece operator[](size_t col) const;
+  folly::StringPiece operator[](size_t col) const;
 
   bool isNull(size_t col) const;
 
@@ -465,7 +461,7 @@ class EphemeralRow {
 
 // Declarations of specializations and trivial implementations.
 template <>
-StringPiece RowBlock::getField(size_t row, size_t field_num) const;
+folly::StringPiece RowBlock::getField(size_t row, size_t field_num) const;
 
 template <>
 time_t RowBlock::getField(size_t row, size_t field_num) const;
@@ -481,11 +477,11 @@ std::chrono::microseconds RowBlock::getField(size_t row, size_t field_num)
 
 template <typename T>
 T RowBlock::getField(size_t row, size_t field_num) const {
-  return folly::to<T>(getField<StringPiece>(row, field_num));
+  return folly::to<T>(getField<folly::StringPiece>(row, field_num));
 }
 
 template <typename T>
-T RowBlock::getField(size_t row, StringPiece field_name) const {
+T RowBlock::getField(size_t row, folly::StringPiece field_name) const {
   return getField<T>(row, row_fields_info_->fieldIndex(field_name));
 }
 
