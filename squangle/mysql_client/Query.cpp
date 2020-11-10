@@ -112,6 +112,7 @@ QueryArgument&& QueryArgument::operator()(
   return std::move(*this);
 }
 
+namespace { // anonymous namespace to prevent class shadowing
 struct FbStringConverter : public boost::static_visitor<fbstring> {
   fbstring operator()(const double& operand) const {
     return folly::to<fbstring>(operand);
@@ -131,6 +132,8 @@ struct FbStringConverter : public boost::static_visitor<fbstring> {
         "Only allowed type conversions are Int, Double, Bool and String");
   }
 };
+
+} // namespace
 
 folly::fbstring QueryArgument::asString() const {
   return boost::apply_visitor(FbStringConverter(), value_);

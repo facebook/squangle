@@ -140,7 +140,7 @@ class Query {
 
   // Parameters will be coerced into folly::dynamic.
   template <typename... Args>
-  Query(const StringPiece query_text, Args&&... args);
+  /* implicit */ Query(const StringPiece query_text, Args&&... args);
   Query(const StringPiece query_text, std::vector<QueryArgument> params);
 
   void append(const Query& query2);
