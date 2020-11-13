@@ -38,6 +38,45 @@ enum class OperationType {
   TestDatabase
 };
 
+class EnumHelper {
+  public:
+  static const char* failureReasonToString(FailureReason reason) {
+    switch (reason) {
+      case FailureReason::BAD_USAGE:
+        return "BadUsage";
+      case FailureReason::TIMEOUT:
+        return "Timeout";
+      case FailureReason::CANCELLED:
+        return "Cancelled";
+      case FailureReason::DATABASE_ERROR:
+        return "DatabaseError";
+    }
+    return "(should not happen)";
+  }
+
+  static folly::StringPiece operationTypeToString(OperationType operation_type) {
+    switch (operation_type) {
+      case OperationType::None:
+        return "None";
+      case OperationType::Query:
+        return "Query";
+      case OperationType::MultiQuery:
+        return "MultiQuery";
+      case OperationType::MultiQueryStream:
+        return "MultiQueryStream";
+      case OperationType::Connect:
+        return "Connect";
+      case OperationType::PoolConnect:
+        return "PoolConnect";
+      case OperationType::Locator:
+        return "Locator";
+      case OperationType::TestDatabase:
+        return "TestDatabase";
+    }
+    return "(should not happen)";
+  }
+};
+
 typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
     AddNormalValueFunction;
 typedef std::function<void(folly::StringPiece key, int64_t value)>
@@ -155,39 +194,11 @@ class DBLoggerBase {
       const TConnectionInfo& connInfo) = 0;
 
   const char* FailureString(FailureReason reason) {
-    switch (reason) {
-      case FailureReason::BAD_USAGE:
-        return "BadUsage";
-      case FailureReason::TIMEOUT:
-        return "Timeout";
-      case FailureReason::CANCELLED:
-        return "Cancelled";
-      case FailureReason::DATABASE_ERROR:
-        return "DatabaseError";
-    }
-    return "(should not happen)";
+    return EnumHelper::failureReasonToString(reason);
   }
 
   folly::StringPiece toString(OperationType operation_type) {
-    switch (operation_type) {
-      case OperationType::None:
-        return "None";
-      case OperationType::Query:
-        return "Query";
-      case OperationType::MultiQuery:
-        return "MultiQuery";
-      case OperationType::MultiQueryStream:
-        return "MultiQueryStream";
-      case OperationType::Connect:
-        return "Connect";
-      case OperationType::PoolConnect:
-        return "PoolConnect";
-      case OperationType::Locator:
-        return "Locator";
-      case OperationType::TestDatabase:
-        return "TestDatabase";
-    }
-    return "(should not happen)";
+    return EnumHelper::operationTypeToString(operation_type);
   }
 
  protected:
