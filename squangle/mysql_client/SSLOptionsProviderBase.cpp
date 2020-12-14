@@ -17,9 +17,9 @@ bool SSLOptionsProviderBase::setMysqlSSLOptions(MYSQL* mysql) {
   enum mysql_ssl_mode ssl_mode = SSL_MODE_PREFERRED;
   mysql_options(mysql, MYSQL_OPT_SSL_MODE, &ssl_mode);
   mysql_options(mysql, MYSQL_OPT_SSL_CONTEXT, sslContext->getSSLCtx());
-  auto sslSession = getSSLSession();
+  auto sslSession = getRawSSLSession();
   if (sslSession) {
-    mysql_options4(mysql, MYSQL_OPT_SSL_SESSION, sslSession, (void*)1);
+    mysql_options4(mysql, MYSQL_OPT_SSL_SESSION, sslSession.release(), (void*)1);
   }
   return true;
 }
@@ -29,7 +29,7 @@ bool SSLOptionsProviderBase::storeMysqlSSLSession(MYSQL* mysql) {
   if (!reused) {
     folly::ssl::SSLSessionUniquePtr session((SSL_SESSION*)mysql_get_ssl_session(mysql));
     if (session) {
-      storeSSLSession(std::move(session));
+      storeRawSSLSession(std::move(session));
     }
   }
   return reused;
