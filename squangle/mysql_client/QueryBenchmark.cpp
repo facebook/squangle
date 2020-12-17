@@ -15,10 +15,7 @@
 using namespace facebook::common::mysql_client;
 
 using folly::runBenchmarks;
-using folly::StringPiece;
 using std::string;
-using std::unordered_map;
-using std::vector;
 
 const int kCount = 20000;
 const int kNumericCount = 20000;
