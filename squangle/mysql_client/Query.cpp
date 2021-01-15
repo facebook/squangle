@@ -185,17 +185,19 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
     std::vector<folly::dynamic> keys(param.keys().begin(), param.keys().end());
     std::sort(keys.begin(), keys.end());
     value_ = std::vector<ArgPair>();
+    auto& vec = boost::get<std::vector<ArgPair>>(value_);
+    vec.reserve(keys.size());
 
     for (const auto& key : keys) {
       QueryArgument q2(param[key]);
 
-      boost::get<std::vector<ArgPair>>(value_).emplace_back(
-          ArgPair(key.asString(), q2));
+      vec.emplace_back(ArgPair(key.asString(), q2));
     }
   } else if (param.isNull()) {
     value_ = nullptr;
   } else if (param.isArray()) {
     value_ = std::vector<QueryArgument>();
+    boost::get<std::vector<QueryArgument>>(value_).reserve(param.size());
     auto& v = boost::get<std::vector<QueryArgument>>(value_);
     for (const auto& val : param) {
       v.emplace_back(QueryArgument(val));

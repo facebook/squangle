@@ -14,6 +14,7 @@
 #include <folly/Memory.h>
 #include <folly/experimental/StringKeyedUnorderedMap.h>
 #include <folly/portability/GFlags.h>
+#include <folly/small_vector.h>
 #include <folly/ssl/OpenSSLPtrTypes.h>
 #include <mysql_async.h>
 
@@ -54,7 +55,8 @@ ConnectionOptions::ConnectionOptions()
       query_timeout_(FLAGS_async_mysql_timeout_micros) {}
 
 std::string ConnectionOptions::getDisplayString() const {
-  std::vector<std::string> parts;
+  // Reserve 4 + 2 extra elements
+  folly::small_vector<std::string, 6> parts;
 
   parts.push_back(
       folly::sformat("conn timeout={}us", connection_timeout_.count()));
