@@ -35,11 +35,12 @@ enum class OperationType {
   Connect,
   PoolConnect,
   Locator,
-  TestDatabase
+  TestDatabase,
+  Reset,
 };
 
 class EnumHelper {
-  public:
+ public:
   static const char* failureReasonToString(FailureReason reason) {
     switch (reason) {
       case FailureReason::BAD_USAGE:
@@ -54,7 +55,8 @@ class EnumHelper {
     return "(should not happen)";
   }
 
-  static folly::StringPiece operationTypeToString(OperationType operation_type) {
+  static folly::StringPiece operationTypeToString(
+      OperationType operation_type) {
     switch (operation_type) {
       case OperationType::None:
         return "None";
@@ -72,6 +74,8 @@ class EnumHelper {
         return "Locator";
       case OperationType::TestDatabase:
         return "TestDatabase";
+      case OperationType::Reset:
+        return "Reset";
     }
     return "(should not happen)";
   }

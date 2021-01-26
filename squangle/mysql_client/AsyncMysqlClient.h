@@ -105,6 +105,7 @@ class MysqlHandler {
   virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
   virtual Status nextResult(MYSQL* mysql) = 0;
   virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
+  virtual Status resetConn(MYSQL* mysql) = 0;
 };
 
 class MysqlClientBase {
@@ -194,7 +195,9 @@ class MysqlClientBase {
   friend class ConnectOperation;
   friend class ConnectPoolOperation;
   friend class FetchOperation;
+  friend class ResetOperation;
   friend class MysqlConnectionHolder;
+  friend class AsyncConnection;
   friend class AsyncConnectionPool;
   virtual db::SquangleLoggingData makeSquangleLoggingData(
       const ConnectionKey* connKey,
@@ -393,6 +396,7 @@ class AsyncMysqlClient : public MysqlClientBase {
     Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt) override;
     Status nextResult(MYSQL* mysql) override;
     Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override;
+    Status resetConn(MYSQL* mysql) override;
     MYSQL_RES* getResult(MYSQL* mysql) override;
   } mysql_handler_;
 
@@ -514,7 +518,30 @@ class Connection {
   Connection(
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
-      MYSQL* existing_connection);
+      std::unique_ptr<MysqlConnectionHolder> conn)
+      : mysql_connection_(std::move(conn)),
+        conn_key_(conn_key),
+        mysql_client_(mysql_client),
+        socket_handler_(mysql_client_->getEventBase()),
+        pre_operation_callback_(nullptr),
+        post_operation_callback_(nullptr),
+        initialized_(false) {}
+
+  Connection(
+      MysqlClientBase* mysql_client,
+      ConnectionKey conn_key,
+      MYSQL* existing_conn)
+      : conn_key_(conn_key),
+        mysql_client_(mysql_client),
+        socket_handler_(mysql_client_->getEventBase()),
+        pre_operation_callback_(nullptr),
+        post_operation_callback_(nullptr),
+        initialized_(false) {
+    if (existing_conn) {
+      mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
+          mysql_client_, existing_conn, conn_key);
+    }
+  }
 
   virtual ~Connection();
 
@@ -703,7 +730,8 @@ class Connection {
   // a familiar API.
   std::string escapeString(folly::StringPiece unescaped) {
     CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
-    return Query::escapeString<std::string>(mysql_connection_->mysql(), unescaped);
+    return Query::escapeString<std::string>(
+        mysql_connection_->mysql(), unescaped);
   }
 
   // Returns the number of errors, warnings, and notes generated during
@@ -757,8 +785,11 @@ class Connection {
     return mysql_connection_.get();
   }
 
-  std::unique_ptr<MysqlConnectionHolder> stealMysqlConnectionHolder() {
-    DCHECK(isInEventBaseThread());
+  std::unique_ptr<MysqlConnectionHolder> stealMysqlConnectionHolder(
+      bool skipCheck = false) {
+    if (!skipCheck) {
+      DCHECK(isInEventBaseThread());
+    }
     return std::move(mysql_connection_);
   }
 
@@ -859,6 +890,22 @@ class Connection {
   // Called when a new operation is being started.
   virtual void resetActionable() = 0;
 
+  void setMysqlConnectionHolder(
+      std::unique_ptr<MysqlConnectionHolder> mysql_connection) {
+    CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
+    CHECK_THROW(
+        conn_key_ == *mysql_connection->getKey(),
+        db::InvalidConnectionException);
+    mysql_connection_ = std::move(mysql_connection);
+  }
+
+  // If this is set and other necessary conditions are met, we clone Connection
+  // object in its destructor to properly reset the connection by sending
+  // COM_RESET_CONNECTION before it is completed destructed.
+  bool needToCloneConnection_{true};
+
+  std::shared_ptr<ResetOperation> resetConn(std::unique_ptr<Connection> conn);
+
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
@@ -871,6 +918,7 @@ class Connection {
   friend class QueryOperation;
   friend class MultiQueryOperation;
   friend class MultiQueryStreamOperation;
+  friend class ResetOperation;
 
   ChainedCallback setCallback(
       ChainedCallback orgCallback,
@@ -906,15 +954,6 @@ class Connection {
   MysqlConnectionHolder* mysqlConnection() const {
     DCHECK(isInEventBaseThread());
     return mysql_connection_.get();
-  }
-
-  void setMysqlConnectionHolder(
-      std::unique_ptr<MysqlConnectionHolder> mysql_connection) {
-    CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
-    CHECK_THROW(
-        conn_key_ == *mysql_connection->getKey(),
-        db::InvalidConnectionException);
-    mysql_connection_ = std::move(mysql_connection);
   }
 
   // Helper function that will begin multiqueries or single queries depending
@@ -976,6 +1015,12 @@ class Connection {
 // between AsyncMysqlClient or SyncMysqlClient.
 class AsyncConnection : public Connection {
  public:
+  AsyncConnection(
+      MysqlClientBase* mysql_client,
+      ConnectionKey conn_key,
+      std::unique_ptr<MysqlConnectionHolder> conn)
+      : Connection(mysql_client, conn_key, std::move(conn)) {}
+
   AsyncConnection(
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,

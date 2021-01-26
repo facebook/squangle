@@ -1596,6 +1596,45 @@ void MultiQueryOperation::notifyOperationCompleted(OperationResult result) {
 
 MultiQueryOperation::~MultiQueryOperation() {}
 
+void ResetOperation::socketActionable() {
+  auto& handler = conn()->client()->getMysqlHandler();
+  MYSQL* mysql = conn()->mysql();
+  auto status = handler.resetConn(mysql);
+
+  if (status == MysqlHandler::PENDING) {
+    waitForSocketActionable();
+  } else if (status == MysqlHandler::DONE) {
+    completeOperation(OperationResult::Succeeded);
+  } else { // MysqlHandler::ERROR
+    completeOperation(OperationResult::Failed);
+  }
+}
+
+void ResetOperation::mustSucceed() {
+  run();
+  wait();
+  if (!ok()) {
+    throw db::RequiredOperationFailedException(
+        "Reset connection failed: " + mysql_error_);
+  }
+}
+
+void ResetOperation::specializedCompleteOperation() {
+  conn()->notify();
+}
+
+void ResetOperation::specializedTimeoutTriggered() {
+  completeOperation(OperationResult::TimedOut);
+}
+
+ResetOperation* ResetOperation::specializedRun() {
+  MYSQL* mysql = conn()->mysql();
+  conn()->socketHandler()->changeHandlerFD(
+      folly::NetworkSocket::fromFd(mysql_get_socket_descriptor(mysql)));
+  socketActionable();
+  return this;
+}
+
 folly::StringPiece Operation::resultString() const {
   return Operation::toString(result());
 }

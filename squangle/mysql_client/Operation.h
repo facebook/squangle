@@ -71,6 +71,7 @@ class FetchOperation;
 class MultiQueryStreamOperation;
 class QueryOperation;
 class MultiQueryOperation;
+class ResetOperation;
 class Operation;
 class Connection;
 class ConnectionKey;
@@ -1345,6 +1346,28 @@ class MultiQueryOperation : public FetchOperation {
 
   int num_current_query_ = 0;
 
+  friend class Connection;
+};
+
+// This is for sending COM_RESET_CONNECTION command before returning an idle
+// connection back to connection pool
+class ResetOperation : public Operation {
+ public:
+  explicit ResetOperation(ConnectionProxy&& conn)
+      : Operation(std::move(conn)) {}
+
+  db::OperationType getOperationType() const override {
+    return db::OperationType::Reset;
+  }
+
+ protected:
+  void socketActionable() override;
+  void mustSucceed() override;
+  void specializedCompleteOperation() override;
+  void specializedTimeoutTriggered() override;
+  ResetOperation* specializedRun() override;
+
+ private:
   friend class Connection;
 };
 

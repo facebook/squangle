@@ -374,6 +374,11 @@ MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::runQuery(
       mysql_real_query_nonblocking(mysql, queryStmt.begin(), queryStmt.size()));
 }
 
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::resetConn(
+    MYSQL* mysql) {
+  return toHandlerStatus(mysql_reset_connection_nonblocking(mysql));
+}
+
 MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::nextResult(
     MYSQL* mysql) {
   return toHandlerStatus(mysql_next_result_nonblocking(mysql));
@@ -405,22 +410,6 @@ std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
   return conn;
 }
 
-Connection::Connection(
-    MysqlClientBase* mysql_client,
-    ConnectionKey conn_key,
-    MYSQL* existing_connection)
-    : conn_key_(conn_key),
-      mysql_client_(mysql_client),
-      socket_handler_(mysql_client_->getEventBase()),
-      pre_operation_callback_(nullptr),
-      post_operation_callback_(nullptr),
-      initialized_(false) {
-  if (existing_connection) {
-    mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
-        mysql_client_, existing_connection, conn_key);
-  }
-}
-
 bool Connection::isSSL() const {
   CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
   return mysql_connection_->mysql()->client_flag & CLIENT_SSL;
@@ -445,10 +434,62 @@ void Connection::initialize(bool initMysql) {
 }
 
 Connection::~Connection() {
+  // TODO: If isInEventBaseThread() is true, assert in resetOp->wait() fails
+  // because EventBaseThread should not sleep while waiting for its own
+  // operaiton. For now, we will send reset only when it is called outside of
+  // evb. Note that cleanupCompletedOperations() can call this from evb.
+  if (mysql_connection_ && conn_dying_callback_ && needToCloneConnection_ &&
+      isReusable() && !inTransaction() && !isInEventBaseThread()) {
+    // We clone this Connection object to send COM_RESET_CONNECTION command
+    // via the connection before returning it to the connection pool.
+    // The callback function points to recycleMysqlConnection(), which is
+    // responsible for recyclining the connection.
+    // This object's callback is set to null and the cloned object's
+    // callback instead points to the original callback function, which will
+    // be called after COM_RESET_CONNECTION.
+    auto connHolder = stealMysqlConnectionHolder(true);
+    auto conn = std::make_unique<AsyncConnection>(
+        client(), *getKey(), std::move(connHolder));
+    conn->needToCloneConnection_ = false;
+    conn->setConnectionOptions(getConnectionOptions());
+    conn->setConnectionDyingCallback(std::move(conn_dying_callback_));
+    conn_dying_callback_ = nullptr;
+
+    auto resetOp = Connection::resetConn(std::move(conn));
+    if (client()->runInThread([resetOp]() {
+          // addOperation() is necessary here for proper cancelling of reset
+          // operation in case of sudden AsyncMysqlClient shutdown
+          resetOp->connection()->client()->addOperation(resetOp);
+          resetOp->run();
+        })) {
+      resetOp->wait();
+    }
+  }
+
   if (mysql_connection_ && conn_dying_callback_) {
     // Recycle connection, if not needed the client will throw it away
     conn_dying_callback_(std::move(mysql_connection_));
   }
+}
+
+std::shared_ptr<ResetOperation> Connection::resetConn(
+    std::unique_ptr<Connection> conn) {
+  // This function is very similar to beginQuery(), but this does not call
+  // addOperation(), which is called by the caller prior to calling
+  // resetOp->run(). This is to avoid race condition where shutdownClient() can
+  // remove the reset operation from pending_operations_ queue, while the
+  // operation still exists in operations_to_remove_ queue; in that case,
+  // cleanupCompletedOperations() hits FATAL error.
+  auto resetOperationPtr = std::make_shared<ResetOperation>(
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))));
+  Duration timeout =
+      resetOperationPtr->connection()->conn_options_.getQueryTimeout();
+  if (timeout.count() > 0) {
+    resetOperationPtr->setTimeout(timeout);
+  }
+  resetOperationPtr->connection()->socket_handler_.setOperation(
+      resetOperationPtr.get());
+  return resetOperationPtr;
 }
 
 template <>
