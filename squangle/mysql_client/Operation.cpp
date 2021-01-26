@@ -406,6 +406,11 @@ ConnectOperation* ConnectOperation::setSniServerName(
   return this;
 }
 
+ConnectOperation* ConnectOperation::enableResetConnBeforeClose() {
+  conn_options_.enableResetConnBeforeClose();
+  return this;
+}
+
 ConnectOperation* ConnectOperation::setTimeout(Duration timeout) {
   conn_options_.setTimeout(timeout);
   Operation::setTimeout(timeout);

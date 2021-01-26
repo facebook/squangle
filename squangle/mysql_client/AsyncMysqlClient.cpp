@@ -122,8 +122,9 @@ void AsyncMysqlClient::drain(bool also_block_operations) {
   active_connections_closed_cv_.wait(
       counter_lock, [&also_block_operations, this] {
         if (also_block_operations) {
-          VLOG(11) << "Waiting for " << this->active_connection_counter_
-                   << " connections to be released before shutting client down";
+          VLOG(11)
+              << "Waiting for " << this->active_connection_counter_
+              << " connections to be released before shutting client down ";
         }
         return this->active_connection_counter_ == 0;
       });
@@ -439,7 +440,8 @@ Connection::~Connection() {
   // operaiton. For now, we will send reset only when it is called outside of
   // evb. Note that cleanupCompletedOperations() can call this from evb.
   if (mysql_connection_ && conn_dying_callback_ && needToCloneConnection_ &&
-      isReusable() && !inTransaction() && !isInEventBaseThread()) {
+      isReusable() && !inTransaction() && !isInEventBaseThread() &&
+      getConnectionOptions().isEnableResetConnBeforeClose()) {
     // We clone this Connection object to send COM_RESET_CONNECTION command
     // via the connection before returning it to the connection pool.
     // The callback function points to recycleMysqlConnection(), which is

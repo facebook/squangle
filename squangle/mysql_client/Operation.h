@@ -309,12 +309,21 @@ class ConnectionOptions {
   std::string getDisplayString() const;
 
   ConnectionOptions& setSniServerName(const std::string& sniName) {
-    sni_servername = sniName;
+    sni_servername_ = sniName;
     return *this;
   }
 
   const folly::Optional<std::string>& getSniServerName() const {
-    return sni_servername;
+    return sni_servername_;
+  }
+
+  ConnectionOptions& enableResetConnBeforeClose() {
+    reset_conn_before_close_ = true;
+    return *this;
+  }
+
+  bool isEnableResetConnBeforeClose() const {
+    return reset_conn_before_close_;
   }
 
  private:
@@ -328,7 +337,8 @@ class ConnectionOptions {
   bool use_checksum_ = false;
   uint32_t max_attempts_ = 1;
   uint8_t dscp_ = 0;
-  folly::Optional<std::string> sni_servername;
+  folly::Optional<std::string> sni_servername_;
+  bool reset_conn_before_close_ = false;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -738,6 +748,7 @@ class ConnectOperation : public Operation {
     return this;
   }
   ConnectOperation* setSniServerName(const std::string& sni_servername);
+  ConnectOperation* enableResetConnBeforeClose();
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(
