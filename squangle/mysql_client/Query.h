@@ -434,12 +434,15 @@ class QueryArgument {
 
   // Since we already have callsites that use dynamic, we are keeping the
   // support, but internally we unpack them.
-  // This constructor will throw exception if the dynamic isn't acceptable
-  /* implicit */ QueryArgument(const folly::dynamic& param) {
-    initFromDynamic(param);
-  }
-  /* implicit */ QueryArgument(folly::dynamic&& param) {
-    initFromDynamic(param);
+  // This factory method will throw exception if the dynamic isn't acceptable
+  // Creating this as a factory method has two benefits: one is it will prevent
+  // accidentally adding more callsites, secondly it is easily bgs-able.
+  // Also makes it explicit this might throw whereas the other constructors
+  // might not.
+  static inline QueryArgument fromDynamic(const folly::dynamic& dyn) {
+    QueryArgument arg;
+    arg.initFromDynamic(dyn);
+    return arg;
   }
 
   QueryArgument&& operator()(folly::StringPiece q1, const QueryArgument& q2);
@@ -486,9 +489,18 @@ Query::Query(const folly::StringPiece query_text, Args&&... args)
 }
 template <typename Arg, typename... Args>
 void Query::unpack(Arg&& arg, Args&&... args) {
-  params_.emplace_back(std::forward<Arg>(arg));
+  using V = folly::remove_cvref_t<Arg>;
+  if constexpr (
+      std::is_same_v<V, folly::dynamic> ||
+      std::is_same_v<V, decltype(folly::dynamic::object())>) {
+    // Have to forward<Arg> because dynamic(ObjectMaker const&) is deleted.
+    params_.emplace_back(QueryArgument::fromDynamic(std::forward<Arg>(arg)));
+  } else {
+    params_.emplace_back(std::forward<Arg>(arg));
+  }
   unpack(std::forward<Args>(args)...);
 }
+
 } // namespace mysql_client
 } // namespace common
 } // namespace facebook
