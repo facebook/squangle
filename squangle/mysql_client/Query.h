@@ -488,7 +488,7 @@ Query::Query(const folly::StringPiece query_text, Args&&... args)
   unpack(std::forward<Args>(args)...);
 }
 template <typename Arg, typename... Args>
-void Query::unpack(Arg&& arg, Args&&... args) {
+void Query::unpack(Arg&& arg, Args&&... args /* lol */) {
   using V = folly::remove_cvref_t<Arg>;
   if constexpr (
       std::is_same_v<V, folly::dynamic> ||
