@@ -176,7 +176,7 @@ class PoolStats {
         pool_hits_(0),
         pool_misses_(0) {}
   // created connections
-  uint64_t numCreatedPoolConnections() {
+  uint64_t numCreatedPoolConnections() const noexcept {
     return created_pool_connections_.load(std::memory_order_relaxed);
   }
 
@@ -184,7 +184,7 @@ class PoolStats {
     created_pool_connections_.fetch_add(1, std::memory_order_relaxed);
   }
   // destroyed connections
-  uint64_t numDestroyedPoolConnections() {
+  uint64_t numDestroyedPoolConnections() const noexcept {
     return destroyed_pool_connections_.load(std::memory_order_relaxed);
   }
 
@@ -194,7 +194,7 @@ class PoolStats {
 
   // Number of connect operation that were requests, this helps us to compare
   // this with the actual number of connections that were open
-  uint64_t numConnectionsRequested() {
+  uint64_t numConnectionsRequested() const noexcept {
     return connections_requested_.load(std::memory_order_relaxed);
   }
 
@@ -203,7 +203,7 @@ class PoolStats {
   }
 
   // How many times the pool had a connection ready in the cache
-  uint64_t numPoolHits() {
+  uint64_t numPoolHits() const noexcept {
     return pool_hits_.load(std::memory_order_relaxed);
   }
 
@@ -212,7 +212,7 @@ class PoolStats {
   }
 
   // how many times the pool didn't have a connection right in cache
-  uint64_t numPoolMisses() {
+  uint64_t numPoolMisses() const noexcept {
     return pool_misses_.load(std::memory_order_relaxed);
   }
 

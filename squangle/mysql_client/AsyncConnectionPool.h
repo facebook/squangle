@@ -317,7 +317,11 @@ class AsyncConnectionPool
   // and proceed without the pool.
   void shutdown();
 
-  db::PoolStats* stats() {
+  db::PoolStats* stats() noexcept {
+    return &pool_stats_;
+  }
+
+  const db::PoolStats* stats() const noexcept {
     return &pool_stats_;
   }
 
