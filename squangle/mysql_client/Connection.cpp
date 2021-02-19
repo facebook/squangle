@@ -18,11 +18,11 @@ namespace mysql_client {
 MysqlConnectionHolder::MysqlConnectionHolder(
     MysqlClientBase* client,
     MYSQL* mysql,
-    const ConnectionKey conn_key,
+    ConnectionKey conn_key,
     bool already_open)
     : client_(client),
       mysql_(mysql),
-      conn_key_(conn_key),
+      conn_key_(std::move(conn_key)),
       conn_context_(nullptr),
       connection_opened_(already_open),
       can_reuse_(true) {

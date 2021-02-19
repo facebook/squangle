@@ -28,8 +28,8 @@ enum class OperationResult;
 // common between failure and success should come here.
 class OperationResultBase {
  public:
-  OperationResultBase(const ConnectionKey conn_key, Duration elapsed_time)
-      : conn_key_(conn_key), elapsed_time_(elapsed_time) {}
+  OperationResultBase(ConnectionKey conn_key, Duration elapsed_time)
+      : conn_key_(std::move(conn_key)), elapsed_time_(elapsed_time) {}
 
   const ConnectionKey* getConnectionKey() const {
     return &conn_key_;
@@ -53,7 +53,7 @@ class MysqlException : public db::Exception, public OperationResultBase {
       OperationResult failure_type,
       int mysql_errno,
       const std::string& mysql_error,
-      const ConnectionKey conn_key,
+      ConnectionKey conn_key,
       Duration elapsed_time);
 
   int mysql_errno() const {
@@ -88,13 +88,13 @@ class QueryException : public MysqlException {
       OperationResult failure_type,
       int mysql_errno,
       const std::string& mysql_error,
-      const ConnectionKey conn_key,
+      ConnectionKey conn_key,
       Duration elapsed_time)
       : MysqlException(
             failure_type,
             mysql_errno,
             mysql_error,
-            conn_key,
+            std::move(conn_key),
             elapsed_time),
         num_executed_queries_(num_executed_queries) {}
 
@@ -114,7 +114,7 @@ class DbResult : public OperationResultBase {
   DbResult(
       std::unique_ptr<Connection>&& conn,
       OperationResult result,
-      const ConnectionKey conn_key,
+      ConnectionKey conn_key,
       Duration elapsed_time);
 
   bool ok() const;
@@ -138,7 +138,7 @@ class ConnectResult : public DbResult {
   ConnectResult(
       std::unique_ptr<Connection>&& conn,
       OperationResult result,
-      const ConnectionKey& conn_key,
+      ConnectionKey conn_key,
       Duration elapsed_time,
       uint32_t num_attempts);
 
@@ -159,9 +159,9 @@ class FetchResult : public DbResult {
       uint64_t result_size,
       std::unique_ptr<Connection>&& conn,
       OperationResult result,
-      const ConnectionKey conn_key,
+      ConnectionKey conn_key,
       Duration elapsed)
-      : DbResult(std::move(conn), result, conn_key, elapsed),
+      : DbResult(std::move(conn), result, std::move(conn_key), elapsed),
         fetch_result_(std::move(query_result)),
         num_queries_executed_(num_queries_executed),
         result_size_(result_size) {}

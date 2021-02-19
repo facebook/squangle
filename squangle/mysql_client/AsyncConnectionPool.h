@@ -540,7 +540,7 @@ class ConnectPoolOperation : public ConnectOperation {
       std::weak_ptr<AsyncConnectionPool> pool,
       std::shared_ptr<AsyncMysqlClient> client,
       ConnectionKey conn_key)
-      : ConnectOperation(client.get(), conn_key), pool_(pool) {}
+      : ConnectOperation(client.get(), std::move(conn_key)), pool_(pool) {}
 
   db::OperationType getOperationType() const override {
     return db::OperationType::PoolConnect;

@@ -32,7 +32,7 @@ class MysqlConnectionHolder {
   MysqlConnectionHolder(
       MysqlClientBase* client,
       MYSQL* mysql,
-      const ConnectionKey conn_key,
+      ConnectionKey conn_key,
       bool connection_already_open = false);
 
   // Closes the connection in hold

@@ -328,7 +328,7 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
 
 std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
     ConnectionKey conn_key) {
-  auto ret = std::make_shared<ConnectOperation>(this, conn_key);
+  auto ret = std::make_shared<ConnectOperation>(this, std::move(conn_key));
   if (connection_cb_) {
     ret->setObserverCallback(connection_cb_);
   }
@@ -339,7 +339,7 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
 std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
     ConnectionKey conn_key,
     MYSQL* mysql_conn) {
-  return std::make_unique<AsyncConnection>(this, conn_key, mysql_conn);
+  return std::make_unique<AsyncConnection>(this, std::move(conn_key), mysql_conn);
 }
 
 static inline MysqlHandler::Status toHandlerStatus(net_async_status status) {
@@ -679,7 +679,7 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
       op->resultSize(),
       nullptr,
       op->result(),
-      conn_key,
+      std::move(conn_key),
       op->elapsed());
   return result;
 }

@@ -520,7 +520,7 @@ class Connection {
       ConnectionKey conn_key,
       std::unique_ptr<MysqlConnectionHolder> conn)
       : mysql_connection_(std::move(conn)),
-        conn_key_(conn_key),
+        conn_key_(std::move(conn_key)),
         mysql_client_(mysql_client),
         socket_handler_(mysql_client_->getEventBase()),
         pre_operation_callback_(nullptr),
@@ -531,7 +531,7 @@ class Connection {
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
       MYSQL* existing_conn)
-      : conn_key_(conn_key),
+      : conn_key_(std::move(conn_key)),
         mysql_client_(mysql_client),
         socket_handler_(mysql_client_->getEventBase()),
         pre_operation_callback_(nullptr),
@@ -539,7 +539,7 @@ class Connection {
         initialized_(false) {
     if (existing_conn) {
       mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
-          mysql_client_, existing_conn, conn_key);
+          mysql_client_, existing_conn, conn_key_);
     }
   }
 
@@ -981,7 +981,7 @@ class Connection {
 
   std::unique_ptr<MysqlConnectionHolder> mysql_connection_;
 
-  ConnectionKey conn_key_;
+  const ConnectionKey conn_key_;
   ConnectionOptions conn_options_;
 
   bool killOnQueryTimeout_ = false;
@@ -1025,7 +1025,7 @@ class AsyncConnection : public Connection {
       MysqlClientBase* mysql_client,
       ConnectionKey conn_key,
       MYSQL* existing_connection)
-      : Connection(mysql_client, conn_key, existing_connection) {}
+      : Connection(mysql_client, std::move(conn_key), existing_connection) {}
 
   // Operations call these methods as the operation becomes unblocked, as
   // callers want to wait for completion, etc.

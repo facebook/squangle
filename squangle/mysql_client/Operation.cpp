@@ -358,7 +358,7 @@ ConnectOperation::ConnectOperation(
     ConnectionKey conn_key)
     : Operation(Operation::ConnectionProxy(Operation::OwnedConnection(
           mysql_client->createConnection(conn_key, nullptr)))),
-      conn_key_(conn_key),
+      conn_key_(std::move(conn_key)),
       flags_(CLIENT_MULTI_STATEMENTS),
       active_in_client_(true),
       tcp_timeout_handler_(mysql_client->getEventBase(), this) {
