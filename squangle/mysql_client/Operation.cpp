@@ -260,7 +260,12 @@ void Operation::snapshotMysqlErrors() {
   MYSQL* mysql = conn()->mysql();
   mysql_errno_ = ::mysql_errno(mysql);
   if (mysql_errno_ != 0) {
-    mysql_error_ = ::mysql_error(mysql);
+    if (mysql_errno_ == CR_TLS_SERVER_NOT_FOUND) {
+      mysql_error_ = "Server loadshedded the connection request.";
+    } else {
+      mysql_error_ = ::mysql_error(mysql);
+    }
+
     mysql_normalize_error_ = mysql_error_;
   }
 }
