@@ -173,8 +173,7 @@ class RowFields {
   size_t fieldIndex(folly::StringPiece field_name) const {
     auto it = field_name_map_.find(field_name);
     if (it == field_name_map_.end()) {
-      throw std::out_of_range(
-          folly::format("Invalid field: {}", field_name).str());
+      throw std::out_of_range(folly::sformat("Invalid field: {}", field_name));
     }
     return it->second;
   }
@@ -402,8 +401,7 @@ class EphemeralRowFields {
         return i;
       }
     }
-    throw std::out_of_range(
-        folly::format("Invalid field: {}", field_name).str());
+    throw std::out_of_range(folly::sformat("Invalid field: {}", field_name));
   }
 
   enum_field_types fieldType(size_t index) const {
