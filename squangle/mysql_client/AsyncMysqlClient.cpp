@@ -339,7 +339,8 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
 std::unique_ptr<Connection> AsyncMysqlClient::createConnection(
     ConnectionKey conn_key,
     MYSQL* mysql_conn) {
-  return std::make_unique<AsyncConnection>(this, std::move(conn_key), mysql_conn);
+  return std::make_unique<AsyncConnection>(
+      this, std::move(conn_key), mysql_conn);
 }
 
 static inline MysqlHandler::Status toHandlerStatus(net_async_status status) {
@@ -435,12 +436,8 @@ void Connection::initialize(bool initMysql) {
 }
 
 Connection::~Connection() {
-  // TODO: If isInEventBaseThread() is true, assert in resetOp->wait() fails
-  // because EventBaseThread should not sleep while waiting for its own
-  // operaiton. For now, we will send reset only when it is called outside of
-  // evb. Note that cleanupCompletedOperations() can call this from evb.
   if (mysql_connection_ && conn_dying_callback_ && needToCloneConnection_ &&
-      isReusable() && !inTransaction() && !isInEventBaseThread() &&
+      isReusable() && !inTransaction() &&
       getConnectionOptions().isEnableResetConnBeforeClose()) {
     // We clone this Connection object to send COM_RESET_CONNECTION command
     // via the connection before returning it to the connection pool.
@@ -449,22 +446,28 @@ Connection::~Connection() {
     // This object's callback is set to null and the cloned object's
     // callback instead points to the original callback function, which will
     // be called after COM_RESET_CONNECTION.
-    auto connHolder = stealMysqlConnectionHolder(true);
-    auto conn = std::make_unique<AsyncConnection>(
-        client(), *getKey(), std::move(connHolder));
-    conn->needToCloneConnection_ = false;
-    conn->setConnectionOptions(getConnectionOptions());
-    conn->setConnectionDyingCallback(std::move(conn_dying_callback_));
-    conn_dying_callback_ = nullptr;
 
-    auto resetOp = Connection::resetConn(std::move(conn));
-    if (client()->runInThread([resetOp]() {
-          // addOperation() is necessary here for proper cancelling of reset
-          // operation in case of sudden AsyncMysqlClient shutdown
-          resetOp->connection()->client()->addOperation(resetOp);
-          resetOp->run();
-        })) {
-      resetOp->wait();
+    // TODO: just set NeedResetBeforeReuse in any case
+    if (!isInEventBaseThread()) {
+      auto connHolder = stealMysqlConnectionHolder(true);
+      auto conn = std::make_unique<AsyncConnection>(
+          client(), *getKey(), std::move(connHolder));
+      conn->needToCloneConnection_ = false;
+      conn->setConnectionOptions(getConnectionOptions());
+      conn->setConnectionDyingCallback(std::move(conn_dying_callback_));
+      conn_dying_callback_ = nullptr;
+
+      auto resetOp = Connection::resetConn(std::move(conn));
+      if (client()->runInThread([resetOp]() {
+            // addOperation() is necessary here for proper cancelling of reset
+            // operation in case of sudden AsyncMysqlClient shutdown
+            resetOp->connection()->client()->addOperation(resetOp);
+            resetOp->run();
+          })) {
+        resetOp->wait();
+      }
+    } else {
+      mysql_connection_->setNeedResetBeforeReuse();
     }
   }
 

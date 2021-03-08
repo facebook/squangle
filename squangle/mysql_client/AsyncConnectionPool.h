@@ -406,6 +406,15 @@ class AsyncConnectionPool
 
   void connectionSpotFreed(const PoolKey& conn_key);
 
+  void openNewConnection(
+      ConnectPoolOperation* rawPoolOp,
+      const PoolKey& poolKey);
+
+  void resetConnection(
+      ConnectPoolOperation* rawPoolOp,
+      const PoolKey& poolKey,
+      std::unique_ptr<MysqlPooledHolder> mysqlConn);
+
   // Auxiliary class to isolate the queue code. Clean ups also happen in this
   // class, it mainly manages the ConnectPoolOperation and
   // MysqlPooledHolder containers.

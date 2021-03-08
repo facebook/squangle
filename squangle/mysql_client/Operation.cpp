@@ -1613,10 +1613,14 @@ void ResetOperation::socketActionable() {
 
   if (status == MysqlHandler::PENDING) {
     waitForSocketActionable();
-  } else if (status == MysqlHandler::DONE) {
-    completeOperation(OperationResult::Succeeded);
-  } else { // MysqlHandler::ERROR
-    completeOperation(OperationResult::Failed);
+  } else {
+    auto result = (status == MysqlHandler::DONE)
+        ? OperationResult::Succeeded
+        : OperationResult::Failed; // MysqlHandler::ERROR
+    completeOperation(result);
+    if (callback_) {
+      callback_(*this, result);
+    }
   }
 }
 

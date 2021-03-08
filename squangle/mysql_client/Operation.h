@@ -95,18 +95,19 @@ typedef enum connect_stage MySqlConnectStage;
 // ConnectCallback is invoked when a connection succeeds or fails.  A
 // QueryCallback is called for each row block (see Row.h) as well as
 // when the query completes (either successfully or with an error).
-typedef std::function<void(ConnectOperation&)> ConnectCallback;
+using ConnectCallback = std::function<void(ConnectOperation&)>;
 // Callback for observer. I will be called for a completed operation,
 // after the callback for the specific operation is called, if one is defined.
-typedef std::function<void(Operation&)> ObserverCallback;
+using ObserverCallback = std::function<void(Operation&)>;
 // Callback that is set on the ConnectOperation, and is then chained along all
 // subsequent queries on that given connection.
-typedef folly::Function<void(Operation&)> ChainedCallback;
-typedef std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>
-    QueryCallback;
-typedef std::function<
-    void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>
-    MultiQueryCallback;
+using ChainedCallback = folly::Function<void(Operation&)>;
+using QueryCallback =
+    std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>;
+using MultiQueryCallback = std::function<
+    void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>;
+using ResetOperationCallback =
+    std::function<void(ResetOperation&, OperationResult)>;
 
 enum class SquangleErrno : uint16_t {
   SQ_ERRNO_CONN_TIMEOUT = 7000,
@@ -1371,6 +1372,9 @@ class ResetOperation : public Operation {
   db::OperationType getOperationType() const override {
     return db::OperationType::Reset;
   }
+  void setCallback(ResetOperationCallback callback) {
+    callback_ = callback;
+  }
 
  protected:
   void socketActionable() override;
@@ -1380,6 +1384,7 @@ class ResetOperation : public Operation {
   ResetOperation* specializedRun() override;
 
  private:
+  ResetOperationCallback callback_{nullptr};
   friend class Connection;
 };
 

@@ -904,7 +904,8 @@ class Connection {
   // COM_RESET_CONNECTION before it is completed destructed.
   bool needToCloneConnection_{true};
 
-  std::shared_ptr<ResetOperation> resetConn(std::unique_ptr<Connection> conn);
+  static std::shared_ptr<ResetOperation> resetConn(
+      std::unique_ptr<Connection> conn);
 
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.

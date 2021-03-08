@@ -278,6 +278,65 @@ void AsyncConnectionPool::recycleMysqlConnection(
   }
 }
 
+void AsyncConnectionPool::openNewConnection(
+    ConnectPoolOperation* rawPoolOp,
+    const PoolKey& poolKey) {
+  stats()->incrPoolMisses();
+  // TODO: Check if we are jammed and fail fast
+
+  // The client holds shared pointers for all active operations
+  // this method is called by the `run()` in the operation, so it
+  // should always exist in the client
+  auto pool_op = std::dynamic_pointer_cast<ConnectPoolOperation>(
+      rawPoolOp->getSharedPointer());
+  // Sanity check
+  DCHECK(pool_op != nullptr);
+  conn_storage_.queueOperation(poolKey, pool_op);
+  // Copy the ConnectionContext from the incoming operation. These contexts
+  // contain application specific logging that will be lost if not passed to
+  // the new ConnectOperation that is spawned to fulfill the pool miss.
+  // Creating a copy ensures that both operations are logged with the
+  // expected additional logging
+  std::unique_ptr<db::ConnectionContextBase> context;
+  if (pool_op->connection_context_) {
+    context = pool_op->connection_context_->copy();
+  }
+  tryRequestNewConnection(poolKey, std::move(context));
+}
+
+void AsyncConnectionPool::resetConnection(
+    ConnectPoolOperation* rawPoolOp,
+    const PoolKey& poolKey,
+    std::unique_ptr<MysqlPooledHolder> mysqlConn) {
+  auto conn = std::make_unique<AsyncConnection>(
+      getMysqlClient().get(),
+      rawPoolOp->getConnectionKey(),
+      std::move(mysqlConn));
+  conn->needToCloneConnection_ = false;
+  auto resetOp = Connection::resetConn(std::move(conn));
+  resetOp->setCallback(
+      [this, rawPoolOp, poolKey](ResetOperation& op, OperationResult result) {
+        if (result == OperationResult::Failed) {
+          openNewConnection(rawPoolOp, poolKey);
+          return;
+        }
+        auto connection = op.releaseConnection();
+        auto mysqlConnHolder = connection->stealMysqlConnectionHolder(true);
+        auto pmysqlConn = mysqlConnHolder.release();
+        std::unique_ptr<MysqlPooledHolder> mysqlConnection(
+            static_cast<MysqlPooledHolder*>(pmysqlConn));
+
+        stats()->incrPoolHits();
+        mysqlConnection->setReusable(true);
+        rawPoolOp->connectionCallback(std::move(mysqlConnection));
+      });
+
+  getMysqlClient()->runInThread([resetOp = std::move(resetOp)]() {
+    resetOp->connection()->client()->addOperation(resetOp);
+    resetOp->run();
+  });
+}
+
 void AsyncConnectionPool::registerForConnection(
     ConnectPoolOperation* raw_pool_op) {
   // Runs only in main thread by run() in the ConnectPoolOperation
@@ -299,27 +358,10 @@ void AsyncConnectionPool::registerForConnection(
       conn_storage_.popConnection(pool_key);
 
   if (mysql_conn == nullptr) {
-    stats()->incrPoolMisses();
-    // TODO: Check if we are jammed and fail fast
-
-    // The client holds shared pointers for all active operations
-    // this method is called by the `run()` in the operation, so it
-    // should always exist in the client
-    auto pool_op = std::dynamic_pointer_cast<ConnectPoolOperation>(
-        raw_pool_op->getSharedPointer());
-    // Sanity check
-    DCHECK(pool_op != nullptr);
-    conn_storage_.queueOperation(pool_key, pool_op);
-    // Copy the ConnectionContext from the incoming operation. These contexts
-    // contain application specific logging that will be lost if not passed to
-    // the new ConnectOperation that is spawned to fulfill the pool miss.
-    // Creating a copy ensures that both operations are logged with the
-    // expected additional logging
-    std::unique_ptr<db::ConnectionContextBase> context;
-    if (pool_op->connection_context_) {
-      context = pool_op->connection_context_->copy();
-    }
-    tryRequestNewConnection(pool_key, std::move(context));
+    openNewConnection(raw_pool_op, pool_key);
+  } else if (mysql_conn->needResetBeforeReuse()) {
+    // reset connection before reusing the connection
+    resetConnection(raw_pool_op, pool_key, std::move(mysql_conn));
   } else {
     // Cache hit
     stats()->incrPoolHits();
