@@ -416,6 +416,11 @@ ConnectOperation* ConnectOperation::enableResetConnBeforeClose() {
   return this;
 }
 
+ConnectOperation* ConnectOperation::enableDelayedResetConn() {
+  conn_options_.enableDelayedResetConn();
+  return this;
+}
+
 ConnectOperation* ConnectOperation::setTimeout(Duration timeout) {
   conn_options_.setTimeout(timeout);
   Operation::setTimeout(timeout);

@@ -466,7 +466,7 @@ Connection::~Connection() {
           })) {
         resetOp->wait();
       }
-    } else {
+    } else if (getConnectionOptions().isEnableDelayedResetConn()) {
       mysql_connection_->setNeedResetBeforeReuse();
     }
   }

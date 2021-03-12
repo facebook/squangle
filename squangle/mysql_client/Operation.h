@@ -328,6 +328,15 @@ class ConnectionOptions {
     return reset_conn_before_close_;
   }
 
+  ConnectionOptions& enableDelayedResetConn() {
+    delayed_reset_conn_ = true;
+    return *this;
+  }
+
+  bool isEnableDelayedResetConn() const {
+    return delayed_reset_conn_;
+  }
+
  private:
   Duration connection_timeout_;
   folly::Optional<Duration> connection_tcp_timeout_;
@@ -341,6 +350,7 @@ class ConnectionOptions {
   uint8_t dscp_ = 0;
   folly::Optional<std::string> sni_servername_;
   bool reset_conn_before_close_ = false;
+  bool delayed_reset_conn_ = false;
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -751,6 +761,7 @@ class ConnectOperation : public Operation {
   }
   ConnectOperation* setSniServerName(const std::string& sni_servername);
   ConnectOperation* enableResetConnBeforeClose();
+  ConnectOperation* enableDelayedResetConn();
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(
