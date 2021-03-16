@@ -45,7 +45,10 @@ namespace mysql_client {
 
 namespace {
 const std::string kQueryChecksumKey = "checksum";
-}
+
+using MysqlCertValidatorCallback = int(*)(
+    X509 *server_cert, const void *context, const char **errptr);
+} // namespace
 
 namespace chrono = std::chrono;
 
@@ -389,6 +392,11 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
   }
+  if (conn_opts.getCertValidationCallback()) {
+    setCertValidationCallback(
+        conn_opts.getCertValidationCallback(),
+        conn_opts.getCertValidationContext());
+  }
   return this;
 }
 
@@ -418,6 +426,14 @@ ConnectOperation* ConnectOperation::enableResetConnBeforeClose() {
 
 ConnectOperation* ConnectOperation::enableDelayedResetConn() {
   conn_options_.enableDelayedResetConn();
+  return this;
+}
+
+ConnectOperation* ConnectOperation::setCertValidationCallback(
+    CertValidatorCallback callback, const void* context) {
+  CHECK_THROW(
+      state() == OperationState::Unstarted, db::OperationStateException);
+  conn_options_.setCertValidationCallback(callback, context);
   return this;
 }
 
@@ -564,6 +580,19 @@ void ConnectOperation::specializedRunImpl() {
         mysql,
         MYSQL_OPT_TLS_SNI_SERVERNAME,
         (*conn_options_.getSniServerName()).c_str());
+  }
+
+  if (conn_options_.getCertValidationCallback()) {
+    MysqlCertValidatorCallback callback = mysqlCertValidator;
+    const void* self = this;
+    mysql_options(
+        mysql,
+        MYSQL_OPT_TLS_CERT_CALLBACK,
+        &callback);
+    mysql_options(
+        mysql,
+        MYSQL_OPT_TLS_CERT_CALLBACK_CONTEXT,
+        &self);
   }
 
   conn()->socketHandler()->setOperation(this);
@@ -815,6 +844,27 @@ void ConnectOperation::removeClientReference() {
     client()->activeConnectionRemoved(&conn_key_);
   }
 }
+
+int ConnectOperation::mysqlCertValidator(
+    X509 *server_cert, const void *context, const char **errptr) {
+  ConnectOperation* self =
+      reinterpret_cast<ConnectOperation*>(const_cast<void*>(context));
+  CHECK_NOTNULL(self);
+  const CertValidatorCallback callback =
+      self->conn_options_.getCertValidationCallback();
+  CHECK(callback);
+  const void* callbackContext = self->conn_options_.getCertValidationContext();
+  folly::StringPiece errorMessage;
+
+  // "libmysql" expects this callback to return "0" if the cert validation was
+  // successful, and return "1" if validation failed.
+  int result = callback(server_cert, callbackContext, errorMessage) ? 0 : 1;
+  if (!errorMessage.empty()) {
+    *errptr = errorMessage.data();
+  }
+  return result;
+}
+
 
 FetchOperation::FetchOperation(
     ConnectionProxy&& conn,

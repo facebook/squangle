@@ -106,6 +106,8 @@ using QueryCallback =
     std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>;
 using MultiQueryCallback = std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>;
+using CertValidatorCallback = std::function<
+  bool(X509 *server_cert, const void *context, folly::StringPiece& errMsg)>;
 using ResetOperationCallback =
     std::function<void(ResetOperation&, OperationResult)>;
 
@@ -337,6 +339,21 @@ class ConnectionOptions {
     return delayed_reset_conn_;
   }
 
+  ConnectionOptions& setCertValidationCallback(
+      CertValidatorCallback callback, const void* context) {
+    certValidationCallback_ = callback;
+    certValidationContext_ = context;
+    return *this;
+  }
+
+  const CertValidatorCallback& getCertValidationCallback() const {
+    return certValidationCallback_;
+  }
+
+  const void* getCertValidationContext() const {
+    return certValidationContext_;
+  }
+
  private:
   Duration connection_timeout_;
   folly::Optional<Duration> connection_tcp_timeout_;
@@ -351,6 +368,8 @@ class ConnectionOptions {
   folly::Optional<std::string> sni_servername_;
   bool reset_conn_before_close_ = false;
   bool delayed_reset_conn_ = false;
+  CertValidatorCallback certValidationCallback_{nullptr};
+  const void* certValidationContext_{nullptr};
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -762,6 +781,8 @@ class ConnectOperation : public Operation {
   ConnectOperation* setSniServerName(const std::string& sni_servername);
   ConnectOperation* enableResetConnBeforeClose();
   ConnectOperation* enableDelayedResetConn();
+  ConnectOperation* setCertValidationCallback(
+      CertValidatorCallback callback, const void* context = nullptr);
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(
@@ -888,6 +909,9 @@ class ConnectOperation : public Operation {
   void maybeStoreSSLSession();
 
   bool isDoneWithTcpHandShake();
+
+  static int mysqlCertValidator(
+      X509 *server_cert, const void *context, const char **errptr);
 
   const ConnectionKey conn_key_;
 
