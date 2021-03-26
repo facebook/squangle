@@ -550,11 +550,19 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
     ret->setTimeout(timeout);
   }
 
-  ret->connection()->mysql_client_->addOperation(ret);
-  ret->connection()->socket_handler_.setOperation(ret.get());
-  ret->pre_operation_callback_ = ret->connection()->stealPreOperationCallback();
-  ret->post_operation_callback_ =
-      ret->connection()->stealPostOperationCallback();
+  auto* conn = ret->connection();
+  conn->mysql_client_->addOperation(ret);
+  conn->socket_handler_.setOperation(ret.get());
+  ret->setPreOperationCallback([conn](Operation& op) {
+    if (conn->pre_operation_callback_) {
+      conn->pre_operation_callback_(op);
+    }
+  });
+  ret->setPostOperationCallback([conn](Operation& op) {
+    if (conn->post_operation_callback_) {
+      conn->post_operation_callback_(op);
+    }
+  });
   return ret;
 }
 

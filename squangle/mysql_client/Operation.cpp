@@ -237,10 +237,6 @@ void Operation::completeOperationInner(OperationResult result) {
     post_operation_callback_(*this);
   }
 
-  // Pass the chained callback to the Connection now that we are done with it
-  conn()->setPreOperationCallback(std::move(pre_operation_callback_));
-  conn()->setPostOperationCallback(std::move(post_operation_callback_));
-
   specializedCompleteOperation();
 
   // call observer callback
@@ -794,6 +790,10 @@ void ConnectOperation::maybeStoreSSLSession() {
 }
 
 void ConnectOperation::specializedCompleteOperation() {
+  // Pass the chained callback to the Connection now that we are done with it
+  conn()->setPreOperationCallback(std::move(pre_operation_callback_));
+  conn()->setPostOperationCallback(std::move(post_operation_callback_));
+
   maybeStoreSSLSession();
   // Can only log this on successful connections because unsuccessful
   // ones call mysql_close_free inside libmysql

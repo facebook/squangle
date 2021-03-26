@@ -847,14 +847,6 @@ class Connection {
         setCallback(std::move(post_operation_callback_), std::move(callback));
   }
 
-  ChainedCallback stealPreOperationCallback() {
-    return std::move(pre_operation_callback_);
-  }
-
-  ChainedCallback stealPostOperationCallback() {
-    return std::move(post_operation_callback_);
-  }
-
   const folly::EventBase* getEventBase() const {
     return client()->getEventBase();
   }
