@@ -792,7 +792,7 @@ void ConnectionSocketHandler::handlerReady(uint16_t /*events*/) noexcept {
   if (op_->state() == OperationState::Cancelling) {
     op_->cancel();
   } else {
-    op_->socketActionable();
+    op_->invokeSocketActionable();
   }
 }
 } // namespace mysql_client

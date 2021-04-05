@@ -51,6 +51,7 @@
 #include <folly/dynamic.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventHandler.h>
+#include <folly/io/async/Request.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/ssl/OpenSSLPtrTypes.h>
 #include "squangle/logger/DBEventLogger.h"
@@ -701,6 +702,11 @@ class Operation : public std::enable_shared_from_this<Operation> {
   ChainedCallback post_operation_callback_;
 
  private:
+  // Restore folly::RequestContext and also invoke socketActionable()
+  void invokeSocketActionable();
+
+  std::shared_ptr<folly::RequestContext> request_context_;
+
   folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;
   std::unique_ptr<db::ConnectionContextBase> connection_context_;

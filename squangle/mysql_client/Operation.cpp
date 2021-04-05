@@ -97,6 +97,7 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       mysql_errno_(0),
       pre_operation_callback_(nullptr),
       post_operation_callback_(nullptr),
+      request_context_(folly::RequestContext::saveContext()),
       observer_callback_(nullptr),
       mysql_client_(conn()->mysql_client_) {
   timeout_ = Duration(FLAGS_async_mysql_timeout_micros);
@@ -112,6 +113,12 @@ bool Operation::isEventBaseSet() {
 }
 
 Operation::~Operation() {}
+
+void Operation::invokeSocketActionable() {
+  DCHECK(isInEventBaseThread());
+  folly::RequestContextScopeGuard guard(request_context_);
+  socketActionable();
+}
 
 void Operation::waitForSocketActionable() {
   DCHECK(isInEventBaseThread());
@@ -147,6 +154,8 @@ void Operation::waitForSocketActionable() {
 }
 
 void Operation::cancel() {
+  folly::RequestContextScopeGuard guard(std::move(request_context_));
+
   {
     // This code competes with `run()` to see who changes `state_` first,
     // since they both have the combination `check and change` this must
