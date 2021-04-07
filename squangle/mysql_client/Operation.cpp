@@ -743,7 +743,10 @@ void ConnectOperation::timeoutHandler(
         delta.count(),
         std::lround(avgLoopTimeUs / 1000.0),
         (isTcpTimeout ? 1 : 0));
-    setAsyncClientError(msg, "Connect timed out (loop stalled)");
+    setAsyncClientError(
+        CR_SERVER_LOST,
+        msg,
+        "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
 }
@@ -1371,7 +1374,10 @@ void FetchOperation::specializedTimeoutTriggered() {
         kErrorPrefix,
         rows.c_str(),
         std::lround(avgLoopTimeUs / 1000.0));
-    setAsyncClientError(msg, "Query timed out (loop stalled)");
+    setAsyncClientError(
+        CR_NET_READ_INTERRUPTED,
+        msg,
+        "Query timed out (loop stalled)");
   }
   completeOperation(OperationResult::TimedOut);
 }
