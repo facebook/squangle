@@ -262,7 +262,13 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
 
 std::string MultiQueryStreamHandler::escapeString(
     folly::StringPiece str) const {
-  return operation_->connection()->escapeString(str);
+  if (auto conn = operation_->connection(); conn) {
+    return conn->escapeString(str);
+  }
+
+  DCHECK(false)
+      << "Attempting to call escapeString on a handler with a null connection";
+  return std::string();
 }
 
 // Information about why this operation failed.
