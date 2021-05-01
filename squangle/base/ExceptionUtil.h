@@ -27,9 +27,14 @@ class Exception : public std::exception {
   Exception(const Exception& other) : msg_(other.msg_) {}
   Exception(Exception&& other) noexcept : msg_(std::move(other.msg_)) {}
 
-  template <typename... Args>
-  explicit Exception(Args&&... args)
-      : msg_(folly::to<std::string>(std::forward<Args>(args)...)) {}
+  template <
+      typename Arg,
+      typename... Args,
+      std::enable_if_t<
+          !std::is_same_v<folly::remove_cvref_t<Arg>, Exception>, int> = 0>
+  explicit Exception(Arg&& arg, Args&&... args)
+      : msg_(folly::to<std::string>(
+            std::forward<Arg>(arg), std::forward<Args>(args)...)) {}
 
   ~Exception() throw() override {}
 
