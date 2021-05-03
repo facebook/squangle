@@ -9,10 +9,11 @@
 #ifndef COMMON_DB_EXCEPTION_UTIL_H
 #define COMMON_DB_EXCEPTION_UTIL_H
 
-#include <folly/Conv.h>
+#include <folly/CPortability.h>
 
 #include <chrono>
 #include <exception>
+#include <stdexcept>
 #include <string>
 
 namespace facebook {
@@ -20,48 +21,24 @@ namespace db {
 
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
 
-// Stolen from proxygen/Exception.h.
-class Exception : public std::exception {
+class FOLLY_EXPORT Exception : public std::runtime_error {
  public:
-  explicit Exception(std::string const& msg) : msg_(msg) {}
-  Exception(const Exception& other) : msg_(other.msg_) {}
-  Exception(Exception&& other) noexcept : msg_(std::move(other.msg_)) {}
-
-  template <
-      typename Arg,
-      typename... Args,
-      std::enable_if_t<
-          !std::is_same_v<folly::remove_cvref_t<Arg>, Exception>, int> = 0>
-  explicit Exception(Arg&& arg, Args&&... args)
-      : msg_(folly::to<std::string>(
-            std::forward<Arg>(arg), std::forward<Args>(args)...)) {}
-
-  ~Exception() throw() override {}
-
-  // std::exception methods
-  const char* what() const throw() override {
-    return msg_.c_str();
-  }
-
- private:
-  const std::string msg_;
+  using std::runtime_error::runtime_error;
 };
 
-class OperationStateException : public Exception {
+class FOLLY_EXPORT OperationStateException : public Exception {
  public:
-  explicit OperationStateException(std::string const& msg) : Exception(msg) {}
+  using Exception::Exception;
 };
 
-class InvalidConnectionException : public Exception {
+class FOLLY_EXPORT InvalidConnectionException : public Exception {
  public:
-  explicit InvalidConnectionException(std::string const& msg)
-      : Exception(msg) {}
+  using Exception::Exception;
 };
 
-class RequiredOperationFailedException : public Exception {
+class FOLLY_EXPORT RequiredOperationFailedException : public Exception {
  public:
-  explicit RequiredOperationFailedException(std::string const& msg)
-      : Exception(msg) {}
+  using Exception::Exception;
 };
 } // namespace db
 } // namespace facebook

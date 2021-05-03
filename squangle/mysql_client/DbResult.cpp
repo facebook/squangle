@@ -44,7 +44,7 @@ MysqlException::MysqlException(
                     conn_key.db_name,
                     conn_key.host,
                     conn_key.port)
-              : Operation::toString(failure_type)),
+              : std::string(Operation::toString(failure_type))),
       OperationResultBase(std::move(conn_key), elapsed_time),
       failure_type_(failure_type),
       mysql_errno_(mysql_errno),
