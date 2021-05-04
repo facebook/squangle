@@ -1555,12 +1555,11 @@ void QueryOperation::notifyRowsReady() {
   if (row_block.numRows() == 0) {
     return;
   }
+
+  query_result_->appendRowBlock(std::move(row_block));
   if (buffered_query_callback_) {
-    query_result_->setPartialRows(std::move(row_block));
     buffered_query_callback_(
         *this, query_result_.get(), QueryCallbackReason::RowsFetched);
-  } else {
-    query_result_->appendRowBlock(std::move(row_block));
   }
 }
 
@@ -1625,12 +1624,10 @@ void MultiQueryOperation::notifyRowsReady() {
     return;
   }
 
+  current_query_result_->appendRowBlock(std::move(row_block));
   if (buffered_query_callback_) {
-    current_query_result_->setPartialRows(std::move(row_block));
     buffered_query_callback_(
         *this, current_query_result_.get(), QueryCallbackReason::RowsFetched);
-  } else {
-    current_query_result_->appendRowBlock(std::move(row_block));
   }
 }
 
@@ -1651,11 +1648,11 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
   current_query_result_->setResponseAttributes(
       FetchOperation::currentRespAttrs());
 
+  query_results_.emplace_back(std::move(*current_query_result_.get()));
+
   if (buffered_query_callback_) {
     buffered_query_callback_(
         *this, current_query_result_.get(), QueryCallbackReason::QueryBoundary);
-  } else {
-    query_results_.emplace_back(std::move(*current_query_result_.get()));
   }
   current_query_result_ =
       std::make_unique<QueryResult>(current_query_result_->queryNum() + 1);

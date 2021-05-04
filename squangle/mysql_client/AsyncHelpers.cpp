@@ -14,43 +14,29 @@ namespace common {
 namespace mysql_client {
 
 QueryCallback resultAppender(const QueryAppenderCallback& callback) {
-  // rowBlocks is deleted when the appended RowBlocks are passed to
-  // QueryAppenderCallback
-  auto* rowBlocks = new std::vector<RowBlock>();
-  return [callback, rowBlocks](
+  return [callback](
              QueryOperation& op, QueryResult* res, QueryCallbackReason reason) {
-    if (reason == QueryCallbackReason::RowsFetched) {
-      rowBlocks->push_back(res->stealCurrentRowBlock());
-    } else {
-      // Failure or success, set rowblocks in the result and send it to callback
-      // It's important to use this final result because of the other values as
-      // lastInsertId, numRowsAffected. It also avoid forgetting to copy
-      // something.
-      res->setRowBlocks(std::move(*rowBlocks));
-      delete rowBlocks;
-      callback(op, std::move(*res), reason);
+    if (reason != QueryCallbackReason::RowsFetched) {
+      QueryResult result{0};
+      if (op.ok()) {
+        // Can't access query result on error
+        result = op.stealQueryResult();
+      }
+      callback(op, std::move(result), reason);
     }
   };
 }
 
 MultiQueryCallback resultAppender(const MultiQueryAppenderCallback& callback) {
-  auto* rowBlocks = new std::vector<RowBlock>();
-  auto* allResults = new std::vector<QueryResult>();
-  return [callback, rowBlocks, allResults](
+  return [callback](
              MultiQueryOperation& op,
              QueryResult* res,
              QueryCallbackReason reason) {
-    if (reason == QueryCallbackReason::RowsFetched) {
-      rowBlocks->push_back(res->stealCurrentRowBlock());
-    } else if (reason == QueryCallbackReason::QueryBoundary) {
-      // wrap up one query
-      res->setRowBlocks(std::move(*rowBlocks));
-      allResults->push_back(std::move(*res));
-      rowBlocks->clear();
-    } else {
-      callback(op, std::move(*allResults), reason);
-      delete allResults;
-      delete rowBlocks;
+    if (reason != QueryCallbackReason::RowsFetched &&
+        reason != QueryCallbackReason::QueryBoundary) {
+      // stealQueryResults is always allowed since in multiQuery
+      // the first few queries might succeed and then be followed by a failure
+      callback(op, op.stealQueryResults(), reason);
     }
   };
 }
