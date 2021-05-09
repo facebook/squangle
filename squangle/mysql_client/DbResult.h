@@ -51,12 +51,12 @@ class MysqlException : public db::Exception, public OperationResultBase {
  public:
   MysqlException(
       OperationResult failure_type,
-      int mysql_errno,
+      unsigned int mysql_errno,
       const std::string& mysql_error,
       ConnectionKey conn_key,
       Duration elapsed_time);
 
-  int mysql_errno() const {
+  unsigned int mysql_errno() const {
     return mysql_errno_;
   }
   const std::string& mysql_error() const {
@@ -75,7 +75,7 @@ class MysqlException : public db::Exception, public OperationResultBase {
  private:
   OperationResult failure_type_;
 
-  int mysql_errno_;
+  unsigned int mysql_errno_;
   std::string mysql_error_;
 };
 
@@ -86,7 +86,7 @@ class QueryException : public MysqlException {
   QueryException(
       int num_executed_queries,
       OperationResult failure_type,
-      int mysql_errno,
+      unsigned int mysql_errno,
       const std::string& mysql_error,
       ConnectionKey conn_key,
       Duration elapsed_time)
@@ -592,7 +592,7 @@ class MultiQueryStreamHandler {
 
   std::string escapeString(folly::StringPiece str) const;
 
-  int mysql_errno() const;
+  unsigned int mysql_errno() const;
   const std::string& mysql_error() const;
 
  private:

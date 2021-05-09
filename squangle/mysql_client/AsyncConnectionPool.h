@@ -446,7 +446,7 @@ class AsyncConnectionPool
     void failOperations(
         const PoolKey& pool_key,
         OperationResult op_result,
-        int mysql_errno,
+        unsigned int mysql_errno,
         const std::string& mysql_error);
 
     // Returns a connection for the given ConnectionKey. The connection will be
@@ -569,7 +569,7 @@ class ConnectPoolOperation : public ConnectOperation {
   // Called when the connection that the pool is trying to acquire failed
   void failureCallback(
       OperationResult failure,
-      int mysql_errno,
+      unsigned int mysql_errno,
       const std::string& mysql_error);
 
   std::weak_ptr<AsyncConnectionPool> pool_;

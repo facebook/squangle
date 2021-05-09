@@ -591,7 +591,7 @@ void AsyncConnectionPool::ConnStorage::queueOperation(
 void AsyncConnectionPool::ConnStorage::failOperations(
     const PoolKey& pool_key,
     OperationResult op_result,
-    int mysql_errno,
+    unsigned int mysql_errno,
     const std::string& mysql_error) {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
@@ -865,7 +865,7 @@ void ConnectPoolOperation::connectionCallback(
 
 void ConnectPoolOperation::failureCallback(
     OperationResult failure,
-    int mysql_errno,
+    unsigned int mysql_errno,
     const std::string& mysql_error) {
   mysql_errno_ = mysql_errno;
   mysql_error_ = mysql_error;

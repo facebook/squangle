@@ -29,7 +29,7 @@ std::ostream& operator<<(
 
 MysqlException::MysqlException(
     OperationResult failure_type,
-    int mysql_errno,
+    unsigned int mysql_errno,
     const std::string& mysql_error,
     ConnectionKey conn_key,
     Duration elapsed_time)
@@ -272,7 +272,7 @@ std::string MultiQueryStreamHandler::escapeString(
 }
 
 // Information about why this operation failed.
-int MultiQueryStreamHandler::mysql_errno() const {
+unsigned int MultiQueryStreamHandler::mysql_errno() const {
   return operation_->mysql_errno();
 }
 

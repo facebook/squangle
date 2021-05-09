@@ -423,7 +423,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   virtual void mustSucceed() = 0;
 
   // Information about why this operation failed.
-  int mysql_errno() const {
+  unsigned int mysql_errno() const {
     return mysql_errno_;
   }
   const std::string& mysql_error() const {
@@ -553,7 +553,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Same as above, but specify the error code.
   void setAsyncClientError(
-      int mysql_errno,
+      unsigned int mysql_errno,
       folly::StringPiece msg,
       folly::StringPiece normalizeMsg = "");
 
@@ -686,7 +686,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   ConnectionProxy conn_proxy_;
 
   // Errors that may have occurred.
-  int mysql_errno_;
+  unsigned int mysql_errno_;
   std::string mysql_error_;
   std::string mysql_normalize_error_;
 

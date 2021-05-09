@@ -290,7 +290,7 @@ void Operation::setAsyncClientError(
 }
 
 void Operation::setAsyncClientError(
-    int mysql_errno,
+    unsigned int mysql_errno,
     folly::StringPiece msg,
     folly::StringPiece normalizeMsg) {
   if (normalizeMsg.empty()) {
