@@ -163,16 +163,6 @@ AsyncMysqlClient::~AsyncMysqlClient() {
   VLOG(2) << "AsyncMysqlClient finished destructor";
 }
 
-void AsyncMysqlClient::setDBLoggerForTesting(
-    std::unique_ptr<db::SquangleLoggerBase> dbLogger) {
-  db_logger_ = std::move(dbLogger);
-}
-
-void AsyncMysqlClient::setDBCounterForTesting(
-    std::unique_ptr<db::DBCounterBase> dbCounter) {
-  client_stats_ = std::move(dbCounter);
-}
-
 void MysqlClientBase::logQuerySuccess(
     const db::QueryLoggingData& logging_data,
     const Connection& conn) {

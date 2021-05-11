@@ -170,6 +170,18 @@ class MysqlClientBase {
     return db_logger_.get();
   }
 
+  // For internal (testing) use only
+  std::unique_ptr<db::SquangleLoggerBase> setDBLoggerForTesting(
+      std::unique_ptr<db::SquangleLoggerBase> dbLogger) {
+    std::swap(db_logger_, dbLogger);
+    return dbLogger;
+  }
+  std::unique_ptr<db::DBCounterBase> setDBCounterForTesting(
+      std::unique_ptr<db::DBCounterBase> dbCounter) {
+    std::swap(client_stats_, dbCounter);
+    return dbCounter;
+  }
+
   void setConnectionCallback(ObserverCallback connection_cb) {
     if (connection_cb_) {
       auto old_cb = connection_cb_;
@@ -293,10 +305,6 @@ class AsyncMysqlClient : public MysqlClientBase {
   const std::thread::id threadId() const {
     return thread_.get_id();
   }
-
-  // For internal use only
-  void setDBLoggerForTesting(std::unique_ptr<db::SquangleLoggerBase> dbLogger);
-  void setDBCounterForTesting(std::unique_ptr<db::DBCounterBase> dbCounter);
 
   void setPoolsConnectionLimit(uint64_t limit) {
     pools_conn_limit_.store(limit, std::memory_order_relaxed);
