@@ -1648,12 +1648,14 @@ void MultiQueryOperation::notifyQuerySuccess(bool) {
   current_query_result_->setResponseAttributes(
       FetchOperation::currentRespAttrs());
 
-  query_results_.emplace_back(std::move(*current_query_result_.get()));
-
+  // Notify the callback before moving the result into the operation. This is
+  // because the callback can't access the result out of the operation.
   if (buffered_query_callback_) {
     buffered_query_callback_(
         *this, current_query_result_.get(), QueryCallbackReason::QueryBoundary);
   }
+
+  query_results_.emplace_back(std::move(*current_query_result_.get()));
   current_query_result_ =
       std::make_unique<QueryResult>(current_query_result_->queryNum() + 1);
 }
