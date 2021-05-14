@@ -314,12 +314,16 @@ void AsyncConnectionPool::resetConnection(
       std::move(mysqlConn));
   conn->needToCloneConnection_ = false;
   auto resetOp = Connection::resetConn(std::move(conn));
+
   resetOp->setCallback(
       [this, rawPoolOp, poolKey](ResetOperation& op, OperationResult result) {
+        rawPoolOp->resetPreOperation();
+
         if (result == OperationResult::Failed) {
           openNewConnection(rawPoolOp, poolKey);
           return;
         }
+
         auto connection = op.releaseConnection();
         auto mysqlConnHolder = connection->stealMysqlConnectionHolder(true);
         auto pmysqlConn = mysqlConnHolder.release();
@@ -331,6 +335,7 @@ void AsyncConnectionPool::resetConnection(
         rawPoolOp->connectionCallback(std::move(mysqlConnection));
       });
 
+  rawPoolOp->setPreOperation(resetOp);
   getMysqlClient()->runInThread([resetOp = std::move(resetOp)]() {
     resetOp->connection()->client()->addOperation(resetOp);
     resetOp->run();
@@ -791,6 +796,8 @@ void ConnectPoolOperation::specializedRunImpl() {
 void ConnectPoolOperation::specializedTimeoutTriggered() {
   auto locked_pool = pool_.lock();
   if (locked_pool) {
+    cancelPreOperation();
+
     // Check if the timeout happened because of the host is being slow or the
     // pool is lacking resources
     auto pool_key = PoolKey(getConnectionKey(), getConnectionOptions());

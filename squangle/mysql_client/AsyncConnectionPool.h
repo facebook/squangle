@@ -555,6 +555,21 @@ class ConnectPoolOperation : public ConnectOperation {
     return db::OperationType::PoolConnect;
   }
 
+  void setPreOperation(std::shared_ptr<Operation> op) {
+    preOperation_.withWLock([op = std::move(op)](auto& preOperation) {
+      preOperation = std::move(op);
+    });
+  }
+  void cancelPreOperation() {
+    preOperation_.withWLock([](auto& preOperation) {
+      preOperation->cancel();
+      preOperation.reset();
+    });
+  }
+  void resetPreOperation() {
+    preOperation_.withWLock([](auto& preOperation) { preOperation.reset(); });
+  }
+
  protected:
   void attemptFailed(OperationResult result) override;
 
@@ -573,6 +588,9 @@ class ConnectPoolOperation : public ConnectOperation {
       const std::string& mysql_error);
 
   std::weak_ptr<AsyncConnectionPool> pool_;
+  // Operation that is required before completing this operation, which could be
+  // reset_connection or change_user operation. There's at most 1 pre-operation.
+  folly::Synchronized<std::shared_ptr<Operation>> preOperation_;
 
   friend class AsyncConnectionPool;
 };

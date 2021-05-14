@@ -45,7 +45,7 @@ namespace {
 folly::Singleton<AsyncMysqlClient> client(
     []() { return new AsyncMysqlClient; },
     AsyncMysqlClient::deleter);
-}
+} // namespace
 
 std::shared_ptr<AsyncMysqlClient> AsyncMysqlClient::defaultClient() {
   return folly::Singleton<AsyncMysqlClient>::try_get();
