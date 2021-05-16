@@ -222,7 +222,7 @@ folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
   }
 
   // Runs in User thread
-  operation_->connection()->wait();
+  connection()->wait();
   DCHECK(operation_->isPaused() || operation_->done());
 
   folly::Optional<StreamedQueryResult> res;
@@ -243,7 +243,7 @@ folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
 
 std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
   // Runs in User thread
-  operation_->connection()->wait();
+  connection()->wait();
   if (state_ == State::OperationSucceeded || state_ == State::OperationFailed) {
     return operation_->releaseConnection();
   }
@@ -258,17 +258,6 @@ std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
 
   // Should throw above.
   return nullptr;
-}
-
-std::string MultiQueryStreamHandler::escapeString(
-    folly::StringPiece str) const {
-  if (auto conn = operation_->connection(); conn) {
-    return conn->escapeString(str);
-  }
-
-  DCHECK(false)
-      << "Attempting to call escapeString on a handler with a null connection";
-  return std::string();
 }
 
 // Information about why this operation failed.
@@ -311,7 +300,7 @@ void MultiQueryStreamHandler::streamCallback(
 folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
     StreamedQueryResult* result) {
   checkStreamedQueryResult(result);
-  operation_->connection()->wait();
+  connection()->wait();
   // Accepted states: ReadRows, ReadResult, OperationFailed
   if (state_ == State::ReadRows) {
     if (!operation_->rowStream()->hasNext()) {
@@ -337,7 +326,7 @@ folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
 
 void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
   checkStreamedQueryResult(result);
-  operation_->connection()->wait();
+  connection()->wait();
   // Accepted states: ReadResult, OperationFailed
   if (state_ == State::ReadResult) {
     handleQueryEnded(result);
@@ -351,7 +340,7 @@ void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
 }
 
 void MultiQueryStreamHandler::resumeOperation() {
-  operation_->connection()->resetActionable();
+  connection()->resetActionable();
   operation_->resume();
 }
 
@@ -433,6 +422,10 @@ MultiQueryStreamHandler::~MultiQueryStreamHandler() {
         state_ == State::OperationFailed);
     CHECK(operation_->done());
   }
+}
+
+Connection* MultiQueryStreamHandler::connection() const {
+  return operation_->connection();
 }
 
 EphemeralRowFields* StreamedQueryResult::getRowFields() const {

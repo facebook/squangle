@@ -590,7 +590,15 @@ class MultiQueryStreamHandler {
 
   std::unique_ptr<Connection> releaseConnection();
 
-  std::string escapeString(folly::StringPiece str) const;
+  // This is a dangerous function.  Please use it with utmost care.  It allows
+  // someone to do something with the raw connection outside of the bounds of
+  // this class.  We added it to support a specific use-case: TAO calls
+  // escapeString will the connection is running a query.  Please do not use
+  // this for other purposes.
+  template <typename Func>
+  auto accessConn(Func func) const {
+    return func(connection());
+  }
 
   unsigned int mysql_errno() const;
   const std::string& mysql_error() const;
@@ -621,6 +629,8 @@ class MultiQueryStreamHandler {
 
   // sanity checks on StreamedQueryResult
   void checkStreamedQueryResult(StreamedQueryResult* result);
+
+  Connection* connection() const;
 
   folly::exception_wrapper exception_wrapper_;
 
