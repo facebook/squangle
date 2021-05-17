@@ -562,8 +562,10 @@ class ConnectPoolOperation : public ConnectOperation {
   }
   void cancelPreOperation() {
     preOperation_.withWLock([](auto& preOperation) {
-      preOperation->cancel();
-      preOperation.reset();
+      if (preOperation) {
+        preOperation->cancel();
+        preOperation.reset();
+      }
     });
   }
   void resetPreOperation() {
