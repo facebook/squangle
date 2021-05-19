@@ -46,8 +46,8 @@ namespace mysql_client {
 namespace {
 const std::string kQueryChecksumKey = "checksum";
 
-using MysqlCertValidatorCallback = int(*)(
-    X509 *server_cert, const void *context, const char **errptr);
+using MysqlCertValidatorCallback =
+    int (*)(X509* server_cert, const void* context, const char** errptr);
 } // namespace
 
 namespace chrono = std::chrono;
@@ -435,7 +435,8 @@ ConnectOperation* ConnectOperation::enableDelayedResetConn() {
 }
 
 ConnectOperation* ConnectOperation::setCertValidationCallback(
-    CertValidatorCallback callback, const void* context) {
+    CertValidatorCallback callback,
+    const void* context) {
   CHECK_THROW(
       state() == OperationState::Unstarted, db::OperationStateException);
   conn_options_.setCertValidationCallback(callback, context);
@@ -590,14 +591,8 @@ void ConnectOperation::specializedRunImpl() {
   if (conn_options_.getCertValidationCallback()) {
     MysqlCertValidatorCallback callback = mysqlCertValidator;
     const void* self = this;
-    mysql_options(
-        mysql,
-        MYSQL_OPT_TLS_CERT_CALLBACK,
-        &callback);
-    mysql_options(
-        mysql,
-        MYSQL_OPT_TLS_CERT_CALLBACK_CONTEXT,
-        &self);
+    mysql_options(mysql, MYSQL_OPT_TLS_CERT_CALLBACK, &callback);
+    mysql_options(mysql, MYSQL_OPT_TLS_CERT_CALLBACK_CONTEXT, &self);
   }
 
   conn()->socketHandler()->setOperation(this);
@@ -744,9 +739,7 @@ void ConnectOperation::timeoutHandler(
         std::lround(avgLoopTimeUs / 1000.0),
         (isTcpTimeout ? 1 : 0));
     setAsyncClientError(
-        CR_SERVER_LOST,
-        msg,
-        "Connect timed out (loop stalled)");
+        CR_SERVER_LOST, msg, "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
 }
@@ -858,7 +851,9 @@ void ConnectOperation::removeClientReference() {
 }
 
 int ConnectOperation::mysqlCertValidator(
-    X509 *server_cert, const void *context, const char **errptr) {
+    X509* server_cert,
+    const void* context,
+    const char** errptr) {
   ConnectOperation* self =
       reinterpret_cast<ConnectOperation*>(const_cast<void*>(context));
   CHECK_NOTNULL(self);
@@ -876,7 +871,6 @@ int ConnectOperation::mysqlCertValidator(
   }
   return result;
 }
-
 
 FetchOperation::FetchOperation(
     ConnectionProxy&& conn,
@@ -1375,9 +1369,7 @@ void FetchOperation::specializedTimeoutTriggered() {
         rows.c_str(),
         std::lround(avgLoopTimeUs / 1000.0));
     setAsyncClientError(
-        CR_NET_READ_INTERRUPTED,
-        msg,
-        "Query timed out (loop stalled)");
+        CR_NET_READ_INTERRUPTED, msg, "Query timed out (loop stalled)");
   }
   completeOperation(OperationResult::TimedOut);
 }

@@ -108,7 +108,7 @@ using QueryCallback =
 using MultiQueryCallback = std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>;
 using CertValidatorCallback = std::function<
-  bool(X509 *server_cert, const void *context, folly::StringPiece& errMsg)>;
+    bool(X509* server_cert, const void* context, folly::StringPiece& errMsg)>;
 using ResetOperationCallback =
     std::function<void(ResetOperation&, OperationResult)>;
 
@@ -341,7 +341,8 @@ class ConnectionOptions {
   }
 
   ConnectionOptions& setCertValidationCallback(
-      CertValidatorCallback callback, const void* context) {
+      CertValidatorCallback callback,
+      const void* context) {
     certValidationCallback_ = callback;
     certValidationContext_ = context;
     return *this;
@@ -788,7 +789,8 @@ class ConnectOperation : public Operation {
   ConnectOperation* enableResetConnBeforeClose();
   ConnectOperation* enableDelayedResetConn();
   ConnectOperation* setCertValidationCallback(
-      CertValidatorCallback callback, const void* context = nullptr);
+      CertValidatorCallback callback,
+      const void* context = nullptr);
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(
@@ -917,7 +919,9 @@ class ConnectOperation : public Operation {
   bool isDoneWithTcpHandShake();
 
   static int mysqlCertValidator(
-      X509 *server_cert, const void *context, const char **errptr);
+      X509* server_cert,
+      const void* context,
+      const char** errptr);
 
   const ConnectionKey conn_key_;
 

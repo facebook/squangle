@@ -107,14 +107,15 @@ void vectorDynamic(int count) {
 
 void vectorQueryArgument(int count) {
   for (int i = 0; i < count; ++i) {
-    QueryArgument q({"String value",
-                     10,
-                     2.0,
-                     "String value",
-                     10,
-                     2.0,
-                     QueryArgument("key", 10),
-                     QueryArgument("key", 10)});
+    QueryArgument q(
+        {"String value",
+         10,
+         2.0,
+         "String value",
+         10,
+         2.0,
+         QueryArgument("key", 10),
+         QueryArgument("key", 10)});
   }
 }
 

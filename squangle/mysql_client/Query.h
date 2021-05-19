@@ -163,8 +163,9 @@ class Query {
   static Query unsafe(
       const folly::StringPiece query_text,
       bool shallowCopy = false) {
-    Query ret{shallowCopy ? QueryText::makeShallow(query_text)
-                          : QueryText{query_text}};
+    Query ret{
+        shallowCopy ? QueryText::makeShallow(query_text)
+                    : QueryText{query_text}};
     ret.allowUnsafeEvilQueries();
     return ret;
   }

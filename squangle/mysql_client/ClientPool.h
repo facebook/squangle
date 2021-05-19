@@ -5,8 +5,8 @@
 
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
-#include <folly/hash/Hash.h>
 #include <folly/Random.h>
+#include <folly/hash/Hash.h>
 
 namespace facebook {
 namespace common {
@@ -85,6 +85,6 @@ class ClientPool {
  private:
   std::vector<std::shared_ptr<TClient>> client_pool_;
 };
-}
-}
-}
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
