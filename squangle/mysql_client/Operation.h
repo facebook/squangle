@@ -505,6 +505,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Connections are transferred across operations.  At any one time,
   // there is one unique owner of the connection.
   std::unique_ptr<Connection>&& releaseConnection();
+  const Connection* connection() const {
+    return conn_proxy_.get();
+  }
   Connection* connection() {
     return conn_proxy_.get();
   }
@@ -666,8 +669,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
     ReferencedConnection referencedConn_;
   };
 
-  bool isInEventBaseThread();
-  bool isEventBaseSet();
+  bool isInEventBaseThread() const;
+  bool isEventBaseSet() const;
 
   bool isCancelledOnRun() const {
     return cancel_on_run_;
@@ -1036,10 +1039,10 @@ class FetchOperation : public Operation {
   // Streaming calls. Should only be called when using the StreamCallback.
   // TODO#10716355: We shouldn't let these functions visible for non-stream
   // mode. Leaking for tests.
-  uint64_t currentLastInsertId();
-  uint64_t currentAffectedRows();
-  const std::string& currentRecvGtid();
-  const RespAttrs& currentRespAttrs();
+  uint64_t currentLastInsertId() const;
+  uint64_t currentAffectedRows() const;
+  const std::string& currentRecvGtid() const;
+  const RespAttrs& currentRespAttrs() const;
 
   bool noIndexUsed() const {
     return no_index_used_;
@@ -1110,8 +1113,8 @@ class FetchOperation : public Operation {
 
   void resumeImpl();
   // Checks if the current thread has access to stream, or result data.
-  bool isStreamAccessAllowed();
-  bool isPaused();
+  bool isStreamAccessAllowed() const;
+  bool isPaused() const;
 
   // Read the response attributes
   RespAttrs readResponseAttributes();

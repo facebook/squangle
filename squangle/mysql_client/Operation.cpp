@@ -104,11 +104,11 @@ Operation::Operation(ConnectionProxy&& safe_conn)
   conn()->resetActionable();
 }
 
-bool Operation::isInEventBaseThread() {
+bool Operation::isInEventBaseThread() const {
   return connection()->isInEventBaseThread();
 }
 
-bool Operation::isEventBaseSet() {
+bool Operation::isEventBaseSet() const {
   return connection()->getEventBase() != nullptr;
 }
 
@@ -885,12 +885,12 @@ FetchOperation* FetchOperation::setUseChecksum(bool useChecksum) noexcept {
   return this;
 }
 
-bool FetchOperation::isStreamAccessAllowed() {
+bool FetchOperation::isStreamAccessAllowed() const {
   // XOR if isPaused or the caller is coming from IO Thread
   return isPaused() || isInEventBaseThread();
 }
 
-bool FetchOperation::isPaused() {
+bool FetchOperation::isPaused() const {
   return active_fetch_action_ == FetchAction::WaitForConsumer;
 }
 
@@ -997,22 +997,22 @@ void FetchOperation::setFetchAction(FetchAction action) {
   }
 }
 
-uint64_t FetchOperation::currentLastInsertId() {
+uint64_t FetchOperation::currentLastInsertId() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_last_insert_id_;
 }
 
-uint64_t FetchOperation::currentAffectedRows() {
+uint64_t FetchOperation::currentAffectedRows() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_affected_rows_;
 }
 
-const std::string& FetchOperation::currentRecvGtid() {
+const std::string& FetchOperation::currentRecvGtid() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_recv_gtid_;
 }
 
-const FetchOperation::RespAttrs& FetchOperation::currentRespAttrs() {
+const FetchOperation::RespAttrs& FetchOperation::currentRespAttrs() const {
   CHECK_THROW(isStreamAccessAllowed(), db::OperationStateException);
   return current_resp_attrs_;
 }
