@@ -434,6 +434,11 @@ ConnectOperation* ConnectOperation::enableDelayedResetConn() {
   return this;
 }
 
+ConnectOperation* ConnectOperation::enableChangeUser() {
+  conn_options_.enableChangeUser();
+  return this;
+}
+
 ConnectOperation* ConnectOperation::setCertValidationCallback(
     CertValidatorCallback callback,
     const void* context) {

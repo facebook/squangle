@@ -340,6 +340,15 @@ class ConnectionOptions {
     return delayed_reset_conn_;
   }
 
+  ConnectionOptions& enableChangeUser() {
+    change_user_ = true;
+    return *this;
+  }
+
+  bool isEnableChangeUser() const {
+    return change_user_;
+  }
+
   ConnectionOptions& setCertValidationCallback(
       CertValidatorCallback callback,
       const void* context) {
@@ -370,6 +379,7 @@ class ConnectionOptions {
   folly::Optional<std::string> sni_servername_;
   bool reset_conn_before_close_ = false;
   bool delayed_reset_conn_ = false;
+  bool change_user_ = false;
   CertValidatorCallback certValidationCallback_{nullptr};
   const void* certValidationContext_{nullptr};
 };
@@ -791,6 +801,7 @@ class ConnectOperation : public Operation {
   ConnectOperation* setSniServerName(const std::string& sni_servername);
   ConnectOperation* enableResetConnBeforeClose();
   ConnectOperation* enableDelayedResetConn();
+  ConnectOperation* enableChangeUser();
   ConnectOperation* setCertValidationCallback(
       CertValidatorCallback callback,
       const void* context = nullptr);
