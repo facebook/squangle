@@ -95,8 +95,6 @@ Operation::Operation(ConnectionProxy&& safe_conn)
       result_(OperationResult::Unknown),
       conn_proxy_(std::move(safe_conn)),
       mysql_errno_(0),
-      pre_operation_callback_(nullptr),
-      post_operation_callback_(nullptr),
       request_context_(folly::RequestContext::saveContext()),
       observer_callback_(nullptr),
       mysql_client_(conn()->mysql_client_) {
@@ -192,10 +190,10 @@ void Operation::timeoutTriggered() {
 
 Operation* Operation::run() {
   start_time_ = chrono::steady_clock::now();
-  if (pre_operation_callback_) {
+  if (callbacks_.pre_operation_callback_) {
     CHECK_THROW(
         state() == OperationState::Unstarted, db::OperationStateException);
-    pre_operation_callback_(*this);
+    callbacks_.pre_operation_callback_(*this);
   }
   {
     std::unique_lock<std::mutex> l(run_state_mutex_);
@@ -242,8 +240,8 @@ void Operation::completeOperationInner(OperationResult result) {
   conn()->socketHandler()->unregisterHandler();
   conn()->socketHandler()->cancelTimeout();
 
-  if (post_operation_callback_) {
-    post_operation_callback_(*this);
+  if (callbacks_.post_operation_callback_) {
+    callbacks_.post_operation_callback_(*this);
   }
 
   specializedCompleteOperation();
@@ -353,13 +351,62 @@ ChainedCallback Operation::setCallback(
 }
 
 void Operation::setPreOperationCallback(ChainedCallback chainedCallback) {
-  pre_operation_callback_ = setCallback(
-      std::move(pre_operation_callback_), std::move(chainedCallback));
+  callbacks_.pre_operation_callback_ = setCallback(
+      std::move(callbacks_.pre_operation_callback_),
+      std::move(chainedCallback));
 }
 
 void Operation::setPostOperationCallback(ChainedCallback chainedCallback) {
-  post_operation_callback_ = setCallback(
-      std::move(post_operation_callback_), std::move(chainedCallback));
+  callbacks_.post_operation_callback_ = setCallback(
+      std::move(callbacks_.post_operation_callback_),
+      std::move(chainedCallback));
+}
+
+AsyncPreQueryCallback Operation::appendCallback(
+    AsyncPreQueryCallback&& callback1,
+    AsyncPreQueryCallback&& callback2) {
+  if (!callback1) {
+    return std::move(callback2);
+  }
+
+  if (!callback2) {
+    return std::move(callback1);
+  }
+
+  return [callback1 = std::move(callback1),
+          callback2 = std::move(callback2)](FetchOperation& op) {
+    return callback1(op).deferValue(
+        [&op, callback2](auto&& /* unused */) { return callback2(op); });
+  };
+}
+
+AsyncPostQueryCallback Operation::appendCallback(
+    AsyncPostQueryCallback&& callback1,
+    AsyncPostQueryCallback&& callback2) {
+  if (!callback1) {
+    return std::move(callback2);
+  }
+
+  if (!callback2) {
+    return std::move(callback1);
+  }
+
+  return [callback1 = std::move(callback1),
+          callback2 = std::move(callback2)](auto&& result) {
+    return callback1(std::move(result)).deferValue([callback2](auto&& result) {
+      return callback2(std::move(result));
+    });
+  };
+}
+
+void Operation::setPreQueryCallback(AsyncPreQueryCallback&& callback) {
+  callbacks_.pre_query_callback_ = appendCallback(
+      std::move(callbacks_.pre_query_callback_), std::move(callback));
+}
+
+void Operation::setPostQueryCallback(AsyncPostQueryCallback&& callback) {
+  callbacks_.post_query_callback_ = appendCallback(
+      std::move(callbacks_.post_query_callback_), std::move(callback));
 }
 
 void ConnectTcpTimeoutHandler::timeoutExpired() noexcept {
@@ -800,9 +847,8 @@ void ConnectOperation::maybeStoreSSLSession() {
 }
 
 void ConnectOperation::specializedCompleteOperation() {
-  // Pass the chained callback to the Connection now that we are done with it
-  conn()->setPreOperationCallback(std::move(pre_operation_callback_));
-  conn()->setPostOperationCallback(std::move(post_operation_callback_));
+  // Pass the callbacks to the Connection now that we are done with them
+  conn()->setCallbacks(std::move(callbacks_));
 
   maybeStoreSSLSession();
   // Can only log this on successful connections because unsuccessful

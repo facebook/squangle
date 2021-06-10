@@ -8,8 +8,10 @@
  */
 
 #include "squangle/mysql_client/FutureAdapter.h"
+#include "folly/futures/Future.h"
 #include "squangle/mysql_client/AsyncHelpers.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "squangle/mysql_client/DbResult.h"
 
 #include <folly/MoveWrapper.h>
 #include <folly/futures/Promise.h>
@@ -57,41 +59,64 @@ folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr& query_op) {
 }
 
 folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op) {
-  folly::MoveWrapper<folly::Promise<DbQueryResult>> promise;
-  auto future = promise->getSemiFuture();
+  // Use the pre-query callback if we have it, or else an empty SemiFuture
+  return (query_op->callbacks_.pre_query_callback_
+              ? query_op->callbacks_.pre_query_callback_(*query_op)
+              : folly::makeSemiFuture(folly::unit))
+      .deferValue([query_op](auto&& /* unused */) {
+        folly::MoveWrapper<
+            folly::Promise<std::pair<DbQueryResult, AsyncPostQueryCallback>>>
+            promise;
+        auto future = promise->getSemiFuture();
 
-  QueryAppenderCallback appender_callback =
-      [promise](
-          QueryOperation& op,
-          QueryResult query_result,
-          QueryCallbackReason reason) mutable {
-        if (reason == QueryCallbackReason::Success) {
-          auto conn_key = *op.connection()->getKey();
-          DbQueryResult result(
-              std::move(query_result),
-              op.numQueriesExecuted(),
-              op.resultSize(),
-              op.releaseConnection(),
-              op.result(),
-              conn_key,
-              op.elapsed());
-          promise->setValue(std::move(result));
-        } else {
-          auto conn = op.releaseConnection();
-          QueryException excep(
-              op.numQueriesExecuted(),
-              op.result(),
-              op.mysql_errno(),
-              op.mysql_error(),
-              *conn->getKey(),
-              op.elapsed());
-          promise->setException(excep);
-        }
-      };
+        QueryAppenderCallback appender_callback =
+            [promise](
+                QueryOperation& op,
+                QueryResult query_result,
+                QueryCallbackReason reason) mutable {
+              if (reason == QueryCallbackReason::Success) {
+                auto conn_key = *op.connection()->getKey();
+                DbQueryResult result(
+                    std::move(query_result),
+                    op.numQueriesExecuted(),
+                    op.resultSize(),
+                    op.releaseConnection(),
+                    op.result(),
+                    conn_key,
+                    op.elapsed());
+                promise->setValue(std::make_pair(
+                    std::move(result),
+                    std::move(op.callbacks_.post_query_callback_)));
+              } else {
+                auto conn = op.releaseConnection();
+                QueryException excep(
+                    op.numQueriesExecuted(),
+                    op.result(),
+                    op.mysql_errno(),
+                    op.mysql_error(),
+                    *conn->getKey(),
+                    op.elapsed());
+                promise->setException(excep);
+              }
+            };
 
-  query_op->setCallback(resultAppender(appender_callback));
-  query_op->run();
-  return future;
+        query_op->setCallback(resultAppender(appender_callback));
+        query_op->run();
+        return future;
+      })
+      .deferValue(
+          [](std::pair<DbQueryResult, AsyncPostQueryCallback>&& resultPair) {
+            if (resultPair.second) {
+              // If we have a callback set, wrap (and then unwrap) the
+              // result to/from the callback's std::variant wrapper
+              return resultPair
+                  .second(AsyncPostQueryResult(std::move(resultPair.first)))
+                  .deferValue([](AsyncPostQueryResult&& result) {
+                    return std::get<DbQueryResult>(std::move(result));
+                  });
+            }
+            return folly::makeSemiFuture(std::move(resultPair.first));
+          });
 }
 
 folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
@@ -101,41 +126,64 @@ folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
 
 folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
     MultiQueryOperation* mquery_op) {
-  folly::MoveWrapper<folly::Promise<DbMultiQueryResult>> promise;
-  auto future = promise->getSemiFuture();
+  // Use the pre-query callback if we have it, or else an empty SemiFuture
+  return (mquery_op->callbacks_.pre_query_callback_
+              ? mquery_op->callbacks_.pre_query_callback_(*mquery_op)
+              : folly::makeSemiFuture(folly::unit))
+      .deferValue([mquery_op](auto&& /* unused */) {
+        folly::MoveWrapper<folly::Promise<
+            std::pair<DbMultiQueryResult, AsyncPostQueryCallback>>>
+            promise;
+        auto future = promise->getSemiFuture();
 
-  MultiQueryAppenderCallback appender_callback =
-      [promise](
-          MultiQueryOperation& op,
-          std::vector<QueryResult> query_results,
-          QueryCallbackReason reason) mutable {
-        if (reason == QueryCallbackReason::Success) {
-          auto conn_key = *op.connection()->getKey();
-          DbMultiQueryResult result(
-              std::move(query_results),
-              op.numQueriesExecuted(),
-              op.resultSize(),
-              op.releaseConnection(),
-              op.result(),
-              conn_key,
-              op.elapsed());
-          promise->setValue(std::move(result));
-        } else {
-          auto conn = op.releaseConnection();
-          QueryException excep(
-              op.numQueriesExecuted(),
-              op.result(),
-              op.mysql_errno(),
-              op.mysql_error(),
-              *conn->getKey(),
-              op.elapsed());
-          promise->setException(excep);
+        MultiQueryAppenderCallback appender_callback =
+            [promise](
+                MultiQueryOperation& op,
+                std::vector<QueryResult> query_results,
+                QueryCallbackReason reason) mutable {
+              if (reason == QueryCallbackReason::Success) {
+                auto conn_key = *op.connection()->getKey();
+                DbMultiQueryResult result(
+                    std::move(query_results),
+                    op.numQueriesExecuted(),
+                    op.resultSize(),
+                    op.releaseConnection(),
+                    op.result(),
+                    conn_key,
+                    op.elapsed());
+                promise->setValue(std::make_pair(
+                    std::move(result),
+                    std::move(op.callbacks_.post_query_callback_)));
+              } else {
+                auto conn = op.releaseConnection();
+                QueryException excep(
+                    op.numQueriesExecuted(),
+                    op.result(),
+                    op.mysql_errno(),
+                    op.mysql_error(),
+                    *conn->getKey(),
+                    op.elapsed());
+                promise->setException(excep);
+              }
+            };
+
+        mquery_op->setCallback(resultAppender(appender_callback));
+        mquery_op->run();
+        return future;
+      })
+      .deferValue([](std::pair<DbMultiQueryResult, AsyncPostQueryCallback>&&
+                         resultPair) {
+        if (resultPair.second) {
+          // If we have a callback set, wrap (and then unwrap) the
+          // result to/from the callback's std::variant wrapper
+          return resultPair
+              .second(AsyncPostQueryResult(std::move(resultPair.first)))
+              .deferValue([](AsyncPostQueryResult&& result) {
+                return std::get<DbMultiQueryResult>(std::move(result));
+              });
         }
-      };
-
-  mquery_op->setCallback(resultAppender(appender_callback));
-  mquery_op->run();
-  return future;
+        return folly::makeSemiFuture(std::move(resultPair.first));
+      });
 }
 
 folly::Future<ConnectResult> toFuture(ConnectOperation_ptr conn_op) {

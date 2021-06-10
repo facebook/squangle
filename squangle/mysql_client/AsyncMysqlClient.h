@@ -531,8 +531,6 @@ class Connection {
         conn_key_(std::move(conn_key)),
         mysql_client_(mysql_client),
         socket_handler_(mysql_client_->getEventBase()),
-        pre_operation_callback_(nullptr),
-        post_operation_callback_(nullptr),
         initialized_(false) {}
 
   Connection(
@@ -542,8 +540,6 @@ class Connection {
       : conn_key_(std::move(conn_key)),
         mysql_client_(mysql_client),
         socket_handler_(mysql_client_->getEventBase()),
-        pre_operation_callback_(nullptr),
-        post_operation_callback_(nullptr),
         initialized_(false) {
     if (existing_conn) {
       mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
@@ -846,13 +842,28 @@ class Connection {
   // Note that the chained callback is invoked in the MySQL client thread
   // and so any callback should execute *very* quickly and not block
   void setPreOperationCallback(ChainedCallback&& callback) {
-    pre_operation_callback_ =
-        setCallback(std::move(pre_operation_callback_), std::move(callback));
+    callbacks_.pre_operation_callback_ = setCallback(
+        std::move(callbacks_.pre_operation_callback_), std::move(callback));
   }
 
   void setPostOperationCallback(ChainedCallback&& callback) {
-    post_operation_callback_ =
-        setCallback(std::move(post_operation_callback_), std::move(callback));
+    callbacks_.post_operation_callback_ = setCallback(
+        std::move(callbacks_.post_operation_callback_), std::move(callback));
+  }
+
+  void setCallbacks(Operation::Callbacks&& callbacks) {
+    callbacks_.pre_operation_callback_ = setCallback(
+        std::move(callbacks_.pre_operation_callback_),
+        std::move(callbacks.pre_operation_callback_));
+    callbacks_.post_operation_callback_ = setCallback(
+        std::move(callbacks_.post_operation_callback_),
+        std::move(callbacks.post_operation_callback_));
+    callbacks_.pre_query_callback_ = Operation::appendCallback(
+        std::move(callbacks_.pre_query_callback_),
+        std::move(callbacks.pre_query_callback_));
+    callbacks_.post_query_callback_ = Operation::appendCallback(
+        std::move(callbacks_.post_query_callback_),
+        std::move(callbacks.post_query_callback_));
   }
 
   const folly::EventBase* getEventBase() const {
@@ -997,7 +1008,7 @@ class Connection {
 
   ConnectionDyingCallback conn_dying_callback_;
 
-  ChainedCallback pre_operation_callback_, post_operation_callback_;
+  Operation::Callbacks callbacks_;
 
   bool initialized_;
 

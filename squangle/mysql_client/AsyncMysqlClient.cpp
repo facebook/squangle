@@ -8,6 +8,7 @@
  */
 
 #include "squangle/mysql_client/AsyncMysqlClient.h"
+#include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/FutureAdapter.h"
 #include "squangle/mysql_client/Operation.h"
 
@@ -15,6 +16,8 @@
 
 #include <folly/Memory.h>
 #include <folly/Singleton.h>
+#include <folly/Unit.h>
+#include <folly/futures/Future.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
 #include <folly/ssl/Init.h>
@@ -544,15 +547,29 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
   conn->mysql_client_->addOperation(ret);
   conn->socket_handler_.setOperation(ret.get());
   ret->setPreOperationCallback([conn](Operation& op) {
-    if (conn->pre_operation_callback_) {
-      conn->pre_operation_callback_(op);
+    if (conn->callbacks_.pre_operation_callback_) {
+      conn->callbacks_.pre_operation_callback_(op);
     }
   });
   ret->setPostOperationCallback([conn](Operation& op) {
-    if (conn->post_operation_callback_) {
-      conn->post_operation_callback_(op);
+    if (conn->callbacks_.post_operation_callback_) {
+      conn->callbacks_.post_operation_callback_(op);
     }
   });
+  auto opType = ret->getOperationType();
+  if (opType == db::OperationType::Query ||
+      opType == db::OperationType::MultiQuery) {
+    ret->setPreQueryCallback([conn](FetchOperation& op) {
+      return conn->callbacks_.pre_query_callback_
+          ? conn->callbacks_.pre_query_callback_(op)
+          : folly::makeSemiFuture(folly::unit);
+    });
+    ret->setPostQueryCallback([conn](AsyncPostQueryResult&& result) {
+      return conn->callbacks_.post_query_callback_
+          ? conn->callbacks_.post_query_callback_(std::move(result))
+          : folly::makeSemiFuture(std::move(result));
+    });
+  }
   return ret;
 }
 
@@ -630,6 +647,9 @@ DbQueryResult Connection::query(Query&& query) {
   };
   operation_in_progress_ = true;
 
+  if (op->callbacks_.pre_query_callback_) {
+    op->callbacks_.pre_query_callback_(*op).get();
+  }
   op->run()->wait();
 
   if (!op->ok()) {
@@ -650,6 +670,15 @@ DbQueryResult Connection::query(Query&& query) {
       op->result(),
       conn_key,
       op->elapsed());
+  if (op->callbacks_.post_query_callback_) {
+    // If we have a callback set, wrap (and then unwrap) the result to/from the
+    // callback's std::variant wrapper
+    return op->callbacks_.post_query_callback_(std::move(result))
+        .deferValue([](AsyncPostQueryResult&& result) {
+          return std::get<DbQueryResult>(std::move(result));
+        })
+        .get();
+  }
   return result;
 }
 
@@ -661,6 +690,9 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
   auto guard = folly::makeGuard([&] { operation_in_progress_ = false; });
 
   operation_in_progress_ = true;
+  if (op->callbacks_.pre_query_callback_) {
+    op->callbacks_.pre_query_callback_(*op).get();
+  }
   op->run()->wait();
 
   if (!op->ok()) {
@@ -682,6 +714,15 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
       op->result(),
       std::move(conn_key),
       op->elapsed());
+  if (op->callbacks_.post_query_callback_) {
+    // If we have a callback set, wrap (and then unwrap) the result to/from the
+    // callback's std::variant wrapper
+    return op->callbacks_.post_query_callback_(std::move(result))
+        .deferValue([](AsyncPostQueryResult&& result) {
+          return std::get<DbMultiQueryResult>(std::move(result));
+        })
+        .get();
+  }
   return result;
 }
 

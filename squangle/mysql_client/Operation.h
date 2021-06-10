@@ -48,7 +48,9 @@
 #include <folly/Function.h>
 #include <folly/Memory.h>
 #include <folly/String.h>
+#include <folly/Unit.h>
 #include <folly/dynamic.h>
+#include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventHandler.h>
 #include <folly/io/async/Request.h>
@@ -103,6 +105,18 @@ using ObserverCallback = std::function<void(Operation&)>;
 // Callback that is set on the ConnectOperation, and is then chained along all
 // subsequent queries on that given connection.
 using ChainedCallback = folly::Function<void(Operation&)>;
+// Variant type allowing AsyncPostQueryCallback (below) to operate on either a
+// Query or MultiQuery result.
+using AsyncPostQueryResult = std::variant<DbQueryResult, DbMultiQueryResult>;
+// Callbacks that are set on the ConnectOperation, and are then chained along
+// all subsequent queries on that given connection. They execute asynchronously
+// before/after query operations (if the async query APIs are used), and allow
+// modification of the operation before or processing of results after a query.
+using AsyncPreQueryCallback =
+    std::function<folly::SemiFuture<folly::Unit>(FetchOperation&)>;
+using AsyncPostQueryCallback =
+    std::function<folly::SemiFuture<AsyncPostQueryResult>(
+        AsyncPostQueryResult&&)>;
 using QueryCallback =
     std::function<void(QueryOperation&, QueryResult*, QueryCallbackReason)>;
 using MultiQueryCallback = std::function<
@@ -554,6 +568,21 @@ class Operation : public std::enable_shared_from_this<Operation> {
   void setPreOperationCallback(ChainedCallback obs_cb);
   void setPostOperationCallback(ChainedCallback obs_cb);
 
+  /**
+   * Set callbacks that are invoked asynchronously before/after query operations
+   * (if using asynchronous query APIs). They do not execute on operations that
+   * have failed, and if they fail the operation will fail too.
+   *
+   * PreQueryCallbacks execute after a query operation is initialized and before
+   * it has been run. They are allowed to modify the operation by reference.
+   *
+   * PostQueryCallbacks execute after a query operation returns results. They
+   * are allowed to do post-processing on the results received and returned via
+   * rvalue reference.
+   */
+  void setPreQueryCallback(AsyncPreQueryCallback&& callback);
+  void setPostQueryCallback(AsyncPostQueryCallback&& callback);
+
   // Retrieve the shared pointer that holds this instance.
   std::shared_ptr<Operation> getSharedPointer();
 
@@ -578,6 +607,15 @@ class Operation : public std::enable_shared_from_this<Operation> {
   ChainedCallback setCallback(
       ChainedCallback orgCallback,
       ChainedCallback newCallback);
+
+  // Helper functions to set query callbacks
+  static AsyncPreQueryCallback appendCallback(
+      AsyncPreQueryCallback&& callback1,
+      AsyncPreQueryCallback&& callback2);
+
+  static AsyncPostQueryCallback appendCallback(
+      AsyncPostQueryCallback&& callback1,
+      AsyncPostQueryCallback&& callback2);
 
   // Threshold is 500ms, but because of smoothing, actual last loop delay
   // needs to be roughly 2x this value to trigger detection
@@ -712,8 +750,27 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // thread.
   std::mutex run_state_mutex_;
 
-  ChainedCallback pre_operation_callback_;
-  ChainedCallback post_operation_callback_;
+  struct Callbacks {
+    Callbacks()
+        : pre_operation_callback_(nullptr),
+          post_operation_callback_(nullptr),
+          pre_query_callback_(nullptr),
+          post_query_callback_(nullptr) {}
+
+    ChainedCallback pre_operation_callback_;
+    ChainedCallback post_operation_callback_;
+
+    AsyncPreQueryCallback pre_query_callback_;
+    AsyncPostQueryCallback post_query_callback_;
+  };
+
+  Callbacks callbacks_;
+
+  // Friends because they need to access the query callbacks on this class
+  friend folly::SemiFuture<DbQueryResult> toSemiFuture(
+      QueryOperation* query_op);
+  friend folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+      MultiQueryOperation* mquery_op);
 
  private:
   // Restore folly::RequestContext and also invoke socketActionable()
