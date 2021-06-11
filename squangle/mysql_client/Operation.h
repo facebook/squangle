@@ -59,6 +59,7 @@
 #include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/MysqlHandler.h"
 #include "squangle/mysql_client/Query.h"
 #include "squangle/mysql_client/Row.h"
 
@@ -66,7 +67,6 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-class MysqlHandler;
 class MysqlClientBase;
 class QueryResult;
 class ConnectOperation;
@@ -75,6 +75,8 @@ class MultiQueryStreamOperation;
 class QueryOperation;
 class MultiQueryOperation;
 class ResetOperation;
+class SpecialOperation;
+class ChangeUserOperation;
 class Operation;
 class Connection;
 class ConnectionKey;
@@ -123,8 +125,8 @@ using MultiQueryCallback = std::function<
     void(MultiQueryOperation&, QueryResult*, QueryCallbackReason)>;
 using CertValidatorCallback = std::function<
     bool(X509* server_cert, const void* context, folly::StringPiece& errMsg)>;
-using ResetOperationCallback =
-    std::function<void(ResetOperation&, OperationResult)>;
+using SpecialOperationCallback =
+    std::function<void(SpecialOperation&, OperationResult)>;
 
 enum class SquangleErrno : uint16_t {
   SQ_ERRNO_CONN_TIMEOUT = 7000,
@@ -1478,30 +1480,72 @@ class MultiQueryOperation : public FetchOperation {
   friend class Connection;
 };
 
-// This is for sending COM_RESET_CONNECTION command before returning an idle
-// connection back to connection pool
-class ResetOperation : public Operation {
+// SpecialOperation means operations like COM_RESET_CONNECTION,
+// COM_CHANGE_USER, etc.
+class SpecialOperation : public Operation {
  public:
-  explicit ResetOperation(ConnectionProxy&& conn)
+  explicit SpecialOperation(ConnectionProxy&& conn)
       : Operation(std::move(conn)) {}
-
-  db::OperationType getOperationType() const override {
-    return db::OperationType::Reset;
-  }
-  void setCallback(ResetOperationCallback callback) {
+  void setCallback(SpecialOperationCallback callback) {
     callback_ = callback;
   }
 
  protected:
   void socketActionable() override;
-  void mustSucceed() override;
   void specializedCompleteOperation() override;
   void specializedTimeoutTriggered() override;
-  ResetOperation* specializedRun() override;
+  SpecialOperation* specializedRun() override;
+  void mustSucceed() override;
+  SpecialOperationCallback callback_{nullptr};
+  friend class Connection;
 
  private:
-  ResetOperationCallback callback_{nullptr};
-  friend class Connection;
+  virtual MysqlHandler::Status callMysqlHandler() = 0;
+  virtual const char* getErrorMsg() const = 0;
+};
+
+// This is for sending COM_RESET_CONNECTION command before returning an idle
+// connection back to connection pool
+class ResetOperation : public SpecialOperation {
+ public:
+  explicit ResetOperation(ConnectionProxy&& conn)
+      : SpecialOperation(std::move(conn)) {}
+
+ private:
+  MysqlHandler::Status callMysqlHandler() override;
+  db::OperationType getOperationType() const override {
+    return db::OperationType::Reset;
+  }
+  const char* getErrorMsg() const override {
+    return errorMsg;
+  }
+  static constexpr const char* errorMsg = "Reset connection failed: ";
+};
+
+class ChangeUserOperation : public SpecialOperation {
+ public:
+  explicit ChangeUserOperation(
+      ConnectionProxy&& conn,
+      const std::string& user,
+      const std::string& password,
+      const std::string& database)
+      : SpecialOperation(std::move(conn)),
+        user_(user),
+        password_(password),
+        database_(database) {}
+
+ private:
+  MysqlHandler::Status callMysqlHandler() override;
+  db::OperationType getOperationType() const override {
+    return db::OperationType::ChangeUser;
+  }
+  const char* getErrorMsg() const override {
+    return errorMsg;
+  }
+  const std::string user_;
+  const std::string password_;
+  const std::string database_;
+  static constexpr const char* errorMsg = "Change user failed: ";
 };
 
 // Helper function to build the result for a ConnectOperation in the sync mode.

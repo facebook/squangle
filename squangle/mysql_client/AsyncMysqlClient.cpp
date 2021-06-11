@@ -374,6 +374,15 @@ MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::resetConn(
   return toHandlerStatus(mysql_reset_connection_nonblocking(mysql));
 }
 
+MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::changeUser(
+    MYSQL* mysql,
+    const std::string& user,
+    const std::string& password,
+    const std::string& database) {
+  return toHandlerStatus(mysql_change_user_nonblocking(
+      mysql, user.c_str(), password.c_str(), database.c_str()));
+}
+
 MysqlHandler::Status AsyncMysqlClient::AsyncMysqlHandler::nextResult(
     MYSQL* mysql) {
   return toHandlerStatus(mysql_next_result_nonblocking(mysql));
@@ -488,6 +497,28 @@ std::shared_ptr<ResetOperation> Connection::resetConn(
   resetOperationPtr->connection()->socket_handler_.setOperation(
       resetOperationPtr.get());
   return resetOperationPtr;
+}
+
+std::shared_ptr<ChangeUserOperation> Connection::changeUser(
+    std::unique_ptr<Connection> conn,
+    const std::string& user,
+    const std::string& password,
+    const std::string& database) {
+  auto changeUserOperationPtr = std::make_shared<ChangeUserOperation>(
+      Operation::ConnectionProxy(Operation::OwnedConnection(std::move(conn))),
+      user,
+      password,
+      database);
+  Duration timeout =
+      changeUserOperationPtr->connection()->conn_options_.getTimeout();
+  if (timeout.count() > 0) {
+    // set its timeout longer than connection timeout to prevent change user
+    // operation from hitting timeout earlier than connection timeout itself
+    changeUserOperationPtr->setTimeout(timeout + std::chrono::seconds(1));
+  }
+  changeUserOperationPtr->connection()->socket_handler_.setOperation(
+      changeUserOperationPtr.get());
+  return changeUserOperationPtr;
 }
 
 template <>

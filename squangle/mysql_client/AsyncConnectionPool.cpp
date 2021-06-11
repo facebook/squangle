@@ -316,7 +316,7 @@ void AsyncConnectionPool::resetConnection(
   auto resetOp = Connection::resetConn(std::move(conn));
 
   resetOp->setCallback(
-      [this, rawPoolOp, poolKey](ResetOperation& op, OperationResult result) {
+      [this, rawPoolOp, poolKey](SpecialOperation& op, OperationResult result) {
         rawPoolOp->resetPreOperation();
 
         if (result == OperationResult::Failed) {

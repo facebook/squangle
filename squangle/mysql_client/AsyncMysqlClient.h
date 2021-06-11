@@ -50,6 +50,7 @@
 #include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/MysqlHandler.h"
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/Query.h"
 #include "squangle/mysql_client/Row.h"
@@ -85,28 +86,6 @@ class MysqlConnectionHolder;
 
 typedef std::function<void(std::unique_ptr<MysqlConnectionHolder>)>
     ConnectionDyingCallback;
-
-// MysqlHandler interface that is impletemented by the sync and async
-// clients appropriately.
-class MysqlHandler {
- public:
-  enum Status {
-    PENDING,
-    DONE,
-    ERROR,
-  };
-  virtual ~MysqlHandler() = default;
-  virtual Status tryConnect(
-      MYSQL* mysql,
-      const ConnectionOptions& opts,
-      const ConnectionKey& key,
-      int flags) = 0;
-  virtual Status runQuery(MYSQL* mysql, folly::StringPiece queryStmt) = 0;
-  virtual MYSQL_RES* getResult(MYSQL* mysql) = 0;
-  virtual Status nextResult(MYSQL* mysql) = 0;
-  virtual Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) = 0;
-  virtual Status resetConn(MYSQL* mysql) = 0;
-};
 
 class MysqlClientBase {
  public:
@@ -207,7 +186,9 @@ class MysqlClientBase {
   friend class ConnectOperation;
   friend class ConnectPoolOperation;
   friend class FetchOperation;
+  friend class SpecialOperation;
   friend class ResetOperation;
+  friend class ChangeUserOperation;
   friend class MysqlConnectionHolder;
   friend class AsyncConnection;
   friend class AsyncConnectionPool;
@@ -405,6 +386,11 @@ class AsyncMysqlClient : public MysqlClientBase {
     Status nextResult(MYSQL* mysql) override;
     Status fetchRow(MYSQL_RES* res, MYSQL_ROW& row) override;
     Status resetConn(MYSQL* mysql) override;
+    Status changeUser(
+        MYSQL* mysql,
+        const std::string& user,
+        const std::string& password,
+        const std::string& database) override;
     MYSQL_RES* getResult(MYSQL* mysql) override;
   } mysql_handler_;
 
@@ -918,6 +904,12 @@ class Connection {
   static std::shared_ptr<ResetOperation> resetConn(
       std::unique_ptr<Connection> conn);
 
+  static std::shared_ptr<ChangeUserOperation> changeUser(
+      std::unique_ptr<Connection> conn,
+      const std::string& user,
+      const std::string& password,
+      const std::string& database);
+
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
@@ -930,7 +922,9 @@ class Connection {
   friend class QueryOperation;
   friend class MultiQueryOperation;
   friend class MultiQueryStreamOperation;
+  friend class SpecialOperation;
   friend class ResetOperation;
+  friend class ChangeUserOperation;
 
   ChainedCallback setCallback(
       ChainedCallback orgCallback,

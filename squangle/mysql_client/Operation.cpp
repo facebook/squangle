@@ -1718,11 +1718,8 @@ void MultiQueryOperation::notifyOperationCompleted(OperationResult result) {
 
 MultiQueryOperation::~MultiQueryOperation() {}
 
-void ResetOperation::socketActionable() {
-  auto& handler = conn()->client()->getMysqlHandler();
-  MYSQL* mysql = conn()->mysql();
-  auto status = handler.resetConn(mysql);
-
+void SpecialOperation::socketActionable() {
+  auto status = callMysqlHandler();
   if (status == MysqlHandler::PENDING) {
     waitForSocketActionable();
   } else {
@@ -1736,29 +1733,40 @@ void ResetOperation::socketActionable() {
   }
 }
 
-void ResetOperation::mustSucceed() {
+void SpecialOperation::mustSucceed() {
   run();
   wait();
   if (!ok()) {
-    throw db::RequiredOperationFailedException(
-        "Reset connection failed: " + mysql_error_);
+    throw db::RequiredOperationFailedException(getErrorMsg() + mysql_error_);
   }
 }
 
-void ResetOperation::specializedCompleteOperation() {
+void SpecialOperation::specializedCompleteOperation() {
   conn()->notify();
 }
 
-void ResetOperation::specializedTimeoutTriggered() {
+void SpecialOperation::specializedTimeoutTriggered() {
   completeOperation(OperationResult::TimedOut);
 }
 
-ResetOperation* ResetOperation::specializedRun() {
+SpecialOperation* SpecialOperation::specializedRun() {
   MYSQL* mysql = conn()->mysql();
   conn()->socketHandler()->changeHandlerFD(
       folly::NetworkSocket::fromFd(mysql_get_socket_descriptor(mysql)));
   socketActionable();
   return this;
+}
+
+MysqlHandler::Status ResetOperation::callMysqlHandler() {
+  auto& handler = conn()->client()->getMysqlHandler();
+  MYSQL* mysql = conn()->mysql();
+  return handler.resetConn(mysql);
+}
+
+MysqlHandler::Status ChangeUserOperation::callMysqlHandler() {
+  auto& handler = conn()->client()->getMysqlHandler();
+  MYSQL* mysql = conn()->mysql();
+  return handler.changeUser(mysql, user_, password_, database_);
 }
 
 folly::StringPiece Operation::resultString() const {

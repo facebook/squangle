@@ -37,6 +37,7 @@ enum class OperationType {
   Locator,
   TestDatabase,
   Reset,
+  ChangeUser,
 };
 
 class EnumHelper {
@@ -76,6 +77,8 @@ class EnumHelper {
         return "TestDatabase";
       case OperationType::Reset:
         return "Reset";
+      case OperationType::ChangeUser:
+        return "ChangeUser";
     }
     return "(should not happen)";
   }
