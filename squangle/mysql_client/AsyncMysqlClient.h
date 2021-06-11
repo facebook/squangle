@@ -910,6 +910,10 @@ class Connection {
       const std::string& password,
       const std::string& database);
 
+  const db::ConnectionContextBase* getConnectionContext() const {
+    return connection_context_.get();
+  }
+
  private:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
@@ -979,10 +983,6 @@ class Connection {
 
   void setConnectionContext(std::unique_ptr<db::ConnectionContextBase>&& e) {
     connection_context_ = std::move(e);
-  }
-
-  const db::ConnectionContextBase* getConnectionContext() const {
-    return connection_context_.get();
   }
 
   std::unique_ptr<MysqlConnectionHolder> mysql_connection_;
