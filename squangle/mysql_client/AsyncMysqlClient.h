@@ -559,7 +559,7 @@ class Connection {
       std::unique_ptr<Connection> conn,
       Args&&... args);
 
-  static folly::SemiFuture<DbQueryResult> querySemiFuture(
+  FOLLY_NODISCARD static folly::SemiFuture<DbQueryResult> querySemiFuture(
       std::unique_ptr<Connection> conn,
       Query&& query,
       QueryOptions&& options = QueryOptions());
@@ -569,12 +569,14 @@ class Connection {
       "Replaced by the SemiFuture APIs")]] static folly::Future<DbQueryResult>
   queryFuture(std::unique_ptr<Connection> conn, Args&&... args);
 
-  static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
+  FOLLY_NODISCARD static folly::SemiFuture<DbMultiQueryResult>
+  multiQuerySemiFuture(
       std::unique_ptr<Connection> conn,
       Query&& query,
       QueryOptions&& options = QueryOptions());
 
-  static folly::SemiFuture<DbMultiQueryResult> multiQuerySemiFuture(
+  FOLLY_NODISCARD static folly::SemiFuture<DbMultiQueryResult>
+  multiQuerySemiFuture(
       std::unique_ptr<Connection> conn,
       std::vector<Query>&& queries,
       QueryOptions&& options = QueryOptions());

@@ -31,17 +31,21 @@ typedef std::shared_ptr<QueryOperation> QueryOperation_ptr;
 typedef std::shared_ptr<MultiQueryOperation> MultiQueryOperation_ptr;
 
 // SemiFuture for ConnectOperation
-folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op);
-folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation_ptr conn_op);
+FOLLY_NODISCARD folly::SemiFuture<ConnectResult> toSemiFuture(
+    ConnectOperation* conn_op);
+FOLLY_NODISCARD folly::SemiFuture<ConnectResult> toSemiFuture(
+    ConnectOperation_ptr conn_op);
 
 // SemiFuture for QueryOperation
-folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op);
-folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr& query_op);
+FOLLY_NODISCARD folly::SemiFuture<DbQueryResult> toSemiFuture(
+    QueryOperation* query_op);
+FOLLY_NODISCARD folly::SemiFuture<DbQueryResult> toSemiFuture(
+    QueryOperation_ptr& query_op);
 
 // SemiFuture for MultiQueryOperation
-folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+FOLLY_NODISCARD folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
     MultiQueryOperation* mquery_op);
-folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
+FOLLY_NODISCARD folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
     MultiQueryOperation_ptr& mquery_op);
 
 // Future for ConnectOperation
