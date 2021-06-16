@@ -871,6 +871,25 @@ class ConnectOperation : public Operation {
     return connection_context_.get();
   }
 
+  void reportServerCertContent(
+      const std::string& sslCertCn,
+      const std::vector<std::string>& sslCertSan,
+      const std::vector<std::string>& sslCertIdentities,
+      bool isValidated) {
+    if (connection_context_) {
+      if (!sslCertCn.empty()) {
+        connection_context_->sslCertCn = sslCertCn;
+      }
+      if (!sslCertSan.empty()) {
+        connection_context_->sslCertSan = sslCertSan;
+      }
+      if (!sslCertIdentities.empty()) {
+        connection_context_->sslCertIdentities = sslCertIdentities;
+      }
+      connection_context_->isServerCertValidated = isValidated;
+    }
+  }
+
   // Don't call this; it's public strictly for AsyncMysqlClient to be
   // able to call make_shared.
   ConnectOperation(MysqlClientBase* mysql_client, ConnectionKey conn_key);

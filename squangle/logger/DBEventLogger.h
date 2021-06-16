@@ -110,6 +110,10 @@ class ConnectionContextBase {
       folly::StringPiece key) const;
   bool isSslConnection = false;
   bool sslSessionReused = false;
+  folly::Optional<std::string> sslCertCn;
+  folly::Optional<std::vector<std::string>> sslCertSan;
+  folly::Optional<std::vector<std::string>> sslCertIdentities;
+  bool isServerCertValidated = false;
   std::string endpointVersion;
 };
 
