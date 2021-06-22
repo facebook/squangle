@@ -174,7 +174,8 @@ class PoolStats {
         destroyed_pool_connections_(0),
         connections_requested_(0),
         pool_hits_(0),
-        pool_misses_(0) {}
+        pool_misses_(0),
+        pool_hits_change_user_(0) {}
   // created connections
   uint64_t numCreatedPoolConnections() const noexcept {
     return created_pool_connections_.load(std::memory_order_relaxed);
@@ -211,6 +212,15 @@ class PoolStats {
     pool_hits_.fetch_add(1, std::memory_order_relaxed);
   }
 
+  // How many times the pool had a connection ready after COM_CHANGE_USER
+  uint64_t numPoolHitsChangeUser() const noexcept {
+    return pool_hits_change_user_.load(std::memory_order_relaxed);
+  }
+
+  void incrPoolHitsChangeUser() {
+    pool_hits_change_user_.fetch_add(1, std::memory_order_relaxed);
+  }
+
   // how many times the pool didn't have a connection right in cache
   uint64_t numPoolMisses() const noexcept {
     return pool_misses_.load(std::memory_order_relaxed);
@@ -226,6 +236,7 @@ class PoolStats {
   std::atomic<uint64_t> connections_requested_;
   std::atomic<uint64_t> pool_hits_;
   std::atomic<uint64_t> pool_misses_;
+  std::atomic<uint64_t> pool_hits_change_user_;
 };
 } // namespace db
 } // namespace facebook

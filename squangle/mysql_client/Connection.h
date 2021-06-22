@@ -121,13 +121,14 @@ class MysqlConnectionHolder {
     return needResetBeforeReuse_;
   }
 
- protected:
   // This constructor takes ownership of the origin holder and copies the data
   // from it, then steals the ownership of the MYSQL* connection. After that the
   // origin is deleted.
   explicit MysqlConnectionHolder(
-      std::unique_ptr<MysqlConnectionHolder> from_holder);
+      std::unique_ptr<MysqlConnectionHolder> from_holder,
+      const ConnectionKey* connKey = nullptr);
 
+ protected:
   MysqlClientBase* client_;
 
  private:

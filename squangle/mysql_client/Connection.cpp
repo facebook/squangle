@@ -31,9 +31,10 @@ MysqlConnectionHolder::MysqlConnectionHolder(
 }
 
 MysqlConnectionHolder::MysqlConnectionHolder(
-    std::unique_ptr<MysqlConnectionHolder> from_holder)
+    std::unique_ptr<MysqlConnectionHolder> from_holder,
+    const ConnectionKey* connKey)
     : client_(from_holder->client_),
-      conn_key_(from_holder->conn_key_),
+      conn_key_((connKey) ? *connKey : from_holder->conn_key_),
       conn_context_(nullptr),
       creation_time_(from_holder->creation_time_),
       last_activity_time_(from_holder->last_activity_time_),

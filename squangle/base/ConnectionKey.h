@@ -30,6 +30,7 @@ class ConnectionKey {
   const std::string password;
   const std::string special_tag;
   const bool ignore_db_name;
+  const size_t partial_hash;
   const size_t hash;
 
   ConnectionKey(
@@ -41,13 +42,15 @@ class ConnectionKey {
       folly::StringPiece sp_special_tag = "",
       bool sp_ignore_db_name = false);
 
+  bool partialEqual(const ConnectionKey& rhs) const;
+
   bool operator==(const ConnectionKey& rhs) const;
 
   bool operator!=(const ConnectionKey& rhs) const {
     return !(*this == rhs);
   }
 
-  std::string getDisplayString() const;
+  std::string getDisplayString(bool level2 = false) const;
 };
 } // namespace mysql_client
 } // namespace common

@@ -32,7 +32,9 @@ MysqlPooledHolder::MysqlPooledHolder(
     std::unique_ptr<MysqlConnectionHolder> holder_base,
     std::weak_ptr<AsyncConnectionPool> weak_pool,
     const PoolKey& pool_key)
-    : MysqlConnectionHolder(std::move(holder_base)),
+    : MysqlConnectionHolder(
+          std::move(holder_base),
+          pool_key.getConnectionKey()),
       good_for_(Duration::zero()),
       weak_pool_(weak_pool),
       pool_key_(pool_key) {
@@ -304,6 +306,49 @@ void AsyncConnectionPool::openNewConnection(
   tryRequestNewConnection(poolKey, std::move(context));
 }
 
+void AsyncConnectionPool::reuseConnWithChangeUser(
+    ConnectPoolOperation* rawPoolOp,
+    const PoolKey& poolKey,
+    std::unique_ptr<MysqlPooledHolder> mysqlConn) {
+  auto conn = std::make_unique<AsyncConnection>(
+      getMysqlClient().get(),
+      rawPoolOp->getConnectionKey(),
+      std::move(mysqlConn));
+  conn->needToCloneConnection_ = false;
+  auto changeUserOp = Connection::changeUser(
+      std::move(conn),
+      poolKey.connKey.user,
+      poolKey.connKey.password,
+      poolKey.connKey.db_name);
+
+  changeUserOp->setCallback(
+      [this, rawPoolOp, poolKey, poolPtr = getSelfWeakPointer()](
+          SpecialOperation& op, OperationResult result) {
+        if (result == OperationResult::Failed) {
+          openNewConnection(rawPoolOp, poolKey);
+          return;
+        }
+
+        auto connection = op.releaseConnection();
+        auto mysqlConn = connection->stealMysqlConnectionHolder(true);
+        auto newMysqlConn = std::make_unique<MysqlConnectionHolder>(
+            std::move(mysqlConn), poolKey.getConnectionKey());
+        auto pooledConn = std::make_unique<MysqlPooledHolder>(
+            std::move(newMysqlConn), poolPtr, poolKey);
+        stats()->incrPoolHits();
+        stats()->incrPoolHitsChangeUser();
+
+        pooledConn->setReusable(true);
+        rawPoolOp->connectionCallback(std::move(pooledConn));
+      });
+
+  rawPoolOp->setPreOperation(changeUserOp);
+  getMysqlClient()->runInThread([changeUserOp = std::move(changeUserOp)]() {
+    changeUserOp->connection()->client()->addOperation(changeUserOp);
+    changeUserOp->run();
+  });
+}
+
 void AsyncConnectionPool::resetConnection(
     ConnectPoolOperation* rawPoolOp,
     const PoolKey& poolKey,
@@ -363,6 +408,15 @@ void AsyncConnectionPool::registerForConnection(
       conn_storage_.popConnection(pool_key);
 
   if (mysql_conn == nullptr) {
+    // One more try before opening a new connection: finding a connection from
+    // level2 cache and if found, run COM_CHANGE_USER
+    if (raw_pool_op->getConnectionOptions().isEnableChangeUser()) {
+      auto ret = conn_storage_.popInstanceConnection(pool_key);
+      if (ret) { // found
+        reuseConnWithChangeUser(raw_pool_op, pool_key, std::move(ret));
+        return;
+      }
+    }
     openNewConnection(raw_pool_op, pool_key);
   } else if (mysql_conn->needResetBeforeReuse()) {
     // reset connection before reusing the connection
@@ -432,6 +486,20 @@ void AsyncConnectionPool::removeOpenConnection(const PoolKey& pool_key) {
 
   --num_open_connections_;
   connectionSpotFreed(pool_key);
+}
+
+void AsyncConnectionPool::displayOpenConnections() {
+  std::unique_lock<std::mutex> l(counter_mutex_);
+
+  LOG(INFO) << "*** Open connections";
+  for (const auto& [key, value] : open_connections_) {
+    LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
+  }
+
+  LOG(INFO) << "*** Pending connections";
+  for (const auto& [key, value] : pending_connections_) {
+    LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
+  }
 }
 
 void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
@@ -614,58 +682,53 @@ void AsyncConnectionPool::ConnStorage::failOperations(
 std::unique_ptr<MysqlPooledHolder>
 AsyncConnectionPool::ConnStorage::popConnection(const PoolKey& pool_key) {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  return stock_.popLevel1(pool_key);
+}
 
-  auto iter = stock_.find(pool_key);
-  if (iter == stock_.end() || iter->second.empty()) {
-    return nullptr;
-  } else {
-    std::unique_ptr<MysqlPooledHolder> ret;
-    ret = std::move(iter->second.front());
-    iter->second.pop_front();
-    return ret;
-  }
+std::unique_ptr<MysqlPooledHolder>
+AsyncConnectionPool::ConnStorage::popInstanceConnection(const PoolKey& key) {
+  DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
+  size_t tries = 0;
+  size_t bestSize = 0;
+  // Find a pool key from level2_ cache, which has the largest number of
+  // connections in level1_ cache. This function checks at most
+  // "kMaxKeysToCheckInLevel2" number of keys in level2_ cache.
+  return stock_.popLevel2(
+      key,
+      [&](const auto& key1, const auto& key2) mutable -> folly::Optional<bool> {
+        tries++;
+        if (tries == kMaxKeysToCheckInLevel2) {
+          return folly::none;
+        }
+        if (bestSize == 0) {
+          bestSize = stock_.level1Size(key1);
+        }
+        auto testSize = stock_.level1Size(key2);
+        if (testSize > bestSize) {
+          bestSize = testSize;
+          return true;
+        }
+        return false;
+      });
 }
 
 void AsyncConnectionPool::ConnStorage::queueConnection(
     std::unique_ptr<MysqlPooledHolder> newConn) {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
-  // If it doesn't have space, remove the oldest and add this
-  MysqlConnectionList& list = stock_[newConn->getPoolKey()];
-
-  list.push_back(std::move(newConn));
-  if (list.size() > conn_limit_) {
-    list.pop_front();
-  }
+  const auto& key = newConn->getPoolKey();
+  stock_.push(key, std::move(newConn), conn_limit_);
 }
 
 void AsyncConnectionPool::ConnStorage::cleanupConnections() {
   DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
 
   Timepoint now = std::chrono::steady_clock::now();
-  for (auto connListIt = stock_.begin(); connListIt != stock_.end();) {
-    auto& connList = connListIt->second;
-    for (MysqlConnectionList::iterator it = connList.begin();
-         it != connList.end();) {
-      bool shouldDelete = false;
-
-      shouldDelete =
-          ((*it)->getLifeDuration() != Duration::zero() &&
-           ((*it)->getCreationTime() + (*it)->getLifeDuration() < now)) ||
-          (*it)->getLastActivityTime() + max_idle_time_ < now;
-      // TODO maybe check if by any chance the connection was killed
-      if (shouldDelete) {
-        it = connList.erase(it);
-      } else {
-        ++it;
-      }
-    }
-    if (connList.empty()) {
-      connListIt = stock_.erase(connListIt);
-    } else {
-      ++connListIt;
-    }
-  }
+  stock_.cleanup([&](const auto& conn) {
+    return (conn->getLifeDuration() != Duration::zero() &&
+            (conn->getCreationTime() + conn->getLifeDuration() < now)) ||
+        conn->getLastActivityTime() + max_idle_time_ < now;
+  });
 }
 
 void AsyncConnectionPool::ConnStorage::cleanupOperations() {
@@ -713,6 +776,19 @@ void AsyncConnectionPool::ConnStorage::clearAll() {
   // For the connections we don't need to close one by one, we can just
   // clear the list and leave the destructor to handle it.
   stock_.clear();
+}
+
+void AsyncConnectionPool::ConnStorage::displayPoolStatus() {
+  LOG(INFO) << "*** level1 cache";
+  stock_.iterateLevel1([](const auto& key, const auto& value) {
+    LOG(INFO) << key.connKey.getDisplayString()
+              << ", # conn = " << value.size();
+  });
+  LOG(INFO) << "*** level2 cache";
+  stock_.iterateLevel2([](const auto& key, const auto& value) {
+    LOG(INFO) << key.connKey.getDisplayString(true)
+              << ", # key = " << value.size();
+  });
 }
 
 void ConnectPoolOperation::attemptFailed(OperationResult result) {

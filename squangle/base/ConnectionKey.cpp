@@ -31,13 +31,15 @@ ConnectionKey::ConnectionKey(
       password(sp_password.toString()),
       special_tag(sp_special_tag.toString()),
       ignore_db_name(sp_ignore_db_name),
-      hash(folly::Hash()(
+      partial_hash(folly::Hash()(
           sp_host,
           sp_port,
-          ignore_db_name ? "" : sp_db_name,
           sp_user,
           sp_password,
-          sp_special_tag)) {}
+          sp_special_tag)),
+      hash(
+          ignore_db_name ? partial_hash
+                         : folly::Hash()(partial_hash, sp_db_name)) {}
 
 bool ConnectionKey::operator==(const ConnectionKey& rhs) const {
   return hash == rhs.hash && host == rhs.host && port == rhs.port &&
@@ -45,9 +47,20 @@ bool ConnectionKey::operator==(const ConnectionKey& rhs) const {
       password == rhs.password && special_tag == rhs.special_tag;
 }
 
-std::string ConnectionKey::getDisplayString() const {
+bool ConnectionKey::partialEqual(const ConnectionKey& rhs) const {
+  return partial_hash == rhs.partial_hash && host == rhs.host &&
+      port == rhs.port && user == rhs.user && password == rhs.password &&
+      special_tag == rhs.special_tag;
+}
+
+std::string ConnectionKey::getDisplayString(bool level2) const {
   return folly::sformat(
-      "{} [{}] ({}@{}:{})", db_name, special_tag, user, host, port);
+      "{} [{}] ({}@{}:{})",
+      level2 ? "" : db_name,
+      special_tag,
+      user,
+      host,
+      port);
 }
 } // namespace mysql_client
 } // namespace common
