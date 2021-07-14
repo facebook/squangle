@@ -56,7 +56,13 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
     auto mysql = mysql_;
     auto client = client_;
     // Close our connection in the thread from which it was created.
-    if (!client_->runInThread([mysql, client]() { mysql_close(mysql); })) {
+    if (!client_->runInThread([mysql]() {
+        // Unregister server cert validation callback
+        const void* callback{nullptr};
+        mysql_options(mysql, MYSQL_OPT_TLS_CERT_CALLBACK, &callback);
+
+        mysql_close(mysql);
+    })) {
       LOG(DFATAL)
           << "Mysql connection couldn't be closed: error in folly::EventBase";
     }

@@ -444,11 +444,9 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
   }
-  if (conn_opts.getCertValidationCallback()) {
-    setCertValidationCallback(
-        conn_opts.getCertValidationCallback(),
-        conn_opts.getCertValidationContext());
-  }
+  // Not overriding server cert validation callback and context.
+  // These values are set from cache, and callback context is
+  // out of date by now.
   return this;
 }
 
@@ -908,6 +906,15 @@ int ConnectOperation::mysqlCertValidator(
   ConnectOperation* self =
       reinterpret_cast<ConnectOperation*>(const_cast<void*>(context));
   CHECK_NOTNULL(self);
+
+  // Hold a shared pointer to the Operation object while running the callback
+  auto weak_self = self->weak_from_this();
+  if (weak_self.expired()) {
+    LOG(ERROR) << "ConnectOperation object " << self << " is already deallocated";
+    return 0;
+  }
+  auto guard = weak_self.lock();
+
   const CertValidatorCallback callback =
       self->conn_options_.getCertValidationCallback();
   CHECK(callback);
