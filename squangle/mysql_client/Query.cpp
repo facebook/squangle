@@ -521,7 +521,7 @@ folly::fbstring Query::render(
       folly::StringPiece type = advance(querySp, &idx, 1);
       if (type != "d" && type != "s" && type != "f" && type != "u" &&
           type != "m") {
-        parseError(querySp, idx, "expected %=d, %=c, %=s, %=u, or %=m");
+        parseError(querySp, idx, "expected %=d, %=f, %=s, %=u, or %=m");
       }
 
       if (param.isNull()) {

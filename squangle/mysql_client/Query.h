@@ -42,7 +42,7 @@
 //                  NULL if a nullptr is passed in.
 // %m - folly::dynamic, gets converted to string/integer/float/boolean.
 //      nulls become "NULL", throws otherwise
-// %=s, %=d, %=f, %=m - like the previous except suitable for comparison,
+// %=s, %=d, %=u, %=f, %=m - like the previous except suitable for comparison,
 //                 so "%s" becomes " = VALUE".  nulls become "IS NULL"
 // %T - a table name.  enclosed with ``.
 // %C - like %T, except for column names. Optionally supply two-/three-tuple
@@ -53,7 +53,7 @@
 //      will become "`table_name`.`column_name` AS `alias`"
 // %V - VALUES style row list; expects a list of lists, each of the same
 //      length.
-// %Ls, %Ld, %Lu, %Lf - strings/ints/uints/floats separated by commas
+// %Ls, %Ld, %Lu, %Lf, %Lm - strings/ints/uints/floats separated by commas
 // %LC - list of column names separated by commas. Optionally supplied as
 //       a list of two-/three-tuples to define qualified column names or
 //       qualified column names with aliases. Similar to %C.
@@ -65,6 +65,7 @@
 //          support unsigned integers.
 // %Q - literal string, evil evil.  don't use.
 // %K - an SQL comment.  Will put the /* and */ for you.
+// %% - literal % character.
 //
 // For more details, check out queryfx in the www codebase.
 
