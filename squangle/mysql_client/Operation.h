@@ -367,9 +367,11 @@ class ConnectionOptions {
 
   ConnectionOptions& setCertValidationCallback(
       CertValidatorCallback callback,
-      const void* context) {
+      const void* context,
+      bool opPtrAsContext) {
     certValidationCallback_ = callback;
-    certValidationContext_ = context;
+    opPtrAsCertValidationContext_ = opPtrAsContext;
+    certValidationContext_ = opPtrAsCertValidationContext_ ? nullptr : context;
     return *this;
   }
 
@@ -379,6 +381,10 @@ class ConnectionOptions {
 
   const void* getCertValidationContext() const {
     return certValidationContext_;
+  }
+
+  bool isOpPtrAsValidationContext() const {
+    return opPtrAsCertValidationContext_;
   }
 
  private:
@@ -398,6 +404,7 @@ class ConnectionOptions {
   bool change_user_ = false;
   CertValidatorCallback certValidationCallback_{nullptr};
   const void* certValidationContext_{nullptr};
+  bool opPtrAsCertValidationContext_{false};
 };
 
 // The abstract base for our available Operations.  Subclasses share
@@ -863,7 +870,8 @@ class ConnectOperation : public Operation {
   ConnectOperation* enableChangeUser();
   ConnectOperation* setCertValidationCallback(
       CertValidatorCallback callback,
-      const void* context = nullptr);
+      const void* context = nullptr,
+      bool opPtrAsContext = false);
 
   db::ConnectionContextBase* getConnectionContext() {
     CHECK_THROW(

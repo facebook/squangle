@@ -444,9 +444,12 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   if (provider) {
     setSSLOptionsProvider(std::move(provider));
   }
-  // Not overriding server cert validation callback and context.
-  // These values are set from cache, and callback context is
-  // out of date by now.
+  if (conn_opts.getCertValidationCallback()) {
+    setCertValidationCallback(
+        conn_opts.getCertValidationCallback(),
+        conn_opts.getCertValidationContext(),
+        conn_opts.isOpPtrAsValidationContext());
+  }
   return this;
 }
 
@@ -486,10 +489,11 @@ ConnectOperation* ConnectOperation::enableChangeUser() {
 
 ConnectOperation* ConnectOperation::setCertValidationCallback(
     CertValidatorCallback callback,
-    const void* context) {
+    const void* context,
+    bool opPtrAsContext) {
   CHECK_THROW(
       state() == OperationState::Unstarted, db::OperationStateException);
-  conn_options_.setCertValidationCallback(callback, context);
+  conn_options_.setCertValidationCallback(callback, context, opPtrAsContext);
   return this;
 }
 
@@ -918,7 +922,10 @@ int ConnectOperation::mysqlCertValidator(
   const CertValidatorCallback callback =
       self->conn_options_.getCertValidationCallback();
   CHECK(callback);
-  const void* callbackContext = self->conn_options_.getCertValidationContext();
+  const void* callbackContext =
+    self->conn_options_.isOpPtrAsValidationContext() ?
+    self :
+    self->conn_options_.getCertValidationContext();
   folly::StringPiece errorMessage;
 
   // "libmysql" expects this callback to return "0" if the cert validation was
