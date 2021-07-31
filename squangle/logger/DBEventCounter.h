@@ -10,10 +10,45 @@
 #define COMMON_DB_CLIENT_STATS_H
 
 #include <folly/Optional.h>
+#include <folly/Range.h>
 #include <atomic>
 
 namespace facebook {
 namespace db {
+
+using AddNormalValueFunction =
+    std::function<void(folly::StringPiece key, folly::StringPiece value)>;
+using AddIntValueFunction =
+    std::function<void(folly::StringPiece key, int64_t value)>;
+
+/*
+ * Base class to allow dynamic logging data efficiently saved in Squangle core
+ * classes. Should be used for data about the connection.
+ */
+class ConnectionContextBase {
+ public:
+  virtual ~ConnectionContextBase() {}
+  virtual void collectNormalValues(AddNormalValueFunction add) const;
+  virtual void collectIntValues(AddIntValueFunction add) const;
+  virtual std::unique_ptr<ConnectionContextBase> copy() const {
+    return std::make_unique<ConnectionContextBase>(*this);
+  }
+
+  /**
+   * Provide a more efficient mechanism to access a single value stored in the
+   * ConnectionContextBase that does not require executing a functor against
+   * every possible value and filtering in the functor
+   */
+  virtual folly::Optional<std::string> getNormalValue(
+      folly::StringPiece key) const;
+  bool isSslConnection = false;
+  bool sslSessionReused = false;
+  folly::Optional<std::string> sslCertCn;
+  folly::Optional<std::vector<std::string>> sslCertSan;
+  folly::Optional<std::vector<std::string>> sslCertIdentities;
+  bool isServerCertValidated = false;
+  std::string endpointVersion;
+};
 
 class ExponentialMovingAverage {
  public:
@@ -48,30 +83,25 @@ class DBCounterBase {
 
   // opened connections
   virtual void incrOpenedConnections(
-      const folly::Optional<std::string>& shardmap,
-      const folly::Optional<std::string>& endpointType) = 0;
+      const db::ConnectionContextBase* context) = 0;
 
   // closed connections
   virtual void incrClosedConnections(
-      const folly::Optional<std::string>& shardmap,
-      const folly::Optional<std::string>& endpointType) = 0;
+      const db::ConnectionContextBase* context) = 0;
 
   // failed connections
   virtual void incrFailedConnections(
-      const folly::Optional<std::string>& shardmap,
-      const folly::Optional<std::string>& endpointType,
+      const db::ConnectionContextBase* context,
       unsigned int mysql_errno) = 0;
 
   // query failures
   virtual void incrFailedQueries(
-      const folly::Optional<std::string>& shardmap,
-      const folly::Optional<std::string>& endpointType,
+      const db::ConnectionContextBase* context,
       unsigned int mysql_errno) = 0;
 
   // query successes
   virtual void incrSucceededQueries(
-      const folly::Optional<std::string>& shardmap,
-      const folly::Optional<std::string>& endpointType) = 0;
+      const db::ConnectionContextBase* context) = 0;
 
   // reused ssl connections
   virtual void incrReusedSSLSessions() = 0;
@@ -96,8 +126,7 @@ class SimpleDbCounter : public DBCounterBase {
   }
 
   void incrOpenedConnections(
-      const folly::Optional<std::string>& /* unused */,
-      const folly::Optional<std::string>& /* unused */) override {
+      const db::ConnectionContextBase* /* context */) override {
     opened_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -107,8 +136,7 @@ class SimpleDbCounter : public DBCounterBase {
   }
 
   void incrClosedConnections(
-      const folly::Optional<std::string>& /* unused */,
-      const folly::Optional<std::string>& /* unused */) override {
+      const db::ConnectionContextBase* /* context */) override {
     closed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
 
@@ -118,8 +146,7 @@ class SimpleDbCounter : public DBCounterBase {
   }
 
   void incrFailedConnections(
-      const folly::Optional<std::string>& /* unused */,
-      const folly::Optional<std::string>& /* unused */,
+      const db::ConnectionContextBase* /* context */,
       unsigned int /* unused */) override {
     failed_connections_.fetch_add(1, std::memory_order_relaxed);
   }
@@ -130,8 +157,7 @@ class SimpleDbCounter : public DBCounterBase {
   }
 
   void incrFailedQueries(
-      const folly::Optional<std::string>& /* unused */,
-      const folly::Optional<std::string>& /* unused */,
+      const db::ConnectionContextBase* /* context */,
       unsigned int /* unused */) override {
     failed_queries_.fetch_add(1, std::memory_order_relaxed);
   }
@@ -142,8 +168,7 @@ class SimpleDbCounter : public DBCounterBase {
   }
 
   void incrSucceededQueries(
-      const folly::Optional<std::string>& /* unused */,
-      const folly::Optional<std::string>& /* unused */) override {
+      const db::ConnectionContextBase* /* context */) override {
     succeeded_queries_.fetch_add(1, std::memory_order_relaxed);
   }
 

@@ -170,13 +170,7 @@ void MysqlClientBase::logQuerySuccess(
     const db::QueryLoggingData& logging_data,
     const Connection& conn) {
   auto conn_context = conn.getConnectionContext();
-  if (conn_context) {
-    stats()->incrSucceededQueries(
-        conn_context->getNormalValue("shardmap"),
-        conn_context->getNormalValue("endpoint_type"));
-  } else {
-    stats()->incrSucceededQueries(folly::none, folly::none);
-  }
+  stats()->incrSucceededQueries(conn_context);
 
   if (db_logger_) {
     db_logger_->logQuerySuccess(
@@ -191,14 +185,7 @@ void MysqlClientBase::logQueryFailure(
     const std::string& error,
     const Connection& conn) {
   auto conn_context = conn.getConnectionContext();
-  if (conn_context) {
-    stats()->incrFailedQueries(
-        conn_context->getNormalValue("shardmap"),
-        conn_context->getNormalValue("endpoint_type"),
-        mysqlErrno);
-  } else {
-    stats()->incrFailedQueries(folly::none, folly::none, mysqlErrno);
-  }
+  stats()->incrFailedQueries(conn_context, mysqlErrno);
 
   if (db_logger_) {
     db_logger_->logQueryFailure(
@@ -227,14 +214,7 @@ void MysqlClientBase::logConnectionFailure(
     unsigned int mysqlErrno,
     const std::string& error,
     const db::ConnectionContextBase* connection_context) {
-  if (connection_context) {
-    stats()->incrFailedConnections(
-        connection_context->getNormalValue("shardmap"),
-        connection_context->getNormalValue("endpoint_type"),
-        mysqlErrno);
-  } else {
-    stats()->incrFailedConnections(folly::none, folly::none, mysqlErrno);
-  }
+  stats()->incrFailedConnections(connection_context, mysqlErrno);
 
   if (db_logger_) {
     db_logger_->logConnectionFailure(

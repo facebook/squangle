@@ -67,13 +67,7 @@ MysqlConnectionHolder::~MysqlConnectionHolder() {
           << "Mysql connection couldn't be closed: error in folly::EventBase";
     }
     if (connection_opened_) {
-      if (conn_context_) {
-        client_->stats()->incrClosedConnections(
-            conn_context_->getNormalValue("shardmap"),
-            conn_context_->getNormalValue("endpoint_type"));
-      } else {
-        client_->stats()->incrClosedConnections(folly::none, folly::none);
-      }
+      client_->stats()->incrClosedConnections(conn_context_.get());
     }
   }
   client_->activeConnectionRemoved(&conn_key_);
@@ -83,13 +77,7 @@ void MysqlConnectionHolder::connectionOpened() {
   connection_opened_ = true;
   last_activity_time_ = std::chrono::steady_clock::now();
 
-  if (conn_context_) {
-    client_->stats()->incrOpenedConnections(
-        conn_context_->getNormalValue("shardmap"),
-        conn_context_->getNormalValue("endpoint_type"));
-  } else {
-    client_->stats()->incrOpenedConnections(folly::none, folly::none);
-  }
+  client_->stats()->incrOpenedConnections(conn_context_.get());
 }
 
 } // namespace mysql_client

@@ -84,39 +84,6 @@ class EnumHelper {
   }
 };
 
-typedef std::function<void(folly::StringPiece key, folly::StringPiece value)>
-    AddNormalValueFunction;
-typedef std::function<void(folly::StringPiece key, int64_t value)>
-    AddIntValueFunction;
-/*
- * Base class to allow dynamic logging data efficiently saved in Squangle core
- * classes. Should be used for data about the connection.
- */
-class ConnectionContextBase {
- public:
-  virtual ~ConnectionContextBase() {}
-  virtual void collectNormalValues(AddNormalValueFunction add) const;
-  virtual void collectIntValues(AddIntValueFunction add) const;
-  virtual std::unique_ptr<ConnectionContextBase> copy() const {
-    return std::make_unique<ConnectionContextBase>(*this);
-  }
-
-  /**
-   * Provide a more efficient mechanism to access a single value stored in the
-   * ConnectionContextBase that does not require executing a functor against
-   * every possible value and filtering in the functor
-   */
-  virtual folly::Optional<std::string> getNormalValue(
-      folly::StringPiece key) const;
-  bool isSslConnection = false;
-  bool sslSessionReused = false;
-  folly::Optional<std::string> sslCertCn;
-  folly::Optional<std::vector<std::string>> sslCertSan;
-  folly::Optional<std::vector<std::string>> sslCertIdentities;
-  bool isServerCertValidated = false;
-  std::string endpointVersion;
-};
-
 typedef std::chrono::duration<uint64_t, std::micro> Duration;
 
 struct SquangleLoggingData {
