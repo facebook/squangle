@@ -25,6 +25,7 @@ enum class FailureReason {
   TIMEOUT,
   CANCELLED,
   DATABASE_ERROR,
+  DISCOVERY_ERROR,
 };
 
 enum class OperationType {
@@ -52,6 +53,8 @@ class EnumHelper {
         return "Cancelled";
       case FailureReason::DATABASE_ERROR:
         return "DatabaseError";
+      case FailureReason::DISCOVERY_ERROR:
+        return "DiscoveryError";
     }
     return "(should not happen)";
   }
