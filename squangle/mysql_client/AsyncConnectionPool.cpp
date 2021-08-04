@@ -13,6 +13,7 @@
 
 #include <memory>
 
+#include <folly/MapUtil.h>
 #include <folly/Memory.h>
 
 #include <vector>
@@ -430,12 +431,12 @@ void AsyncConnectionPool::registerForConnection(
   }
 }
 
-bool AsyncConnectionPool::canCreateMoreConnections(const PoolKey& pool_key) {
+bool AsyncConnectionPool::canCreateMoreConnections(
+    const PoolKey& pool_key) const {
   DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
   std::unique_lock<std::mutex> l(counter_mutex_);
-  auto open_conns = open_connections_[pool_key];
-  auto pending_conns = pending_connections_[pool_key];
-
+  auto open_conns = folly::get_default(open_connections_, pool_key, 0);
+  auto pending_conns = folly::get_default(pending_connections_, pool_key, 0);
   auto enqueued_pool_ops = conn_storage_.numQueuedOperations(pool_key);
 
   auto client_total_conns = mysql_client_->numStartedAndOpenConnections();
@@ -460,12 +461,15 @@ bool AsyncConnectionPool::canCreateMoreConnections(const PoolKey& pool_key) {
   return false;
 }
 
-PoolKeyStats AsyncConnectionPool::getPoolKeyStats(const PoolKey& pool_key) {
+PoolKeyStats AsyncConnectionPool::getPoolKeyStats(
+    const PoolKey& pool_key) const {
   PoolKeyStats stats;
   stats.connection_limit = conn_per_key_limit_;
   std::unique_lock<std::mutex> l(counter_mutex_);
-  stats.open_connections = open_connections_[pool_key];
-  stats.pending_connections = pending_connections_[pool_key];
+  stats.open_connections =
+      folly::get_default(open_connections_, pool_key, 0);
+  stats.pending_connections =
+      folly::get_default(pending_connections_, pool_key, 0);
   return stats;
 }
 

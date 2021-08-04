@@ -26,12 +26,12 @@
 #define COMMON_ASYNC_CONNECTION_POOL_H
 
 #include <folly/String.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/futures/Future.h>
 #include <chrono>
 #include <list>
 #include <memory>
-#include <unordered_map>
 
 #include "squangle/logger/DBEventCounter.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
@@ -505,7 +505,7 @@ class AsyncConnectionPool
     return &pool_stats_;
   }
 
-  PoolKeyStats getPoolKeyStats(const PoolKey& key);
+  PoolKeyStats getPoolKeyStats(const PoolKey& key) const;
 
   // Don't use the constructor directly, only public to use make_shared
   AsyncConnectionPool(
@@ -573,7 +573,7 @@ class AsyncConnectionPool
   // it's a waste to create a new connection to avoid start opening a new
   // connection when we already have enough being open for the demand in
   // queue.
-  bool canCreateMoreConnections(const PoolKey& conn_key);
+  bool canCreateMoreConnections(const PoolKey& conn_key) const;
 
   ///////////// Counter control functions
 
@@ -670,9 +670,10 @@ class AsyncConnectionPool
     // for debugging
     void displayPoolStatus();
 
-    size_t numQueuedOperations(const PoolKey& pool_key) {
+    size_t numQueuedOperations(const PoolKey& pool_key) const {
       DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
-      return waitList_[pool_key].size();
+      auto it = waitList_.find(pool_key);
+      return it == waitList_.end() ? 0 : it->second.size();
     }
 
    private:
@@ -691,7 +692,7 @@ class AsyncConnectionPool
         PoolKeyPartialHash>
         stock_;
 
-    std::unordered_map<PoolKey, PoolOpList, PoolKeyHash> waitList_;
+    folly::F14NodeMap<PoolKey, PoolOpList, PoolKeyHash> waitList_;
 
     size_t conn_limit_;
     Duration max_idle_time_;
@@ -717,15 +718,15 @@ class AsyncConnectionPool
   const bool pool_per_instance_;
 
   // Protects the read and writes of connection counters
-  std::mutex counter_mutex_;
+  mutable std::mutex counter_mutex_;
 
   uint32_t num_open_connections_ = 0;
   // Counts the number of open connections for a given connectionKey
-  std::unordered_map<PoolKey, uint64_t, PoolKeyHash> open_connections_;
+  folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> open_connections_;
   // Same as above but for connections that we are still opening
   // This one doesn't need locking, only accessed by client thread
   uint32_t num_pending_connections_ = 0;
-  std::unordered_map<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
+  folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
 
   // Used in the destructor to wait cleanup_timer_ be called. It's required by
   // `shutdown_condvar_`
