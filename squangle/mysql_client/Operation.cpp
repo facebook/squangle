@@ -1909,6 +1909,10 @@ folly::fbstring Operation::connectStageString(connect_stage stage) {
            "CONNECT_STAGE_NOT_STARTED"},
           {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
            "CONNECT_STAGE_NET_BEGIN_CONNECT"},
+#if MYSQL_VERSION_ID >= 80020  // csm_wait_connect added in 8.0.20
+          {connect_stage::CONNECT_STAGE_NET_WAIT_CONNECT,
+           "CONNECT_STAGE_NET_WAIT_CONNECT"},
+#endif
           {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
            "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
           {connect_stage::CONNECT_STAGE_READ_GREETING,
