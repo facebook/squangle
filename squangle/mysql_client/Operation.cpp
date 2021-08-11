@@ -621,8 +621,6 @@ void ConnectOperation::specializedRunImpl() {
 
   const auto& compression_lib = getCompression();
   if (compression_lib) {
-    CHECK_NE(*compression_lib, ZSTD) << "ZSTD is not yet supported";
-
     mysql_options(mysql, MYSQL_OPT_COMPRESS, nullptr);
     setCompressionOption(mysql, *compression_lib);
   }
