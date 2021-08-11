@@ -619,12 +619,12 @@ void ConnectOperation::specializedRunImpl() {
         value.c_str());
   }
 
-  auto compression_lib = getCompression();
+  const auto& compression_lib = getCompression();
   if (compression_lib) {
-    CHECK(*compression_lib != MYSQL_COMPRESSION_ZSTD)
-        << "ZSTD is not yet supported";
+    CHECK_NE(*compression_lib, ZSTD) << "ZSTD is not yet supported";
+
     mysql_options(mysql, MYSQL_OPT_COMPRESS, nullptr);
-    mysql_options(mysql, MYSQL_OPT_COMP_LIB, (void*)&(*compression_lib));
+    setCompressionOption(mysql, *compression_lib);
   }
 
   auto provider = conn_options_.getSSLOptionsProviderPtr();
@@ -914,7 +914,8 @@ int ConnectOperation::mysqlCertValidator(
   // Hold a shared pointer to the Operation object while running the callback
   auto weak_self = self->weak_from_this();
   if (weak_self.expired()) {
-    LOG(ERROR) << "ConnectOperation object " << self << " is already deallocated";
+    LOG(ERROR) << "ConnectOperation object " << self
+               << " is already deallocated";
     return 0;
   }
   auto guard = weak_self.lock();
@@ -922,10 +923,9 @@ int ConnectOperation::mysqlCertValidator(
   const CertValidatorCallback callback =
       self->conn_options_.getCertValidationCallback();
   CHECK(callback);
-  const void* callbackContext =
-    self->conn_options_.isOpPtrAsValidationContext() ?
-    self :
-    self->conn_options_.getCertValidationContext();
+  const void* callbackContext = self->conn_options_.isOpPtrAsValidationContext()
+      ? self
+      : self->conn_options_.getCertValidationContext();
   folly::StringPiece errorMessage;
 
   // "libmysql" expects this callback to return "0" if the cert validation was

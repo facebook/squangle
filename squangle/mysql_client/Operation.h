@@ -57,6 +57,7 @@
 #include <folly/io/async/SSLContext.h>
 #include <folly/ssl/OpenSSLPtrTypes.h>
 #include "squangle/logger/DBEventLogger.h"
+#include "squangle/mysql_client/Compression.h"
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/DbResult.h"
 #include "squangle/mysql_client/MysqlHandler.h"
@@ -259,12 +260,12 @@ class ConnectionOptions {
 
   // Sorry for the weird API, there is no enum for compression = None
   ConnectionOptions& setCompression(
-      folly::Optional<mysql_compression_lib> comp_lib) {
-    compression_lib_ = comp_lib;
+      folly::Optional<CompressionAlgorithm> comp_lib) {
+    compression_lib_ = std::move(comp_lib);
     return *this;
   }
 
-  folly::Optional<mysql_compression_lib> getCompression() const {
+  const folly::Optional<CompressionAlgorithm>& getCompression() const {
     return compression_lib_;
   }
 
@@ -394,7 +395,7 @@ class ConnectionOptions {
   Duration query_timeout_;
   std::shared_ptr<SSLOptionsProviderBase> ssl_options_provider_;
   std::unordered_map<std::string, std::string> attributes_;
-  folly::Optional<mysql_compression_lib> compression_lib_;
+  folly::Optional<CompressionAlgorithm> compression_lib_;
   bool use_checksum_ = false;
   uint32_t max_attempts_ = 1;
   uint8_t dscp_ = 0;
@@ -960,12 +961,12 @@ class ConnectOperation : public Operation {
   }
 
   ConnectOperation* setCompression(
-      folly::Optional<mysql_compression_lib> compression_lib) {
-    conn_options_.setCompression(compression_lib);
+      folly::Optional<CompressionAlgorithm> compression_lib) {
+    conn_options_.setCompression(std::move(compression_lib));
     return this;
   }
 
-  folly::Optional<mysql_compression_lib> getCompression() const {
+  const folly::Optional<CompressionAlgorithm>& getCompression() const {
     return conn_options_.getCompression();
   }
 
