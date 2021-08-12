@@ -409,6 +409,11 @@ class EphemeralRowFields {
     return fields_[index].type;
   }
 
+  folly::StringPiece fieldName(size_t index) const {
+    CHECK_LT(index, num_fields_);
+    return folly::StringPiece(fields_[index].name, fields_[index].name_length);
+  }
+
   std::shared_ptr<RowFields> makeBufferedFields() const;
 
   EphemeralRowFields(EphemeralRowFields const&) = delete;
