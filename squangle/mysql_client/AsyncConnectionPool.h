@@ -507,6 +507,10 @@ class AsyncConnectionPool
 
   PoolKeyStats getPoolKeyStats(const PoolKey& key) const;
 
+  uint32_t getNumOpenConnections() {
+    return num_open_connections_;
+  }
+
   // Don't use the constructor directly, only public to use make_shared
   AsyncConnectionPool(
       std::shared_ptr<AsyncMysqlClient> mysql_client,
