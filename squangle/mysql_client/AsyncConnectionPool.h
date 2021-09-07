@@ -507,8 +507,12 @@ class AsyncConnectionPool
 
   PoolKeyStats getPoolKeyStats(const PoolKey& key) const;
 
-  uint32_t getNumOpenConnections() {
+  uint32_t getNumOpenConnections() const noexcept {
     return num_open_connections_;
+  }
+
+  uint32_t getNumPendingConnections() const noexcept {
+    return num_pending_connections_;
   }
 
   // Don't use the constructor directly, only public to use make_shared
