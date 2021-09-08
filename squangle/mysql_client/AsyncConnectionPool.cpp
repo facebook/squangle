@@ -466,8 +466,7 @@ PoolKeyStats AsyncConnectionPool::getPoolKeyStats(
   PoolKeyStats stats;
   stats.connection_limit = conn_per_key_limit_;
   std::unique_lock<std::mutex> l(counter_mutex_);
-  stats.open_connections =
-      folly::get_default(open_connections_, pool_key, 0);
+  stats.open_connections = folly::get_default(open_connections_, pool_key, 0);
   stats.pending_connections =
       folly::get_default(pending_connections_, pool_key, 0);
   return stats;
@@ -506,6 +505,14 @@ void AsyncConnectionPool::displayOpenConnections() {
   }
 }
 
+int AsyncConnectionPool::getNumKeysInOpenConnections() {
+  return open_connections_.size();
+}
+
+int AsyncConnectionPool::getNumKeysInPendingConnections() {
+  return pending_connections_.size();
+}
+
 void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
   ++pending_connections_[pool_key];
@@ -514,7 +521,11 @@ void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
 
 void AsyncConnectionPool::removeOpeningConn(const PoolKey& pool_key) {
   std::unique_lock<std::mutex> l(counter_mutex_);
-  --pending_connections_[pool_key];
+  auto num = --pending_connections_[pool_key];
+  DCHECK_GE(int64_t(num), 0);
+  if (num == 0) {
+    pending_connections_.erase(pool_key);
+  }
   --num_pending_connections_;
 }
 
@@ -579,8 +590,8 @@ void AsyncConnectionPool::tryRequestNewConnection(
     });
 
     try {
-      connOp->run();
       addOpeningConn(pool_key);
+      connOp->run();
     } catch (db::OperationStateException& e) {
       LOG(ERROR) << "Client is drain or dying, cannot ask for more connections";
     }

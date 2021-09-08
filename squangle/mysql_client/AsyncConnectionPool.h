@@ -520,6 +520,11 @@ class AsyncConnectionPool
       std::shared_ptr<AsyncMysqlClient> mysql_client,
       const PoolOptions& pool_options);
 
+  // For debugging
+  void displayOpenConnections();
+  int getNumKeysInOpenConnections();
+  int getNumKeysInPendingConnections();
+
  private:
   friend class Connection;
   friend class MysqlPooledHolder;
@@ -593,9 +598,6 @@ class AsyncConnectionPool
 
   void removeOpenConnection(const PoolKey& conn_key);
   void removeOpeningConn(const PoolKey& conn_key);
-
-  // For debugging
-  void displayOpenConnections();
 
   void connectionSpotFreed(const PoolKey& conn_key);
 
