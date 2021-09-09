@@ -508,11 +508,15 @@ class AsyncConnectionPool
   PoolKeyStats getPoolKeyStats(const PoolKey& key) const;
 
   uint32_t getNumOpenConnections() const noexcept {
-    return num_open_connections_;
+    return counters_.withRLock([](const auto& locked) {
+      return locked.num_open_connections;
+    });
   }
 
   uint32_t getNumPendingConnections() const noexcept {
-    return num_pending_connections_;
+    return counters_.withRLock([](const auto& locked) {
+      return locked.num_pending_connections;
+    });
   }
 
   // Don't use the constructor directly, only public to use make_shared
@@ -727,16 +731,18 @@ class AsyncConnectionPool
   ExpirationPolicy expiration_policy_;
   const bool pool_per_instance_;
 
-  // Protects the read and writes of connection counters
-  mutable std::mutex counter_mutex_;
+  struct Counters {
+    uint32_t num_open_connections = 0;
+    // Counts the number of open connections for a given connectionKey
+    folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> open_connections;
+    // Same as above but for connections that we are still opening
+    // This one doesn't need locking, only accessed by client thread
+    uint32_t num_pending_connections = 0;
+    folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> pending_connections;
 
-  uint32_t num_open_connections_ = 0;
-  // Counts the number of open connections for a given connectionKey
-  folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> open_connections_;
-  // Same as above but for connections that we are still opening
-  // This one doesn't need locking, only accessed by client thread
-  uint32_t num_pending_connections_ = 0;
-  folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> pending_connections_;
+  };
+
+  folly::Synchronized<Counters> counters_;
 
   // Used in the destructor to wait cleanup_timer_ be called. It's required by
   // `shutdown_condvar_`

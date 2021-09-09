@@ -434,9 +434,6 @@ void AsyncConnectionPool::registerForConnection(
 bool AsyncConnectionPool::canCreateMoreConnections(
     const PoolKey& pool_key) const {
   DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
-  std::unique_lock<std::mutex> l(counter_mutex_);
-  auto open_conns = folly::get_default(open_connections_, pool_key, 0);
-  auto pending_conns = folly::get_default(pending_connections_, pool_key, 0);
   auto enqueued_pool_ops = conn_storage_.numQueuedOperations(pool_key);
 
   auto client_total_conns = mysql_client_->numStartedAndOpenConnections();
@@ -444,7 +441,13 @@ bool AsyncConnectionPool::canCreateMoreConnections(
 
   // We have the number of connections we are opening and the number of already
   // open, we shouldn't try to create over this sum
-  int num_pool_allocated = num_open_connections_ + num_pending_connections_;
+  auto [num_pool_allocated, open_conns, pending_conns] =
+      counters_.withRLock([&](const auto& locked) {
+        return std::make_tuple(
+            locked.num_open_connections + locked.num_pending_connections,
+            folly::get_default(locked.open_connections, pool_key, 0),
+            folly::get_default(locked.pending_connections, pool_key, 0));
+      });
   int num_per_key_allocated = open_conns + pending_conns;
 
   // First we check global limit, then limits of the pool. If we can create more
@@ -465,68 +468,78 @@ PoolKeyStats AsyncConnectionPool::getPoolKeyStats(
     const PoolKey& pool_key) const {
   PoolKeyStats stats;
   stats.connection_limit = conn_per_key_limit_;
-  std::unique_lock<std::mutex> l(counter_mutex_);
-  stats.open_connections = folly::get_default(open_connections_, pool_key, 0);
-  stats.pending_connections =
-      folly::get_default(pending_connections_, pool_key, 0);
+  counters_.withRLock([&](const auto& locked) {
+    stats.open_connections =
+        folly::get_default(locked.open_connections, pool_key, 0);
+    stats.pending_connections =
+        folly::get_default(locked.pending_connections, pool_key, 0);
+  });
   return stats;
 }
 
 void AsyncConnectionPool::addOpenConnection(const PoolKey& pool_key) {
-  std::unique_lock<std::mutex> l(counter_mutex_);
-  ++open_connections_[pool_key];
-  ++num_open_connections_;
+  counters_.withWLock([&](auto& locked) {
+    ++locked.open_connections[pool_key];
+    ++locked.num_open_connections;
+  });
 }
 
 void AsyncConnectionPool::removeOpenConnection(const PoolKey& pool_key) {
-  std::unique_lock<std::mutex> l(counter_mutex_);
+  counters_.withWLock([&](auto& locked) {
+    auto iter = locked.open_connections.find(pool_key);
+    DCHECK(iter != locked.open_connections.end());
+    if (--iter->second == 0) {
+      locked.open_connections.erase(iter);
+    }
 
-  auto iter = open_connections_.find(pool_key);
-  DCHECK(iter != open_connections_.end());
-  if (--iter->second == 0) {
-    open_connections_.erase(iter);
-  }
+    --locked.num_open_connections;
+  });
 
-  --num_open_connections_;
   connectionSpotFreed(pool_key);
 }
 
 void AsyncConnectionPool::displayOpenConnections() {
-  std::unique_lock<std::mutex> l(counter_mutex_);
+  counters_.withRLock([](const auto& locked) {
+    LOG(INFO) << "*** Open connections";
+    for (const auto& [key, value] : locked.open_connections) {
+      LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
+    }
 
-  LOG(INFO) << "*** Open connections";
-  for (const auto& [key, value] : open_connections_) {
-    LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
-  }
-
-  LOG(INFO) << "*** Pending connections";
-  for (const auto& [key, value] : pending_connections_) {
-    LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
-  }
+    LOG(INFO) << "*** Pending connections";
+    for (const auto& [key, value] : locked.pending_connections) {
+      LOG(INFO) << key.connKey.getDisplayString() << ": " << value;
+    }
+  });
 }
 
 int AsyncConnectionPool::getNumKeysInOpenConnections() {
-  return open_connections_.size();
+  return counters_.withRLock([](const auto& locked) {
+    return locked.open_connections.size();
+  });
 }
 
 int AsyncConnectionPool::getNumKeysInPendingConnections() {
-  return pending_connections_.size();
+  return counters_.withRLock([](const auto& locked) {
+    return locked.pending_connections.size();
+  });
 }
 
 void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
-  std::unique_lock<std::mutex> l(counter_mutex_);
-  ++pending_connections_[pool_key];
-  ++num_pending_connections_;
+  counters_.withWLock([&](auto& locked) {
+    ++locked.pending_connections[pool_key];
+    ++locked.num_pending_connections;
+  });
 }
 
 void AsyncConnectionPool::removeOpeningConn(const PoolKey& pool_key) {
-  std::unique_lock<std::mutex> l(counter_mutex_);
-  auto num = --pending_connections_[pool_key];
-  DCHECK_GE(int64_t(num), 0);
-  if (num == 0) {
-    pending_connections_.erase(pool_key);
-  }
-  --num_pending_connections_;
+  counters_.withWLock([&](auto& locked) {
+    auto num = --locked.pending_connections[pool_key];
+    DCHECK_GE(int64_t(num), 0);
+    if (num == 0) {
+      locked.pending_connections.erase(pool_key);
+    }
+    --locked.num_pending_connections;
+  });
 }
 
 void AsyncConnectionPool::connectionSpotFreed(const PoolKey& pool_key) {
