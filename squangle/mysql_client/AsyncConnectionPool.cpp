@@ -102,6 +102,7 @@ AsyncConnectionPool::AsyncConnectionPool(
 
 AsyncConnectionPool::~AsyncConnectionPool() {
   VLOG(2) << "Connection pool dying";
+
   if (!finished_shutdown_.load(std::memory_order_acquire)) {
     shutdown();
   }
@@ -325,6 +326,8 @@ void AsyncConnectionPool::reuseConnWithChangeUser(
   changeUserOp->setCallback(
       [this, rawPoolOp, poolKey, poolPtr = getSelfWeakPointer()](
           SpecialOperation& op, OperationResult result) {
+        rawPoolOp->resetPreOperation();
+
         if (result == OperationResult::Failed) {
           openNewConnection(rawPoolOp, poolKey);
           return;
@@ -343,7 +346,11 @@ void AsyncConnectionPool::reuseConnWithChangeUser(
         rawPoolOp->connectionCallback(std::move(pooledConn));
       });
 
-  rawPoolOp->setPreOperation(changeUserOp);
+  // Failing to set pre-operation means rawPoolOp already fails (times out, etc)
+  // and its pre-operation is already cancelled.
+  if (!rawPoolOp->setPreOperation(changeUserOp)) {
+    return;
+  }
   getMysqlClient()->runInThread([changeUserOp = std::move(changeUserOp)]() {
     changeUserOp->connection()->client()->addOperation(changeUserOp);
     changeUserOp->run();
@@ -381,7 +388,10 @@ void AsyncConnectionPool::resetConnection(
         rawPoolOp->connectionCallback(std::move(mysqlConnection));
       });
 
-  rawPoolOp->setPreOperation(resetOp);
+  // Failing to set pre-operation means rawPoolOp already fails
+  if (!rawPoolOp->setPreOperation(resetOp)) {
+    return;
+  }
   getMysqlClient()->runInThread([resetOp = std::move(resetOp)]() {
     resetOp->connection()->client()->addOperation(resetOp);
     resetOp->run();
@@ -513,15 +523,11 @@ void AsyncConnectionPool::displayOpenConnections() {
 }
 
 int AsyncConnectionPool::getNumKeysInOpenConnections() {
-  return counters_.withRLock([](const auto& locked) {
-    return locked.open_connections.size();
-  });
+  return counters_.rlock()->open_connections.size();
 }
 
 int AsyncConnectionPool::getNumKeysInPendingConnections() {
-  return counters_.withRLock([](const auto& locked) {
-    return locked.pending_connections.size();
-  });
+  return counters_.rlock()->pending_connections.size();
 }
 
 void AsyncConnectionPool::addOpeningConn(const PoolKey& pool_key) {
@@ -947,8 +953,16 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
 void ConnectPoolOperation::connectionCallback(
     std::unique_ptr<MysqlPooledHolder> mysql_conn) {
   DCHECK(client()->getEventBase()->isInEventBaseThread());
+  DCHECK(mysql_errno_ == 0);
+
   if (!mysql_conn) {
     LOG(DFATAL) << "Unexpected error";
+    completeOperation(OperationResult::Failed);
+    return;
+  }
+  if (mysql_errno_) {
+    LOG(ERROR) << "Connection pool callback was called with mysql err: "
+               << mysql_errno_;
     completeOperation(OperationResult::Failed);
     return;
   }

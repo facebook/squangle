@@ -508,15 +508,11 @@ class AsyncConnectionPool
   PoolKeyStats getPoolKeyStats(const PoolKey& key) const;
 
   uint32_t getNumOpenConnections() const noexcept {
-    return counters_.withRLock([](const auto& locked) {
-      return locked.num_open_connections;
-    });
+    return counters_.rlock()->num_open_connections;
   }
 
   uint32_t getNumPendingConnections() const noexcept {
-    return counters_.withRLock([](const auto& locked) {
-      return locked.num_pending_connections;
-    });
+    return counters_.rlock()->num_pending_connections;
   }
 
   // Don't use the constructor directly, only public to use make_shared
@@ -739,7 +735,6 @@ class AsyncConnectionPool
     // This one doesn't need locking, only accessed by client thread
     uint32_t num_pending_connections = 0;
     folly::F14FastMap<PoolKey, uint64_t, PoolKeyHash> pending_connections;
-
   };
 
   folly::Synchronized<Counters> counters_;
@@ -765,7 +760,9 @@ class AsyncConnectionPool
 
 class ConnectPoolOperation : public ConnectOperation {
  public:
-  ~ConnectPoolOperation() override {}
+  ~ConnectPoolOperation() override {
+    cancelPreOperation();
+  }
 
   // Don't call this; it's public strictly for AsyncConnectionPool to be
   // able to call make_shared.
@@ -779,21 +776,16 @@ class ConnectPoolOperation : public ConnectOperation {
     return db::OperationType::PoolConnect;
   }
 
-  void setPreOperation(std::shared_ptr<Operation> op) {
-    preOperation_.withWLock([op = std::move(op)](auto& preOperation) {
-      preOperation = std::move(op);
-    });
+  bool setPreOperation(std::shared_ptr<Operation> op) {
+    return preOperation_.wlock()->set(std::move(op));
   }
+
   void cancelPreOperation() {
-    preOperation_.withWLock([](auto& preOperation) {
-      if (preOperation) {
-        preOperation->cancel();
-        preOperation.reset();
-      }
-    });
+    preOperation_.wlock()->cancel();
   }
+
   void resetPreOperation() {
-    preOperation_.withWLock([](auto& preOperation) { preOperation.reset(); });
+    preOperation_.wlock()->reset();
   }
 
  protected:
@@ -814,10 +806,44 @@ class ConnectPoolOperation : public ConnectOperation {
       const std::string& mysql_error);
 
   std::weak_ptr<AsyncConnectionPool> pool_;
+
+  // PreOperation keeps any other operation that needs to be canceled when
+  // ConnectPoolOperation is cancelled.
+  // PreOperation is not reused and its lifetime is with ConnectPoolOperation.
+  // PreOperation is not thread-safe, and ConnectPoolOperation is responsible
+  // for adding a lock.
+  class PreOperation {
+   public:
+    void cancel() {
+      if (preOperation_) {
+        preOperation_->cancel();
+        preOperation_.reset();
+      }
+      canceled_ = true;
+    }
+
+    void reset() {
+      preOperation_.reset();
+    }
+
+    // returns true if set pre-operation succeeds, false otherwise
+    bool set(std::shared_ptr<Operation> op) {
+      if (canceled_) {
+        return false;
+      }
+      preOperation_ = std::move(op);
+      return true;
+    }
+
+   private:
+    std::shared_ptr<Operation> preOperation_;
+    bool canceled_{false};
+  };
+
   // Operation that is required before completing this operation, which could
   // be reset_connection or change_user operation. There's at most 1
   // pre-operation.
-  folly::Synchronized<std::shared_ptr<Operation>> preOperation_;
+  folly::Synchronized<PreOperation> preOperation_;
 
   friend class AsyncConnectionPool;
 };
