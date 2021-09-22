@@ -953,7 +953,6 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
 void ConnectPoolOperation::connectionCallback(
     std::unique_ptr<MysqlPooledHolder> mysql_conn) {
   DCHECK(client()->getEventBase()->isInEventBaseThread());
-  DCHECK(mysql_errno_ == 0);
 
   if (!mysql_conn) {
     LOG(DFATAL) << "Unexpected error";
@@ -961,8 +960,9 @@ void ConnectPoolOperation::connectionCallback(
     return;
   }
   if (mysql_errno_) {
-    LOG(ERROR) << "Connection pool callback was called with mysql err: "
-               << mysql_errno_;
+    LOG_EVERY_N(ERROR, 1000)
+        << "Connection pool callback was called with mysql err: "
+        << mysql_errno_;
     completeOperation(OperationResult::Failed);
     return;
   }
