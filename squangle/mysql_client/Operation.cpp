@@ -1049,6 +1049,7 @@ bool FetchOperation::RowStream::slurp() {
   unsigned long* field_lengths = mysql_fetch_lengths(mysql_query_result_.get());
   current_row_.assign(EphemeralRow(row, field_lengths, &row_fields_));
   query_result_size_ += current_row_->calculateRowLength();
+  ++num_rows_seen_;
   return true;
 }
 
@@ -1408,7 +1409,10 @@ void FetchOperation::specializedTimeoutTriggered() {
 
   std::string rows;
   if (rowStream() && rowStream()->numRowsSeen()) {
-    rows = folly::sformat("%lu rows", rowStream()->numRowsSeen());
+    rows = fmt::format(
+        "{} rows, {} bytes seen",
+        rowStream()->numRowsSeen(),
+        rowStream()->query_result_size_);
   } else {
     rows = "no rows seen";
   }
