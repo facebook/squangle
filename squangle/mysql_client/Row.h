@@ -308,6 +308,8 @@ class RowBlock {
     Iterator(const RowBlock* row_block, size_t row_number)
         : row_block_(row_block), current_row_number_(row_number) {}
 
+    explicit Iterator() = default;
+
     void increment() {
       ++current_row_number_;
     }
