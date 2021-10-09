@@ -802,7 +802,7 @@ class Connection {
     return false;
   }
 
-  bool inTransaction() {
+  bool inTransaction() const {
     CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return mysql_connection_->inTransaction();
   }
