@@ -12,6 +12,8 @@
 #include <folly/Optional.h>
 #include <folly/Range.h>
 #include <atomic>
+#include <string>
+#include <vector>
 
 namespace facebook {
 namespace db {
