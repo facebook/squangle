@@ -312,7 +312,7 @@ class ConnectionOptions {
     return *this;
   }
 
-  uint8_t getDscp() const {
+  folly::Optional<uint8_t> getDscp() const {
     return dscp_;
   }
 
@@ -398,7 +398,7 @@ class ConnectionOptions {
   folly::Optional<CompressionAlgorithm> compression_lib_;
   bool use_checksum_ = false;
   uint32_t max_attempts_ = 1;
-  uint8_t dscp_ = 0;
+  folly::Optional<uint8_t> dscp_;
   folly::Optional<std::string> sni_servername_;
   bool reset_conn_before_close_ = false;
   bool delayed_reset_conn_ = false;
@@ -940,7 +940,7 @@ class ConnectOperation : public Operation {
   // See Also ConnectionOptions::setDscp
   ConnectOperation* setDscp(uint8_t dscp);
 
-  uint8_t getDscp() const {
+  folly::Optional<uint8_t> getDscp() const {
     return conn_options_.getDscp();
   }
 

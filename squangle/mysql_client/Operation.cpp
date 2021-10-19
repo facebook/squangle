@@ -66,8 +66,8 @@ std::string ConnectionOptions::getDisplayString() const {
   parts.push_back(folly::sformat("query timeout={}us", query_timeout_.count()));
   parts.push_back(folly::sformat("total timeout={}us", total_timeout_.count()));
   parts.push_back(folly::sformat("conn attempts={}", max_attempts_));
-  if (dscp_ != 0) {
-    parts.push_back(folly::sformat("outbound dscp={}", dscp_));
+  if (dscp_.has_value()) {
+    parts.push_back(folly::sformat("outbound dscp={}", *dscp_));
   }
   if (ssl_options_provider_ != nullptr) {
     parts.push_back(folly::sformat(
@@ -431,7 +431,9 @@ ConnectOperation* ConnectOperation::setConnectionOptions(
   setDefaultQueryTimeout(conn_opts.getQueryTimeout());
   setAttributes(conn_opts.getAttributes());
   setConnectAttempts(conn_opts.getConnectAttempts());
-  setDscp(conn_opts.getDscp());
+  if (conn_opts.getDscp().has_value()) {
+    setDscp(*conn_opts.getDscp());
+  }
   setTotalTimeout(conn_opts.getTotalTimeout());
   setCompression(conn_opts.getCompression());
   auto provider = conn_opts.getSSLOptionsProvider();
@@ -640,6 +642,18 @@ void ConnectOperation::specializedRunImpl() {
         (*conn_options_.getSniServerName()).c_str());
   }
 
+  if (conn_options_.getDscp().has_value()) {
+    // DS field (QOS/TOS level) is 8 bits with DSCP packed into the most
+    // significant 6 bits.
+    uint dsf = *conn_options_.getDscp() << 2;
+    int ret = mysql_options(mysql, MYSQL_OPT_TOS, &dsf);
+    if (ret != 0) {
+      LOG(WARNING) << fmt::format(
+          "Failed to set DSCP {} for MySQL Client socket",
+          *conn_options_.getDscp());
+    }
+  }
+
   if (conn_options_.getCertValidationCallback()) {
     MysqlCertValidatorCallback callback = mysqlCertValidator;
     const void* self = this;
@@ -704,7 +718,8 @@ void ConnectOperation::socketActionable() {
       attemptFailed(OperationResult::Failed);
     } else if (status == MysqlHandler::DONE) {
       auto socket = folly::NetworkSocket::fromFd(fd);
-      if (int dsf = conn_options_.getDscp(); dsf != 0) {
+      if (conn_options_.getDscp().has_value()) {
+        uint dsf = *conn_options_.getDscp();
         // DS field (QOS/TOS level) is 8 bits with DSCP packed into the most
         // significant 6 bits.
         dsf <<= 2;
@@ -1905,34 +1920,30 @@ folly::StringPiece FetchOperation::toString(FetchAction action) {
 // and this provides a way to log the string version of this enum
 folly::fbstring Operation::connectStageString(connect_stage stage) {
   static const folly::F14FastMap<connect_stage, folly::fbstring>
-      stageToStringMap = {
-          {connect_stage::CONNECT_STAGE_INVALID, "CONNECT_STAGE_INVALID"},
-          {connect_stage::CONNECT_STAGE_NOT_STARTED,
-           "CONNECT_STAGE_NOT_STARTED"},
-          {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
-           "CONNECT_STAGE_NET_BEGIN_CONNECT"},
-#if MYSQL_VERSION_ID >= 80020  // csm_wait_connect added in 8.0.20
-          {connect_stage::CONNECT_STAGE_NET_WAIT_CONNECT,
-           "CONNECT_STAGE_NET_WAIT_CONNECT"},
+      stageToStringMap =
+  { {connect_stage::CONNECT_STAGE_INVALID, "CONNECT_STAGE_INVALID"},
+    {connect_stage::CONNECT_STAGE_NOT_STARTED, "CONNECT_STAGE_NOT_STARTED"},
+    {connect_stage::CONNECT_STAGE_NET_BEGIN_CONNECT,
+     "CONNECT_STAGE_NET_BEGIN_CONNECT"},
+#if MYSQL_VERSION_ID >= 80020 // csm_wait_connect added in 8.0.20
+    {connect_stage::CONNECT_STAGE_NET_WAIT_CONNECT,
+     "CONNECT_STAGE_NET_WAIT_CONNECT"},
 #endif
-          {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
-           "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
-          {connect_stage::CONNECT_STAGE_READ_GREETING,
-           "CONNECT_STAGE_READ_GREETING"},
-          {connect_stage::CONNECT_STAGE_PARSE_HANDSHAKE,
-           "CONNECT_STAGE_PARSE_HANDSHAKE"},
-          {connect_stage::CONNECT_STAGE_ESTABLISH_SSL,
-           "CONNECT_STAGE_ESTABLISH_SSL"},
-          {connect_stage::CONNECT_STAGE_AUTHENTICATE,
-           "CONNECT_STAGE_AUTHENTICATE"},
-          {connect_stage::CONNECT_STAGE_PREP_SELECT_DATABASE,
-           "CONNECT_STAGE_PREP_SELECT_DATABASE"},
-          {connect_stage::CONNECT_STAGE_PREP_INIT_COMMANDS,
-           "CONNECT_STAGE_PREP_INIT_COMMANDS"},
-          {connect_stage::CONNECT_STAGE_SEND_ONE_INIT_COMMAND,
-           "CONNECT_STAGE_SEND_ONE_INIT_COMMAND"},
-          {connect_stage::CONNECT_STAGE_COMPLETE, "CONNECT_STAGE_COMPLETE"},
-      };
+    {connect_stage::CONNECT_STAGE_NET_COMPLETE_CONNECT,
+     "CONNECT_STAGE_NET_COMPLETE_CONNECT"},
+    {connect_stage::CONNECT_STAGE_READ_GREETING, "CONNECT_STAGE_READ_GREETING"},
+    {connect_stage::CONNECT_STAGE_PARSE_HANDSHAKE,
+     "CONNECT_STAGE_PARSE_HANDSHAKE"},
+    {connect_stage::CONNECT_STAGE_ESTABLISH_SSL, "CONNECT_STAGE_ESTABLISH_SSL"},
+    {connect_stage::CONNECT_STAGE_AUTHENTICATE, "CONNECT_STAGE_AUTHENTICATE"},
+    {connect_stage::CONNECT_STAGE_PREP_SELECT_DATABASE,
+     "CONNECT_STAGE_PREP_SELECT_DATABASE"},
+    {connect_stage::CONNECT_STAGE_PREP_INIT_COMMANDS,
+     "CONNECT_STAGE_PREP_INIT_COMMANDS"},
+    {connect_stage::CONNECT_STAGE_SEND_ONE_INIT_COMMAND,
+     "CONNECT_STAGE_SEND_ONE_INIT_COMMAND"},
+    {connect_stage::CONNECT_STAGE_COMPLETE, "CONNECT_STAGE_COMPLETE"},
+  };
 
   try {
     return stageToStringMap.at(stage);
