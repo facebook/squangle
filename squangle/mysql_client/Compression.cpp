@@ -9,6 +9,7 @@
 
 #include <glog/logging.h>
 #include <algorithm>
+#include <optional>
 #include <unordered_map>
 
 #include "squangle/mysql_client/Compression.h"
