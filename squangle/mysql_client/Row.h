@@ -63,6 +63,14 @@ class Row {
   template <typename T, typename L>
   T getWithDefault(const L& l, const T d) const;
 
+  // Similar to above but will return as an optional which will be empty if the
+  // column is null
+  template <
+      typename T,
+      template <typename> class Optional = std::optional,
+      typename L>
+  Optional<T> getOptional(const L& l) const;
+
   folly::dynamic getDynamic(size_t l) const;
   folly::dynamic getDynamic(folly::StringPiece l) const;
 
@@ -502,6 +510,17 @@ T Row::getWithDefault(const L& l, const T d) const {
   }
   return get<T>(l);
 }
+
+// Similar to above but will return as an optional which will be empty if the
+// column is null
+template <typename T, template <typename> class Optional, typename L>
+Optional<T> Row::getOptional(const L& l) const {
+  if (isNull(l)) {
+    return {};
+  }
+  return Optional(get<T>(l));
+}
+
 } // namespace mysql_client
 } // namespace common
 } // namespace facebook
