@@ -19,7 +19,8 @@ bool SSLOptionsProviderBase::setMysqlSSLOptions(MYSQL* mysql) {
   mysql_options(mysql, MYSQL_OPT_SSL_CONTEXT, sslContext->getSSLCtx());
   auto sslSession = getRawSSLSession();
   if (sslSession) {
-    mysql_options4(mysql, MYSQL_OPT_SSL_SESSION, sslSession.release(), (void*)1);
+    mysql_options4(
+        mysql, MYSQL_OPT_SSL_SESSION, sslSession.release(), (void*)1);
   }
   return true;
 }
@@ -27,13 +28,14 @@ bool SSLOptionsProviderBase::setMysqlSSLOptions(MYSQL* mysql) {
 bool SSLOptionsProviderBase::storeMysqlSSLSession(MYSQL* mysql) {
   auto reused = mysql_get_ssl_session_reused(mysql);
   if (!reused) {
-    folly::ssl::SSLSessionUniquePtr session((SSL_SESSION*)mysql_get_ssl_session(mysql));
+    folly::ssl::SSLSessionUniquePtr session(
+        (SSL_SESSION*)mysql_get_ssl_session(mysql));
     if (session) {
       storeRawSSLSession(std::move(session));
     }
   }
   return reused;
 }
-}
-}
-}
+} // namespace mysql_client
+} // namespace common
+} // namespace facebook
