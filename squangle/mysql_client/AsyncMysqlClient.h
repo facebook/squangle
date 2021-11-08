@@ -180,6 +180,13 @@ class MysqlClientBase {
 
   virtual bool runInThread(folly::Cob&& fn) = 0;
 
+  virtual uint32_t numStartedAndOpenConnections() {
+    return 0;
+  }
+  virtual double callbackDelayMicrosAvg() {
+    return 0.0;
+  }
+
  protected:
   friend class Connection;
   friend class Operation;
@@ -408,9 +415,13 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // Similar to the above function, but returns the total number of connections
   // being and already opened.
-  uint32_t numStartedAndOpenConnections() {
+  uint32_t numStartedAndOpenConnections() override {
     std::unique_lock<std::mutex> l(counters_mutex_);
     return active_connection_counter_;
+  }
+
+  double callbackDelayMicrosAvg() override {
+    return stats_tracker_->callbackDelayAvg.value();
   }
 
   void cleanupCompletedOperations();

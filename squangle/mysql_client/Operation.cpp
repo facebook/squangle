@@ -778,32 +778,32 @@ void ConnectOperation::timeoutHandler(
     timeoutStage = connectStageString(stage);
   }
   // Check for an overloaded EventBase
-  auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
-  if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
-    auto msg = folly::stringPrintf(
-        "[%d](%s) Connect%s to %s:%d timed out at stage %s (took %lu ms). TcpTimeout:%d",
+  auto cbDelayUs = client()->callbackDelayMicrosAvg();
+  if (cbDelayUs < kCallbackDelayStallThresholdUs) {
+    auto msg = fmt::format(
+        "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms). TcpTimeout:{}",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
         kErrorPrefix,
         isPoolConnection ? "Pool" : "",
-        host().c_str(),
+        host(),
         port(),
-        timeoutStage.c_str(),
+        timeoutStage,
         delta.count(),
         (isTcpTimeout ? 1 : 0));
     setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
   } else {
-    auto msg = folly::stringPrintf(
-        "[%d](%s) Connect%s to %s:%d timed out at stage %s (took %lu ms)"
-        " (loop stalled, avg loop time %ld ms).  TcpTimeout:%d",
+    auto msg = fmt::format(
+        "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms)"
+        " ({}). TcpTimeout:{}",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
         isPoolConnection ? "Pool" : "",
-        host().c_str(),
+        host(),
         port(),
-        timeoutStage.c_str(),
+        timeoutStage,
         delta.count(),
-        std::lround(avgLoopTimeUs / 1000.0),
+        threadOverloadMessage(cbDelayUs),
         (isTcpTimeout ? 1 : 0));
     setAsyncClientError(
         CR_SERVER_LOST, msg, "Connect timed out (loop stalled)");
@@ -1432,24 +1432,24 @@ void FetchOperation::specializedTimeoutTriggered() {
     rows = "no rows seen";
   }
 
-  auto avgLoopTimeUs = conn()->getEventBase()->getAvgLoopTime();
-  if (avgLoopTimeUs < kAvgLoopTimeStallThresholdUs) {
-    msg = folly::stringPrintf(
-        "[%d](%s) Query timed out (%s, took %ld ms)",
+  auto cbDelayUs = client()->callbackDelayMicrosAvg();
+  if (cbDelayUs < kCallbackDelayStallThresholdUs) {
+    msg = fmt::format(
+        "[{}]({}) Query timed out ({}, took {} ms)",
         static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
         kErrorPrefix,
-        rows.c_str(),
+        rows,
         std::lround(delta_micros / 1000.0));
     setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "Query timed out");
   } else {
-    msg = folly::stringPrintf(
-        "[%d](%s) Query timed out (%s, loop stalled,"
-        " avg loop time %ld ms)",
+    msg = fmt::format(
+        "[{}]({}) Query timed out ({}, took {} ms) ({})",
         static_cast<uint16_t>(
             SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED),
         kErrorPrefix,
-        rows.c_str(),
-        std::lround(avgLoopTimeUs / 1000.0));
+        rows,
+        std::lround(delta_micros / 1000.0),
+        threadOverloadMessage(cbDelayUs));
     setAsyncClientError(
         CR_NET_READ_INTERRUPTED, msg, "Query timed out (loop stalled)");
   }
@@ -1997,6 +1997,14 @@ std::unique_ptr<Connection>&& Operation::ConnectionProxy::releaseConnection() {
   }
   throw std::runtime_error("Releasing connection from referenced conn");
 }
+
+std::string Operation::threadOverloadMessage(double cbDelayUs) {
+  return fmt::format(
+      "THREAD_OVERLOAD: cb delay {}ms, {} active conns",
+      std::lround(cbDelayUs / 1000.0),
+      client()->numStartedAndOpenConnections());
+}
+
 } // namespace mysql_client
 } // namespace common
 } // namespace facebook

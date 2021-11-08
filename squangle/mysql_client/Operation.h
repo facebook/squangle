@@ -627,9 +627,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
       AsyncPostQueryCallback&& callback1,
       AsyncPostQueryCallback&& callback2);
 
-  // Threshold is 500ms, but because of smoothing, actual last loop delay
-  // needs to be roughly 2x this value to trigger detection
-  static constexpr double kAvgLoopTimeStallThresholdUs = 500 * 1000;
+  static constexpr double kCallbackDelayStallThresholdUs = 50 * 1000;
 
   class ConnectionProxy;
   explicit Operation(ConnectionProxy&& conn);
@@ -733,6 +731,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
   bool isCancelledOnRun() const {
     return cancel_on_run_;
   }
+
+  std::string threadOverloadMessage(double cbDelayUs);
 
   // Data members; subclasses freely interact with these.
   OperationState state_;
