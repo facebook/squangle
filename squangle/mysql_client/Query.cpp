@@ -128,8 +128,10 @@ struct FbStringConverter : public boost::static_visitor<folly::fbstring> {
   }
   template <typename T>
   folly::fbstring operator()(const T& /*operand*/) const {
-    throw std::invalid_argument(
-        "Only allowed type conversions are Int, Double, Bool and String");
+    throw std::invalid_argument(fmt::format(
+        "Only allowed type conversions are Int, Double, Bool and String:"
+        " type found: {}",
+        boost::typeindex::type_id<T>().pretty_name()));
   }
 };
 
