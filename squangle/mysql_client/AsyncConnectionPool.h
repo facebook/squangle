@@ -118,11 +118,17 @@ class TwoLevelCache {
   // Cleans up connections in level2_ (and level1_) cache, which meet the pred.
   template <typename Pred>
   void cleanup(Pred pred) {
+    // We keep one value to prevent its pool from being destructed in the middle
+    // of traversing the map
+    std::optional<Value> value;
     for (auto it1 = level1_.begin(); it1 != level1_.end();) {
       auto& list = it1->second;
       DCHECK(!list.empty());
       for (auto it2 = list.begin(); it2 != list.end();) {
         if (pred(*it2)) {
+          if (!value) {
+            value = std::move(*it2);
+          }
           it2 = list.erase(it2);
         } else {
           ++it2;

@@ -663,9 +663,9 @@ AsyncConnectionPool::CleanUpTimer::CleanUpTimer(
     : folly::AsyncTimeout(base), pool_(pool) {}
 
 void AsyncConnectionPool::CleanUpTimer::timeoutExpired() noexcept {
-  pool_->cleanupConnections();
-  pool_->cleanupOperations();
   scheduleTimeout(PoolOptions::kCleanUpTimeout);
+  pool_->cleanupOperations();
+  pool_->cleanupConnections();
 }
 
 std::shared_ptr<ConnectPoolOperation>
