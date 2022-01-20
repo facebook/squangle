@@ -174,6 +174,8 @@ class DBLoggerBase {
       const std::string& error,
       const TConnectionInfo& connInfo) = 0;
 
+  virtual void setLoggingPrefix(std::string_view logging_prefix) = 0;
+
   const char* FailureString(FailureReason reason) {
     return EnumHelper::failureReasonToString(reason);
   }

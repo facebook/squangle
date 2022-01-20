@@ -94,6 +94,14 @@ class AsyncMysqlClient : public MysqlClientBase {
   AsyncMysqlClient();
   ~AsyncMysqlClient() override;
 
+  static std::unique_ptr<db::SquangleLoggerBase> adjustLogger(
+      std::unique_ptr<db::SquangleLoggerBase> logger) {
+    if (logger) {
+      logger->setLoggingPrefix("cpp_async");
+    }
+    return logger;
+  }
+
   std::unique_ptr<Connection> createConnection(
       ConnectionKey conn_key,
       MYSQL* mysql_conn) override;

@@ -13,7 +13,17 @@ class SyncMysqlClient : public MysqlClientBase {
       std::unique_ptr<db::SquangleLoggerBase> db_logger,
       std::unique_ptr<db::DBCounterBase> db_stats =
           std::make_unique<db::SimpleDbCounter>())
-      : MysqlClientBase(std::move(db_logger), std::move(db_stats)) {}
+      : MysqlClientBase(
+            adjustLogger(std::move(db_logger)),
+            std::move(db_stats)) {}
+
+  static std::unique_ptr<db::SquangleLoggerBase> adjustLogger(
+      std::unique_ptr<db::SquangleLoggerBase> logger) {
+    if (logger) {
+      logger->setLoggingPrefix("cpp_sync");
+    }
+    return logger;
+  }
 
   db::SquangleLoggingData makeSquangleLoggingData(
       const ConnectionKey* connKey,
