@@ -48,6 +48,8 @@ class SyncMysqlClient : public MysqlClientBase {
       ConnectionKey conn_key,
       MYSQL* mysql_conn) override;
 
+  void drain(bool /*unused*/) {}
+
  protected:
   // Private methods, primarily used by Operations and its subclasses.
   friend class AsyncConnectionPool;
