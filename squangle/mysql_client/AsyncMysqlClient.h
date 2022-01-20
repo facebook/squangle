@@ -927,7 +927,7 @@ class Connection {
     return connection_context_.get();
   }
 
- private:
+ protected:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
   friend class SyncMysqlClient;
@@ -1045,6 +1045,8 @@ class AsyncConnection : public Connection {
       ConnectionKey conn_key,
       MYSQL* existing_connection)
       : Connection(mysql_client, std::move(conn_key), existing_connection) {}
+
+  virtual ~AsyncConnection() override;
 
   // Operations call these methods as the operation becomes unblocked, as
   // callers want to wait for completion, etc.
