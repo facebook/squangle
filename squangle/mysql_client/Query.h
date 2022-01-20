@@ -83,6 +83,7 @@
 
 #include <mysql.h>
 
+#include <optional>
 #include <string>
 #include <tuple>
 
@@ -429,6 +430,70 @@ class QueryArgument {
       std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
+
+  /* implicit */ QueryArgument(const std::optional<bool>& opt) {
+    if (opt) {
+      value_ = static_cast<int64_t>(opt.value());
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  template <typename T, typename std::enable_if<std::is_enum_v<T>, T>::type>
+  /* implicit */ QueryArgument(const std::optional<T>& opt) {
+    if (opt) {
+      value_ = static_cast<int64_t>(opt.value());
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  template <typename T>
+  /* implicit */ QueryArgument(const std::optional<T>& opt) {
+    if (opt) {
+      value_ = opt.value();
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  // Special handling for nullopt optionals to enable
+  // callers to directly pass them in as a query argument
+  /* implicit */ QueryArgument(std::nullopt_t /*opt*/) {
+    value_ = nullptr;
+  }
+
+  /* implicit */ QueryArgument(const folly::Optional<bool>& opt) {
+    if (opt) {
+      value_ = static_cast<int64_t>(opt.value());
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  template <typename T, typename std::enable_if<std::is_enum_v<T>, T>::type>
+  /* implicit */ QueryArgument(const folly::Optional<T>& opt) {
+    if (opt) {
+      value_ = static_cast<int64_t>(opt.value());
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  template <typename T>
+  /* implicit */ QueryArgument(const folly::Optional<T>& opt) {
+    if (opt) {
+      value_ = opt.value();
+    } else {
+      value_ = nullptr;
+    }
+  }
+
+  // Special handling for folly::none Optional values to enable
+  // callers to directly pass them in as a query argument
+  /* implicit */ QueryArgument(const folly::None& /*opt*/) {
+    value_ = nullptr;
+  }
 
   // Pair constructors
   QueryArgument();
