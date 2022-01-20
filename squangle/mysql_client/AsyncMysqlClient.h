@@ -48,8 +48,8 @@
 
 #include "squangle/logger/DBEventCounter.h"
 #include "squangle/logger/DBEventLogger.h"
-#include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/DbResult.h"
+#include "squangle/mysql_client/MysqlConnectionHolder.h"
 #include "squangle/mysql_client/MysqlHandler.h"
 #include "squangle/mysql_client/Operation.h"
 #include "squangle/mysql_client/Query.h"

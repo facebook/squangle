@@ -1,19 +1,9 @@
-/*
- *  Copyright (c) Facebook, Inc. and its affiliates..
- *  All rights reserved.
- *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree.
- *
- */
+// (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 
-#include "squangle/mysql_client/Connection.h"
-#include "squangle/mysql_client/AsyncConnectionPool.h"
+#include "squangle/mysql_client/MysqlConnectionHolder.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
 
-namespace facebook {
-namespace common {
-namespace mysql_client {
+namespace facebook::common::mysql_client {
 
 MysqlConnectionHolder::MysqlConnectionHolder(
     MysqlClientBase* client,
@@ -53,14 +43,11 @@ bool MysqlConnectionHolder::inTransaction() {
 
 MysqlConnectionHolder::~MysqlConnectionHolder() {
   if (close_fd_on_destroy_ && mysql_) {
-    auto mysql = mysql_;
-    auto client = client_;
     // Close our connection in the thread from which it was created.
-    if (!client_->runInThread([mysql]() {
+    if (!client_->runInThread([mysql = mysql_]() {
           // Unregister server cert validation callback
           const void* callback{nullptr};
           mysql_options(mysql, MYSQL_OPT_TLS_CERT_CALLBACK, &callback);
-
           mysql_close(mysql);
         })) {
       LOG(DFATAL)
@@ -80,6 +67,4 @@ void MysqlConnectionHolder::connectionOpened() {
   client_->stats()->incrOpenedConnections(conn_context_.get());
 }
 
-} // namespace mysql_client
-} // namespace common
-} // namespace facebook
+} // namespace facebook::common::mysql_client

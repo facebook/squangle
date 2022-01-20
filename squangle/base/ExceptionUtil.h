@@ -11,15 +11,13 @@
 
 #include <folly/CPortability.h>
 
-#include <chrono>
 #include <exception>
 #include <stdexcept>
-#include <string>
+
+#include "squangle/base/Base.h"
 
 namespace facebook {
 namespace db {
-
-typedef std::chrono::duration<uint64_t, std::micro> Duration;
 
 class FOLLY_EXPORT Exception : public std::runtime_error {
  public:

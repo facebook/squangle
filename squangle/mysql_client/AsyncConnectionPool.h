@@ -35,7 +35,6 @@
 
 #include "squangle/logger/DBEventCounter.h"
 #include "squangle/mysql_client/AsyncMysqlClient.h"
-#include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/Operation.h"
 
 namespace facebook {

@@ -9,8 +9,10 @@
 #ifndef COMMON_ASYNC_MYSQL_RESULT_H
 #define COMMON_ASYNC_MYSQL_RESULT_H
 
+#include "squangle/base/Base.h"
+#include "squangle/base/ConnectionKey.h"
 #include "squangle/base/ExceptionUtil.h"
-#include "squangle/mysql_client/Connection.h"
+#include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/Row.h"
 
 #include <folly/Exception.h>
