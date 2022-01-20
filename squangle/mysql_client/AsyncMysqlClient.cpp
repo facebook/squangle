@@ -84,24 +84,23 @@ bool AsyncMysqlClient::runInThread(folly::Cob&& fn) {
 }
 
 void AsyncMysqlClient::drain(bool also_block_operations) {
-  {
-    std::unique_lock<std::mutex> lock(pending_operations_mutex_);
-    block_operations_ = also_block_operations;
+  pending_.withWLock([&](auto& pending) {
+    pending.block_operations = also_block_operations;
 
-    auto it = pending_operations_.begin();
+    auto it = pending.operations.begin();
     // Clean out any unstarted operations.
-    while (it != pending_operations_.end()) {
+    while (it != pending.operations.end()) {
       // So here the Operation `run` was not called
       // We don't need to lock the state change in the operation here since the
       // cancelling process is going to fire not matter in which part it is.
       if ((*it)->state() == OperationState::Unstarted) {
         (*it)->cancel();
-        it = pending_operations_.erase(it);
+        it = pending.operations.erase(it);
       } else {
         ++it;
       }
     }
-  }
+  });
 
   // Now wait for any started operations to complete.
   std::unique_lock<std::mutex> counter_lock(this->counters_mutex_);
@@ -158,22 +157,23 @@ db::SquangleLoggingData AsyncMysqlClient::makeSquangleLoggingData(
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {
-  std::unique_lock<std::mutex> lock(pending_operations_mutex_);
-  size_t num_erased = 0, before = pending_operations_.size();
+  pending_.withWLock([](auto& pending) {
+    size_t num_erased = 0, before = pending.operations.size();
 
-  VLOG(11) << "removing pending operations";
-  for (auto& op : operations_to_remove_) {
-    if (pending_operations_.erase(op) > 0) {
-      ++num_erased;
-    } else {
-      LOG(DFATAL) << "asked to remove non-pending operation";
+    VLOG(11) << "removing pending operations";
+    for (auto& op : pending.to_remove) {
+      if (pending.operations.erase(op) > 0) {
+        ++num_erased;
+      } else {
+        LOG(DFATAL) << "asked to remove non-pending operation";
+      }
     }
-  }
 
-  operations_to_remove_.clear();
+    pending.to_remove.clear();
 
-  VLOG(11) << "erased: " << num_erased << ", before: " << before
-           << ", after: " << pending_operations_.size();
+    VLOG(11) << "erased: " << num_erased << ", before: " << before
+             << ", after: " << pending.operations.size();
+  });
 }
 
 folly::SemiFuture<ConnectResult> AsyncMysqlClient::connectSemiFuture(

@@ -152,8 +152,7 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // Stop accepting new queries and connections.
   void blockIncomingOperations() {
-    std::unique_lock<std::mutex> l(pending_operations_mutex_);
-    block_operations_ = true;
+    pending_.wlock()->block_operations = true;
   }
 
   // Do not call this from inside the AsyncMysql thread
@@ -230,12 +229,13 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   // Add a pending operation to the client.
   void addOperation(std::shared_ptr<Operation> op) override {
-    std::unique_lock<std::mutex> l(pending_operations_mutex_);
-    if (block_operations_) {
-      LOG(ERROR) << "Attempt to start operation when client is shutting down";
-      op->cancel();
-    }
-    pending_operations_.insert(op);
+    pending_.withWLock([op = std::move(op)](auto& pending) mutable {
+      if (pending.block_operations) {
+        LOG(ERROR) << "Attempt to start operation when client is shutting down";
+        op->cancel();
+      }
+      pending.operations.insert(std::move(op));
+    });
   }
 
   // We remove operations from pending_operations_ after an iteration
@@ -243,16 +243,18 @@ class AsyncMysqlClient : public MysqlClientBase {
   // executing one of its methods (ie handling an event or cancel
   // call).
   void deferRemoveOperation(Operation* op) override {
-    std::unique_lock<std::mutex> l(pending_operations_mutex_);
-    // If the queue to remove is empty, schedule a cleanup to occur after
-    // this pass through the event loop.
-    if (operations_to_remove_.empty()) {
-      if (!runInThread([this]() { cleanupCompletedOperations(); })) {
-        LOG(DFATAL)
-            << "Operation could not be cleaned: error in folly::EventBase";
+    pending_.withWLock([&](auto& pending) {
+      // If the queue to remove is empty, schedule a cleanup to occur after
+      // this pass through the event loop.
+      if (pending.to_remove.empty()) {
+        if (!runInThread([&]() { cleanupCompletedOperations(); })) {
+          LOG(DFATAL)
+              << "Operation could not be cleaned: error in folly::EventBase";
+        }
       }
-    }
-    operations_to_remove_.push_back(op->getSharedPointer());
+
+      pending.to_remove.push_back(op->getSharedPointer());
+    });
   }
 
  private:
@@ -310,23 +312,20 @@ class AsyncMysqlClient : public MysqlClientBase {
   // thread_ is where loop() runs and most of the class does its work.
   std::thread thread_;
 
-  // pending_operations_mutex_ protects pending_operations_ and
-  // blockIncomingOperations(),
-  // this mutex is meant for external operations on the client. For example,
-  // when the user wants to begin an operation.
-  std::mutex pending_operations_mutex_;
+  struct PendingOperations {
+    // The client must keep a reference (via a shared_ptr) to any active
+    // Operation as the op's creator may have released their reference.
+    // We do this via a map of shared_ptr's, where the keys are raw
+    // pointers.
+    std::unordered_set<std::shared_ptr<Operation>> operations;
+    // See comment for deferRemoveOperation.
+    std::vector<std::shared_ptr<Operation>> to_remove;
+    // Are we accepting new connections
+    bool block_operations{false};
+  };
 
-  // The client must keep a reference (via a shared_ptr) to any active
-  // Operation as the op's creator may have released their reference.
-  // We do this via a map of shared_ptr's, where the keys are raw
-  // pointers.
-  std::unordered_set<std::shared_ptr<Operation>> pending_operations_;
+  folly::Synchronized<PendingOperations> pending_;
 
-  // See comment for deferRemoveOperation.
-  std::vector<std::shared_ptr<Operation>> operations_to_remove_;
-
-  // Are we accepting new connections
-  bool block_operations_ = false;
   // Used to guard thread destruction
   std::atomic<bool> is_shutdown_{false};
 
