@@ -21,10 +21,6 @@ namespace common {
 namespace mysql_client {
 
 folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation_ptr conn_op) {
-  return toSemiFuture(conn_op.get());
-}
-
-folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op) {
   folly::MoveWrapper<folly::Promise<ConnectResult>> promise;
   auto future = promise->getSemiFuture();
 
@@ -54,16 +50,13 @@ folly::SemiFuture<ConnectResult> toSemiFuture(ConnectOperation* conn_op) {
   return future;
 }
 
-folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr& query_op) {
-  return toSemiFuture(query_op.get());
-}
-
-folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op) {
+folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation_ptr query_op) {
   // Use the pre-query callback if we have it, or else an empty SemiFuture
-  return (query_op->callbacks_.pre_query_callback_
-              ? query_op->callbacks_.pre_query_callback_(*query_op)
-              : folly::makeSemiFuture(folly::unit))
-      .deferValue([query_op](auto&& /* unused */) {
+  auto sfut = query_op->callbacks_.pre_query_callback_
+      ? query_op->callbacks_.pre_query_callback_(*query_op)
+      : folly::makeSemiFuture(folly::unit);
+  return std::move(sfut)
+      .deferValue([query_op = std::move(query_op)](auto&& /* unused */) {
         folly::MoveWrapper<
             folly::Promise<std::pair<DbQueryResult, AsyncPostQueryCallback>>>
             promise;
@@ -120,17 +113,14 @@ folly::SemiFuture<DbQueryResult> toSemiFuture(QueryOperation* query_op) {
 }
 
 folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
-    MultiQueryOperation_ptr& mquery_op) {
-  return toSemiFuture(mquery_op.get());
-}
-
-folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
-    MultiQueryOperation* mquery_op) {
+    MultiQueryOperation_ptr mquery_op) {
   // Use the pre-query callback if we have it, or else an empty SemiFuture
-  return (mquery_op->callbacks_.pre_query_callback_
-              ? mquery_op->callbacks_.pre_query_callback_(*mquery_op)
-              : folly::makeSemiFuture(folly::unit))
-      .deferValue([mquery_op](auto&& /* unused */) {
+
+  auto sfut = mquery_op->callbacks_.pre_query_callback_
+      ? mquery_op->callbacks_.pre_query_callback_(*mquery_op)
+      : folly::makeSemiFuture(folly::unit);
+  return std::move(sfut)
+      .deferValue([mquery_op = std::move(mquery_op)](auto&& /* unused */) {
         folly::MoveWrapper<folly::Promise<
             std::pair<DbMultiQueryResult, AsyncPostQueryCallback>>>
             promise;
@@ -187,27 +177,15 @@ folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
 }
 
 folly::Future<ConnectResult> toFuture(ConnectOperation_ptr conn_op) {
-  return toFuture(conn_op.get());
+  return toFuture(toSemiFuture(std::move(conn_op)));
 }
 
-folly::Future<ConnectResult> toFuture(ConnectOperation* conn_op) {
-  return toFuture(toSemiFuture(conn_op));
+folly::Future<DbQueryResult> toFuture(QueryOperation_ptr query_op) {
+  return toFuture(toSemiFuture(std::move(query_op)));
 }
 
-folly::Future<DbQueryResult> toFuture(QueryOperation_ptr& query_op) {
-  return toFuture(query_op.get());
-}
-
-folly::Future<DbQueryResult> toFuture(QueryOperation* query_op) {
-  return toFuture(toSemiFuture(query_op));
-}
-
-folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr& mquery_op) {
-  return toFuture(mquery_op.get());
-}
-
-folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation* mquery_op) {
-  return toFuture(toSemiFuture(mquery_op));
+folly::Future<DbMultiQueryResult> toFuture(MultiQueryOperation_ptr mquery_op) {
+  return toFuture(toSemiFuture(std::move(mquery_op)));
 }
 
 folly::Future<ConnectResult> toFuture(folly::SemiFuture<ConnectResult>&& fut) {

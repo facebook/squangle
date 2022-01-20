@@ -778,9 +778,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   // Friends because they need to access the query callbacks on this class
   friend folly::SemiFuture<DbQueryResult> toSemiFuture(
-      QueryOperation* query_op);
+      std::shared_ptr<QueryOperation> query_op);
   friend folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
-      MultiQueryOperation* mquery_op);
+      std::shared_ptr<MultiQueryOperation> mquery_op);
 
  private:
   // Restore folly::RequestContext and also invoke socketActionable()
@@ -1611,7 +1611,7 @@ class ChangeUserOperation : public SpecialOperation {
 // It will block the thread and return the acquired connection, in case of
 // error, it will throw MysqlException as expected in the sync mode.
 std::unique_ptr<Connection> blockingConnectHelper(
-    std::shared_ptr<ConnectOperation>& conn_op);
+    std::shared_ptr<ConnectOperation> conn_op);
 } // namespace mysql_client
 } // namespace common
 } // namespace facebook

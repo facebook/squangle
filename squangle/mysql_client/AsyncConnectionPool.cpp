@@ -156,9 +156,10 @@ folly::SemiFuture<ConnectResult> AsyncConnectionPool::connectSemiFuture(
     const std::string& password,
     const std::string& special_tag,
     const ConnectionOptions& conn_opts) {
-  return toSemiFuture(
-      beginConnection(host, port, database_name, user, password, special_tag)
-          ->setConnectionOptions(conn_opts));
+  auto op =
+      beginConnection(host, port, database_name, user, password, special_tag);
+  op->setConnectionOptions(conn_opts);
+  return toSemiFuture(std::move(op));
 }
 
 folly::Future<ConnectResult> AsyncConnectionPool::connectFuture(
@@ -194,7 +195,7 @@ std::unique_ptr<Connection> AsyncConnectionPool::connect(
   auto op = beginConnection(host, port, database_name, user, password);
   op->setConnectionOptions(conn_opts);
   // This will throw (intended behaviour) in case the operation didn't succeed
-  return blockingConnectHelper(op);
+  return blockingConnectHelper(std::move(op));
 }
 
 std::shared_ptr<ConnectOperation> AsyncConnectionPool::beginConnection(

@@ -1953,7 +1953,7 @@ folly::fbstring Operation::connectStageString(connect_stage stage) {
 }
 
 std::unique_ptr<Connection> blockingConnectHelper(
-    std::shared_ptr<ConnectOperation>& conn_op) {
+    std::shared_ptr<ConnectOperation> conn_op) {
   conn_op->run()->wait();
   if (!conn_op->ok()) {
     throw MysqlException(

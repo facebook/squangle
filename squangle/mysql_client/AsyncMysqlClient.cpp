@@ -260,8 +260,9 @@ folly::SemiFuture<ConnectResult> AsyncMysqlClient::connectSemiFuture(
     const std::string& user,
     const std::string& password,
     const ConnectionOptions& conn_opts) {
-  return toSemiFuture(beginConnection(host, port, database_name, user, password)
-                          ->setConnectionOptions(conn_opts));
+  auto op = beginConnection(host, port, database_name, user, password);
+  op->setConnectionOptions(conn_opts);
+  return toSemiFuture(std::move(op));
 }
 
 folly::Future<ConnectResult> AsyncMysqlClient::connectFuture(
@@ -608,7 +609,7 @@ folly::SemiFuture<DbQueryResult> Connection::querySemiFuture(
     QueryOptions&& options) {
   auto op = beginQuery(std::move(conn), std::move(query));
   op->setAttributes(std::move(options.getAttributes()));
-  return toSemiFuture(op);
+  return toSemiFuture(std::move(op));
 }
 
 template <>
@@ -624,7 +625,7 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   op->setAttributes(std::move(options.getAttributes()));
-  return toSemiFuture(op);
+  return toSemiFuture(std::move(op));
 }
 
 folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
@@ -633,7 +634,7 @@ folly::SemiFuture<DbMultiQueryResult> Connection::multiQuerySemiFuture(
     QueryOptions&& options) {
   auto op = beginMultiQuery(std::move(conn), std::move(args));
   op->setAttributes(std::move(options.getAttributes()));
-  return toSemiFuture(op);
+  return toSemiFuture(std::move(op));
 }
 
 folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
