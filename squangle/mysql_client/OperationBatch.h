@@ -1,11 +1,11 @@
 /*
- *  Copyright (c) Facebook, Inc. and its affiliates..
- *  All rights reserved.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * All rights reserved.
  *
- *  This source code is licensed under the BSD-style license found in the
- *  LICENSE file in the root directory of this source tree.
- *
+ * This source code is licensed under the BSD-style license found in the
+ * LICENSE file in the root directory of this source tree.
  */
+
 //
 // The OperationBatch is a class that allows waiting only for a
 // certain set of operations. All the operations (Connect, Query)
