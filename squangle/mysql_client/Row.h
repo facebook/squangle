@@ -59,9 +59,17 @@ class Row {
   // return value is converted with folly::to<T>.
   template <typename T, typename L>
   T get(const L& l) const;
-
+  // Like above, but a default value is supplied.  If the column is null the
+  // default value is returned
   template <typename T, typename L>
-  T getWithDefault(const L& l, const T d) const;
+  T get(const L& l, T d) const;
+
+  // Legacy version that takes the default value as the second parameter.
+  // New code should just use the two parameter `get()` function.
+  template <typename T, typename L>
+  T getWithDefault(const L& l, T d) const {
+    return get<T>(l, std::move(d));
+  }
 
   // Similar to above but will return as an optional which will be empty if the
   // column is null
@@ -504,7 +512,7 @@ T Row::get(const L& l) const {
 }
 
 template <typename T, typename L>
-T Row::getWithDefault(const L& l, const T d) const {
+T Row::get(const L& l, T d) const {
   if (isNull(l)) {
     return d;
   }
