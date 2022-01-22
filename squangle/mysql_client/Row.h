@@ -64,13 +64,6 @@ class Row {
   template <typename T, typename L>
   T get(const L& l, T d) const;
 
-  // Legacy version that takes the default value as the second parameter.
-  // New code should just use the two parameter `get()` function.
-  template <typename T, typename L>
-  T getWithDefault(const L& l, T d) const {
-    return get<T>(l, std::move(d));
-  }
-
   // Similar to above but will return as an optional which will be empty if the
   // column is null
   template <
