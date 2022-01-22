@@ -882,6 +882,14 @@ class ConnectOperation : public Operation {
     return connection_context_.get();
   }
 
+  const db::ConnectionContextBase* getConnectionContext() const {
+    CHECK_THROW(
+        state_ == OperationState::Unstarted ||
+            state_ == OperationState::Completed,
+        db::OperationStateException);
+    return connection_context_.get();
+  }
+
   void reportServerCertContent(
       const std::string& sslCertCn,
       const std::vector<std::string>& sslCertSan,
@@ -899,34 +907,6 @@ class ConnectOperation : public Operation {
       }
       connection_context_->isServerCertValidated = isValidated;
     }
-  }
-
-  folly::Optional<std::string> getSslCertCn() {
-    if (connection_context_) {
-      return connection_context_->sslCertCn;
-    } else {
-      return folly::none;
-    }
-  }
-
-  folly::Optional<std::vector<std::string>> getSslCertSan() {
-    if (connection_context_) {
-      return connection_context_->sslCertSan;
-    } else {
-      return folly::none;
-    }
-  }
-
-  folly::Optional<std::vector<std::string>> getSslCertExtensions() {
-    if (connection_context_) {
-      return connection_context_->sslCertIdentities;
-    } else {
-      return folly::none;
-    }
-  }
-
-  bool isSslCertValidationEnforced() {
-    return connection_context_ && connection_context_->isServerCertValidated;
   }
 
   // Don't call this; it's public strictly for AsyncMysqlClient to be
