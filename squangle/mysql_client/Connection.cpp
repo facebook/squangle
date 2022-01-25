@@ -253,10 +253,11 @@ folly::Future<DbMultiQueryResult> Connection::multiQueryFuture(
 }
 
 template <>
-DbQueryResult Connection::query(Query&& query) {
+DbQueryResult Connection::query(Query&& query, QueryOptions&& options) {
   auto op = beginAnyQuery<QueryOperation>(
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(query));
+  op->setAttributes(std::move(options.getAttributes()));
   SCOPE_EXIT {
     operation_in_progress_ = false;
   };
@@ -298,10 +299,18 @@ DbQueryResult Connection::query(Query&& query) {
 }
 
 template <>
-DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
+DbQueryResult Connection::query(Query&& query) {
+  return Connection::query(std::move(query), QueryOptions());
+}
+
+template <>
+DbMultiQueryResult Connection::multiQuery(
+    std::vector<Query>&& queries,
+    QueryOptions&& options) {
   auto op = beginAnyQuery<MultiQueryOperation>(
       Operation::ConnectionProxy(Operation::ReferencedConnection(this)),
       std::move(queries));
+  op->setAttributes(std::move(options.getAttributes()));
   auto guard = folly::makeGuard([&] { operation_in_progress_ = false; });
 
   operation_in_progress_ = true;
@@ -339,6 +348,11 @@ DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
         .get();
   }
   return result;
+}
+
+template <>
+DbMultiQueryResult Connection::multiQuery(std::vector<Query>&& queries) {
+  return multiQuery(std::move(queries), QueryOptions());
 }
 
 template <>

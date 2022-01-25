@@ -570,6 +570,9 @@ class Connection {
 template <>
 DbQueryResult Connection::query(Query&& query);
 
+template <>
+DbQueryResult Connection::query(Query&& query, QueryOptions&& options);
+
 template <typename... Args>
 DbQueryResult Connection::query(Args&&... args) {
   Query query_obj{std::forward<Args>(args)...};
