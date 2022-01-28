@@ -776,10 +776,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
   Callbacks callbacks_;
 
   // Friends because they need to access the query callbacks on this class
-  friend folly::SemiFuture<DbQueryResult> toSemiFuture(
-      std::shared_ptr<QueryOperation> query_op);
-  friend folly::SemiFuture<DbMultiQueryResult> toSemiFuture(
-      std::shared_ptr<MultiQueryOperation> mquery_op);
+  template <typename Operation>
+  friend folly::SemiFuture<folly::Unit> handlePreQueryCallback(Operation& op);
+  template <typename ReturnType, typename Operation, typename QueryResult>
+  friend void handleQueryCompletion(
+      Operation& op,
+      QueryResult query_result,
+      QueryCallbackReason reason,
+      folly::Promise<std::pair<ReturnType, AsyncPostQueryCallback>>& promise);
 
  private:
   // Restore folly::RequestContext and also invoke socketActionable()
@@ -921,9 +925,9 @@ class ConnectOperation : public Operation {
   ConnectOperation* setTimeout(Duration timeout);
 
   // This timeout allows for clients to fail fast when tcp handshake
-  // latency is high . This method allows to override the tcp timeout connection
-  // options. These timeouts can either be set directly or by passing in
-  // connection options.
+  // latency is high . This method allows to override the tcp timeout
+  // connection options. These timeouts can either be set directly or by
+  // passing in connection options.
   ConnectOperation* setTcpTimeout(Duration timeout);
 
   const folly::Optional<Duration>& getTcpTimeout() const {
@@ -1062,8 +1066,8 @@ class ConnectOperation : public Operation {
 //  notifications
 // will be made as well.
 // This is the only Operation that can be paused, and the pause should only be
-// called from within `notify` calls. That will allow another thread to read the
-// state.
+// called from within `notify` calls. That will allow another thread to read
+// the state.
 class FetchOperation : public Operation {
  public:
   using RespAttrs = std::unordered_map<std::string, std::string>;
@@ -1100,8 +1104,8 @@ class FetchOperation : public Operation {
   //   while (rowStream->hasNext()) {
   //     EphemeralRow row = consumeRow();
   //   }
-  // The state within RowStream is also used for FetchOperation to know whether
-  // or not to go to next query.
+  // The state within RowStream is also used for FetchOperation to know
+  // whether or not to go to next query.
   class RowStream {
    public:
     RowStream(MYSQL_RES* mysql_query_result, MysqlHandler* handler);
@@ -1192,11 +1196,11 @@ class FetchOperation : public Operation {
   void setFetchAction(FetchAction action);
   static folly::StringPiece toString(FetchAction action);
 
-  // In socket actionable it is analyzed the action that is required to continue
-  // the operation. For example, if the fetch action is StartQuery, it runs
-  // query or requests more results depending if it had already ran or not the
-  // query. The same process happens for the other FetchActions.
-  // The action member can be changed in other member functions called in
+  // In socket actionable it is analyzed the action that is required to
+  // continue the operation. For example, if the fetch action is StartQuery,
+  // it runs query or requests more results depending if it had already ran or
+  // not the query. The same process happens for the other FetchActions. The
+  // action member can be changed in other member functions called in
   // socketActionable to keep the fetching flow running.
   void socketActionable() override;
   void specializedTimeoutTriggered() override;
@@ -1251,9 +1255,9 @@ class FetchOperation : public Operation {
   std::string current_recv_gtid_;
   RespAttrs current_resp_attrs_;
 
-  // When the Fetch gets paused, active fetch action moves to `WaitForConsumer`
-  // and the action that got paused gets saved so tat `resume` can set it
-  // properly afterwards.
+  // When the Fetch gets paused, active fetch action moves to
+  // `WaitForConsumer` and the action that got paused gets saved so tat
+  // `resume` can set it properly afterwards.
   FetchAction active_fetch_action_ = FetchAction::StartQuery;
   FetchAction paused_action_ = FetchAction::StartQuery;
 
@@ -1586,9 +1590,9 @@ class ChangeUserOperation : public SpecialOperation {
   static constexpr const char* errorMsg = "Change user failed: ";
 };
 
-// Helper function to build the result for a ConnectOperation in the sync mode.
-// It will block the thread and return the acquired connection, in case of
-// error, it will throw MysqlException as expected in the sync mode.
+// Helper function to build the result for a ConnectOperation in the sync
+// mode. It will block the thread and return the acquired connection, in case
+// of error, it will throw MysqlException as expected in the sync mode.
 std::unique_ptr<Connection> blockingConnectHelper(
     std::shared_ptr<ConnectOperation> conn_op);
 } // namespace mysql_client
