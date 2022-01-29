@@ -569,7 +569,7 @@ class AsyncConnectionPool
   // these connections.
   void tryRequestNewConnection(
       const PoolKey& pool_key,
-      std::unique_ptr<db::ConnectionContextBase> context = nullptr);
+      std::shared_ptr<db::ConnectionContextBase> context = nullptr);
 
   // Used for when we fail to open a requested connection. In case of mysql
   // failure (e.g. bad password) we propagate the error to all queued

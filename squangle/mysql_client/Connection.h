@@ -531,7 +531,7 @@ class Connection {
     }
   }
 
-  void setConnectionContext(std::unique_ptr<db::ConnectionContextBase>&& e) {
+  void setConnectionContext(std::shared_ptr<db::ConnectionContextBase> e) {
     connection_context_ = std::move(e);
   }
 
@@ -543,7 +543,7 @@ class Connection {
   bool killOnQueryTimeout_ = false;
 
   // Context information for logging purposes.
-  std::unique_ptr<db::ConnectionContextBase> connection_context_;
+  std::shared_ptr<db::ConnectionContextBase> connection_context_;
 
   // Unowned pointer to the client we're from.
   MysqlClientBase* mysql_client_;

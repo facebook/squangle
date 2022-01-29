@@ -94,7 +94,7 @@ class MysqlConnectionHolder {
   }
 
   void setConnectionContext(
-      std::unique_ptr<db::ConnectionContextBase> conn_context) {
+      std::shared_ptr<db::ConnectionContextBase> conn_context) {
     conn_context_ = std::move(conn_context);
   }
 
@@ -129,7 +129,7 @@ class MysqlConnectionHolder {
   // notification of completed operations.
   MYSQL* mysql_;
   const ConnectionKey conn_key_;
-  std::unique_ptr<db::ConnectionContextBase> conn_context_;
+  std::shared_ptr<db::ConnectionContextBase> conn_context_;
   Timepoint creation_time_;
   Timepoint last_activity_time_;
   bool connection_opened_ = false;

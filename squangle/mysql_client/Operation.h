@@ -793,7 +793,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
 
   folly::Optional<folly::dynamic> user_data_;
   ObserverCallback observer_callback_;
-  std::unique_ptr<db::ConnectionContextBase> connection_context_;
+  std::shared_ptr<db::ConnectionContextBase> connection_context_;
 
   MysqlClientBase* mysql_client_;
 
@@ -862,7 +862,7 @@ class ConnectOperation : public Operation {
   // operation will create.
   ConnectOperation* setDefaultQueryTimeout(Duration t);
   ConnectOperation* setConnectionContext(
-      std::unique_ptr<db::ConnectionContextBase>&& e) {
+      std::shared_ptr<db::ConnectionContextBase> e) {
     CHECK_THROW(
         state_ == OperationState::Unstarted, db::OperationStateException);
     connection_context_ = std::move(e);
@@ -1022,7 +1022,7 @@ class ConnectOperation : public Operation {
   ConnectionOptions conn_options_;
 
   // Context information for logging purposes.
-  std::unique_ptr<db::ConnectionContextBase> connection_context_;
+  std::shared_ptr<db::ConnectionContextBase> connection_context_;
 
  private:
   void specializedRunImpl();

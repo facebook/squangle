@@ -733,10 +733,7 @@ void ConnectOperation::socketActionable() {
         }
       }
       conn()->socketHandler()->changeHandlerFD(socket);
-      if (connection_context_) {
-        conn()->mysqlConnection()->setConnectionContext(
-            connection_context_->copy());
-      }
+      conn()->mysqlConnection()->setConnectionContext(connection_context_);
       conn()->mysqlConnection()->connectionOpened();
       attemptSucceeded(OperationResult::Succeeded);
     } else {
@@ -883,7 +880,7 @@ void ConnectOperation::specializedCompleteOperation() {
 
   conn()->setConnectionOptions(conn_options_);
   conn()->setKillOnQueryTimeout(getKillOnQueryTimeout());
-  conn()->setConnectionContext(std::move(connection_context_));
+  conn()->setConnectionContext(connection_context_);
 
   conn()->notify();
 

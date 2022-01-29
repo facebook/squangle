@@ -296,16 +296,12 @@ void AsyncConnectionPool::openNewConnection(
   // Sanity check
   DCHECK(pool_op != nullptr);
   conn_storage_.queueOperation(poolKey, pool_op);
-  // Copy the ConnectionContext from the incoming operation. These contexts
+  // Propagate the ConnectionContext from the incoming operation. These contexts
   // contain application specific logging that will be lost if not passed to
   // the new ConnectOperation that is spawned to fulfill the pool miss.
-  // Creating a copy ensures that both operations are logged with the
-  // expected additional logging
-  std::unique_ptr<db::ConnectionContextBase> context;
-  if (pool_op->connection_context_) {
-    context = pool_op->connection_context_->copy();
-  }
-  tryRequestNewConnection(poolKey, std::move(context));
+  // Propagating the context pointer ensures that both operations are logged
+  // with the expected additional logging
+  tryRequestNewConnection(poolKey, pool_op->connection_context_);
 }
 
 void AsyncConnectionPool::reuseConnWithChangeUser(
@@ -562,7 +558,7 @@ void AsyncConnectionPool::connectionSpotFreed(const PoolKey& pool_key) {
 
 void AsyncConnectionPool::tryRequestNewConnection(
     const PoolKey& pool_key,
-    std::unique_ptr<db::ConnectionContextBase> context) {
+    std::shared_ptr<db::ConnectionContextBase> context) {
   // Only called internally, this doesn't need to check if it's shutting
   // down
   DCHECK_EQ(std::this_thread::get_id(), mysql_client_->threadId());
@@ -581,7 +577,7 @@ void AsyncConnectionPool::tryRequestNewConnection(
     auto connOp = mysql_client_->beginConnection(pool_key.connKey);
     connOp->setConnectionOptions(pool_key.connOptions);
     if (!context) {
-      context = std::make_unique<db::ConnectionContextBase>();
+      context = std::make_shared<db::ConnectionContextBase>();
     }
     connOp->setConnectionContext(std::move(context));
     auto pool_ptr = getSelfWeakPointer();

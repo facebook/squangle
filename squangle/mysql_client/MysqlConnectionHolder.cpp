@@ -31,16 +31,13 @@ MysqlConnectionHolder::MysqlConnectionHolder(
     const ConnectionKey* connKey)
     : client_(from_holder->client_),
       conn_key_((connKey) ? *connKey : from_holder->conn_key_),
-      conn_context_(nullptr),
+      conn_context_(from_holder->conn_context_),
       creation_time_(from_holder->creation_time_),
       last_activity_time_(from_holder->last_activity_time_),
       connection_opened_(from_holder->connection_opened_),
       can_reuse_(from_holder->can_reuse_) {
   mysql_ = from_holder->stealMysql();
   client_->activeConnectionAdded(&conn_key_);
-  if (from_holder->conn_context_) {
-    conn_context_ = from_holder->conn_context_->copy();
-  }
 }
 
 bool MysqlConnectionHolder::inTransaction() {
