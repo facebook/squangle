@@ -58,6 +58,10 @@ class SyncMysqlClient : public MysqlClientBase {
 
   void drain(bool /*unused*/) {}
 
+  bool supportsLocalFiles() override {
+    return true;
+  }
+
  protected:
   // Private methods, primarily used by Operations and its subclasses.
   friend class AsyncConnectionPool;

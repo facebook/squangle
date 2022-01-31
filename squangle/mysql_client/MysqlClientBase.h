@@ -120,6 +120,8 @@ class MysqlClientBase {
     return 0.0;
   }
 
+  virtual bool supportsLocalFiles() = 0;
+
  protected:
   friend class Connection;
   friend class Operation;

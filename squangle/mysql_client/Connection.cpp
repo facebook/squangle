@@ -43,7 +43,9 @@ void Connection::initMysqlOnly() {
   CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
   mysql_connection_ = std::make_unique<MysqlConnectionHolder>(
       mysql_client_, mysql_init(nullptr), conn_key_);
-  mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
+  if (!mysql_client_->supportsLocalFiles()) {
+    mysql_connection_->mysql()->options.client_flag &= ~CLIENT_LOCAL_FILES;
+  }
   // Turn off SSL by default for tests that rely on this.
   enum mysql_ssl_mode ssl_mode = SSL_MODE_DISABLED;
   mysql_options(mysql_connection_->mysql(), MYSQL_OPT_SSL_MODE, &ssl_mode);

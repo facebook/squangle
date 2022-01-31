@@ -189,6 +189,11 @@ class AsyncMysqlClient : public MysqlClientBase {
     return ret;
   }
 
+  bool supportsLocalFiles() override {
+    // The async client does not yet support local files for LOAD DATA
+    return false;
+  }
+
  protected:
   AsyncMysqlClient(
       std::unique_ptr<db::SquangleLoggerBase> db_logger,
