@@ -179,12 +179,21 @@ class RowFields {
   }
 
   // Given a field_name, return the numeric column number, or die trying.
-  size_t fieldIndex(folly::StringPiece field_name) const {
+  std::optional<size_t> fieldIndexOpt(folly::StringPiece field_name) const {
     auto it = field_name_map_.find(field_name);
-    if (it == field_name_map_.end()) {
-      throw std::out_of_range(folly::sformat("Invalid field: {}", field_name));
+    if (it != field_name_map_.end()) {
+      return it->second;
     }
-    return it->second;
+
+    return std::nullopt;
+  }
+
+  size_t fieldIndex(folly::StringPiece field_name) const {
+    if (auto opt = fieldIndexOpt(field_name); opt) {
+      return *opt;
+    }
+
+    throw std::out_of_range(folly::sformat("Invalid field: {}", field_name));
   }
 
  private:
@@ -285,6 +294,9 @@ class RowBlock {
   }
 
   // What is the index of the column labeled n
+  std::optional<size_t> fieldIndexOpt(folly::StringPiece n) const {
+    return row_fields_info_->fieldIndexOpt(n);
+  }
   size_t fieldIndex(folly::StringPiece n) const {
     return row_fields_info_->fieldIndex(n);
   }
@@ -405,13 +417,22 @@ class EphemeralRowFields {
     return num_fields_;
   }
 
-  size_t fieldIndex(folly::StringPiece field_name) const {
+  std::optional<size_t> fieldIndexOpt(folly::StringPiece field_name) const {
     for (int i = 0; i < num_fields_; i++) {
       auto nameSp = folly::StringPiece(fields_[i].name, fields_[i].name_length);
       if (nameSp == field_name) {
         return i;
       }
     }
+
+    return std::nullopt;
+  }
+
+  size_t fieldIndex(folly::StringPiece field_name) const {
+    if (auto opt = fieldIndexOpt(field_name); opt) {
+      return *opt;
+    }
+
     throw std::out_of_range(folly::sformat("Invalid field: {}", field_name));
   }
 
