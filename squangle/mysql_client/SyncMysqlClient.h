@@ -39,18 +39,6 @@ class SyncMysqlClient : public MysqlClientBase {
     return db::SquangleLoggingData(connKey, connContext);
   }
 
-  // Associate an existing Connection object with this mysql client
-  void adoptConnection(Connection& conn);
-
-  // Associate an existing MYSQL connection with this mysql client
-  std::unique_ptr<Connection> adoptConnection(
-      MYSQL* raw_conn,
-      const std::string& host,
-      int port,
-      const std::string& database_name,
-      const std::string& user,
-      const std::string& password) override;
-
   // Factory method
   std::unique_ptr<Connection> createConnection(
       ConnectionKey conn_key,

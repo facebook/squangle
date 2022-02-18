@@ -24,14 +24,6 @@ class MysqlClientBase {
  public:
   virtual ~MysqlClientBase() = default;
 
-  virtual std::unique_ptr<Connection> adoptConnection(
-      MYSQL* conn,
-      const std::string& host,
-      int port,
-      const std::string& database_name,
-      const std::string& user,
-      const std::string& password);
-
   // Initiate a connection to a database.  This is the main entrypoint.
   std::shared_ptr<ConnectOperation> beginConnection(
       const std::string& host,

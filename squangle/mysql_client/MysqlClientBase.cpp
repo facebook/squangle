@@ -113,18 +113,4 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
   return ret;
 }
 
-std::unique_ptr<Connection> MysqlClientBase::adoptConnection(
-    MYSQL* raw_conn,
-    const std::string& host,
-    int port,
-    const std::string& database_name,
-    const std::string& user,
-    const std::string& password) {
-  auto conn = createConnection(
-      ConnectionKey(host, port, database_name, user, password), raw_conn);
-  conn->socketHandler()->changeHandlerFD(
-      folly::NetworkSocket::fromFd(mysql_get_socket_descriptor(raw_conn)));
-  return conn;
-}
-
 } // namespace facebook::common::mysql_client
