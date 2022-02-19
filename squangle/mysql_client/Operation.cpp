@@ -717,21 +717,6 @@ void ConnectOperation::socketActionable() {
       attemptFailed(OperationResult::Failed);
     } else if (status == MysqlHandler::DONE) {
       auto socket = folly::NetworkSocket::fromFd(fd);
-      if (conn_options_.getDscp().has_value()) {
-        uint dsf = *conn_options_.getDscp();
-        // DS field (QOS/TOS level) is 8 bits with DSCP packed into the most
-        // significant 6 bits.
-        dsf <<= 2;
-        // assuming ipv6 ip layer
-        if (folly::netops::setsockopt(
-                socket, IPPROTO_IPV6, IPV6_TCLASS, &dsf, sizeof(dsf))) {
-          std::string error = "setsockopt failed: " + folly::errnoStr(errno);
-          LOG(ERROR) << error;
-          setAsyncClientError(error);
-          attemptFailed(OperationResult::Failed);
-          return;
-        }
-      }
       conn()->socketHandler()->changeHandlerFD(socket);
       conn()->mysqlConnection()->setConnectionContext(connection_context_);
       conn()->mysqlConnection()->connectionOpened();
