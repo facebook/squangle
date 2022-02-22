@@ -15,7 +15,6 @@
 
 #include <folly/Memory.h>
 #include <folly/Singleton.h>
-#include <folly/Unit.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/portability/GFlags.h>
