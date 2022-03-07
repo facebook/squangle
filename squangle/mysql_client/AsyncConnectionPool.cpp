@@ -998,10 +998,27 @@ void ConnectPoolOperation::socketActionable() {
   LOG(DFATAL) << "Should not be called";
 }
 
-std::ostream& operator<<(std::ostream& os, PoolKey key) {
-  return os << "{" << key.connKey.getDisplayString() << ","
-            << key.connOptions.getDisplayString() << "}";
+std::ostream& operator<<(std::ostream& os, ExpirationPolicy policy) {
+  auto str = (policy == ExpirationPolicy::Age)
+      ? "Age"
+      : (policy == ExpirationPolicy::IdleTime ? "IdleTime" : "<invalid>");
+  return os << str;
 }
+
+std::ostream& operator<<(std::ostream& os, const PoolOptions& options) {
+  return os << "{per key limit:" << options.getPerKeyLimit()
+            << ",pool limit:" << options.getPoolLimit()
+            << ",idle timeout:" << options.getIdleTimeout().count()
+            << "us,age timeout:" << options.getAgeTimeout().count()
+            << "us,expiration policy:" << options.getExpPolicy()
+            << ",pool per instance:" << options.poolPerMysqlInstance() << "}";
+}
+
+std::ostream& operator<<(std::ostream& os, PoolKey key) {
+  return os << "{key:" << key.connKey.getDisplayString()
+            << ",options:" << key.connOptions.getDisplayString() << "}";
+}
+
 } // namespace mysql_client
 } // namespace common
 } // namespace facebook

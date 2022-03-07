@@ -212,6 +212,8 @@ enum class ExpirationPolicy {
   // age
 };
 
+std::ostream& operator<<(std::ostream& os, ExpirationPolicy policy);
+
 class PoolOptions {
  public:
   // Doing these the long way as we want to avoid depending on C++14 or FB's
@@ -286,6 +288,8 @@ class PoolOptions {
   ExpirationPolicy exp_policy_;
   bool pool_per_instance_;
 };
+
+std::ostream& operator<<(std::ostream& os, const PoolOptions& options);
 
 class PoolKey {
  public:
