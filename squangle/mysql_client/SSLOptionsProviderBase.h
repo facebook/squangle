@@ -39,6 +39,7 @@ class SSLOptionsProviderBase {
   virtual std::shared_ptr<folly::ssl::SSLSession> getSSLSession() = 0;
   virtual void storeSSLSession(
       std::shared_ptr<folly::ssl::SSLSession> ssl_session) = 0;
+  virtual void allowSessionResumption(bool allow) = 0;
 
   // Set the SSL Options on the MYSQL object.
   // Returns true if set was successful.
