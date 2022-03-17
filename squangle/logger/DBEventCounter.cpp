@@ -36,6 +36,7 @@ void ConnectionContextBase::collectNormalValues(
 
 void ConnectionContextBase::collectIntValues(AddIntValueFunction add) const {
   add("ssl_server_cert_validated", isServerCertValidated ? 1 : 0);
+  add("ssl_client_identity_cert", isIdentityClientCert ? 1 : 0);
 }
 
 folly::Optional<std::string> ConnectionContextBase::getNormalValue(

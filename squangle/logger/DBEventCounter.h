@@ -49,6 +49,7 @@ class ConnectionContextBase {
   folly::Optional<std::vector<std::string>> sslCertSan;
   folly::Optional<std::vector<std::string>> sslCertIdentities;
   bool isServerCertValidated = false;
+  bool isIdentityClientCert = false;
   std::string endpointVersion;
 };
 
