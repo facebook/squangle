@@ -280,6 +280,20 @@ class PoolOptions {
     return pool_per_instance_;
   }
 
+  bool operator==(const PoolOptions& other) const {
+    return per_key_limit_ == other.per_key_limit_ &&
+        pool_limit_ == other.pool_limit_ &&
+        idle_timeout_ == other.idle_timeout_ &&
+        // Note: we ignore age_timeout if using the IdleTime expiration policy
+        (exp_policy_ == ExpirationPolicy::IdleTime ||
+         age_timeout_ == other.age_timeout_) &&
+        exp_policy_ == other.exp_policy_ &&
+        pool_per_instance_ == other.pool_per_instance_;
+  }
+  bool operator!=(const PoolOptions& other) const {
+    return !(operator==(other));
+  }
+
  private:
   uint64_t per_key_limit_;
   uint64_t pool_limit_;
@@ -534,6 +548,30 @@ class AsyncConnectionPool
   int getNumKeysInOpenConnections();
   int getNumKeysInPendingConnections();
 
+  FOLLY_NODISCARD size_t perKeyLimit() const noexcept {
+    return conn_per_key_limit_;
+  }
+
+  FOLLY_NODISCARD size_t totalLimit() const noexcept {
+    return pool_conn_limit_;
+  }
+
+  FOLLY_NODISCARD Duration ageTimeout() const noexcept {
+    return connection_age_timeout_;
+  }
+
+  FOLLY_NODISCARD Duration idleTimeout() const noexcept {
+    return conn_storage_.maxIdleTime();
+  }
+
+  FOLLY_NODISCARD ExpirationPolicy expirationPolicy() const noexcept {
+    return expiration_policy_;
+  }
+
+  FOLLY_NODISCARD bool poolPerMysqlInstance() const noexcept {
+    return pool_per_instance_;
+  }
+
  private:
   friend class Connection;
   friend class MysqlPooledHolder;
@@ -542,10 +580,6 @@ class AsyncConnectionPool
   friend class FetchOperation;
 
   std::weak_ptr<AsyncConnectionPool> getSelfWeakPointer();
-
-  bool poolPerMysqlInstance() const {
-    return pool_per_instance_;
-  }
 
   // Caches the connection in case it's marked as reusable (default). If the
   // connection is in a transaction or the user marked as not reusable, then
@@ -693,6 +727,10 @@ class AsyncConnectionPool
       DCHECK_EQ(std::this_thread::get_id(), allowed_thread_id_);
       auto it = waitList_.find(pool_key);
       return it == waitList_.end() ? 0 : it->second.size();
+    }
+
+    FOLLY_NODISCARD Duration maxIdleTime() const noexcept {
+      return max_idle_time_;
     }
 
    private:
