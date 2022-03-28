@@ -760,6 +760,8 @@ void ConnectOperation::timeoutHandler(
   }
   // Check for an overloaded EventBase
   auto cbDelayUs = client()->callbackDelayMicrosAvg();
+  auto connErrno = isTcpTimeout ? CR_CONN_HOST_ERROR : CR_SERVER_LOST;
+
   if (cbDelayUs < kCallbackDelayStallThresholdUs) {
     auto msg = fmt::format(
         "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms). TcpTimeout:{}",
@@ -771,7 +773,7 @@ void ConnectOperation::timeoutHandler(
         timeoutStage,
         delta.count(),
         (isTcpTimeout ? 1 : 0));
-    setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
+    setAsyncClientError(connErrno, msg, "Connect timed out");
   } else {
     auto msg = fmt::format(
         "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms)"
@@ -786,8 +788,7 @@ void ConnectOperation::timeoutHandler(
         delta.count(),
         threadOverloadMessage(cbDelayUs),
         (isTcpTimeout ? 1 : 0));
-    setAsyncClientError(
-        CR_SERVER_LOST, msg, "Connect timed out (loop stalled)");
+    setAsyncClientError(connErrno, msg, "Connect timed out (loop stalled)");
   }
   attemptFailed(OperationResult::TimedOut);
 }
