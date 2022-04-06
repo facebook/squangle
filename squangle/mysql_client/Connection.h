@@ -464,6 +464,15 @@ class Connection {
     return connection_context_.get();
   }
 
+  std::string getTlsVersion() const {
+    auto version = mysql_get_ssl_version(mysql_connection_->mysql());
+    if (version) {
+      return std::string(version);
+    }
+
+    return "";
+  }
+
  protected:
   // Methods primarily invoked by Operations and AsyncMysqlClient.
   friend class AsyncMysqlClient;
