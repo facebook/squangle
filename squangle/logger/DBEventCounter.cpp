@@ -19,6 +19,9 @@ void ConnectionContextBase::collectNormalValues(
     AddNormalValueFunction add) const {
   add("is_ssl", folly::to<std::string>(isSslConnection));
   add("is_ssl_session_reused", folly::to<std::string>(sslSessionReused));
+  if (!sslVersion.empty()) {
+    add("ssl_version", sslVersion);
+  }
   if (sslCertCn.hasValue()) {
     add("ssl_server_cert_cn", sslCertCn.value());
   }
@@ -45,6 +48,8 @@ folly::Optional<std::string> ConnectionContextBase::getNormalValue(
     return folly::to<std::string>(isSslConnection);
   } else if (key == "is_ssl_session_reused") {
     return folly::to<std::string>(sslSessionReused);
+  } else if (key == "ssl_version" && !sslVersion.empty()) {
+    return sslVersion;
   } else if (key == "ssl_server_cert_cn") {
     return sslCertCn;
   } else if (key == "ssl_server_cert_san") {

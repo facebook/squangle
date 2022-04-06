@@ -798,13 +798,17 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
   if (!conn()->hasInitialized()) {
     return;
   }
+  auto* context = connection_context_.get();
   auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
       end_time_ - start_time_);
   if (result == OperationResult::Succeeded) {
+    if (context) {
+      context->sslVersion = conn()->getTlsVersion();
+    }
     client()->logConnectionSuccess(
         db::CommonLoggingData(getOperationType(), elapsed),
         *conn()->getKey(),
-        connection_context_.get());
+        context);
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
     if (result == OperationResult::TimedOut) {
@@ -818,7 +822,7 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
         *conn()->getKey(),
         mysql_errno(),
         mysql_error(),
-        connection_context_.get());
+        context);
   }
 }
 
