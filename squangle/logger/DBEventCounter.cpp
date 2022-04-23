@@ -40,6 +40,9 @@ void ConnectionContextBase::collectNormalValues(
 void ConnectionContextBase::collectIntValues(AddIntValueFunction add) const {
   add("ssl_server_cert_validated", isServerCertValidated ? 1 : 0);
   add("ssl_client_identity_cert", isIdentityClientCert ? 1 : 0);
+  if (certCacheSize.has_value()) {
+    add("ssl_cert_cache_size", certCacheSize.value());
+  }
 }
 
 folly::Optional<std::string> ConnectionContextBase::getNormalValue(
@@ -66,6 +69,10 @@ folly::Optional<std::string> ConnectionContextBase::getNormalValue(
     }
   } else if (key == "endpoint_version" && !endpointVersion.empty()) {
     return endpointVersion;
+  } else if (key == "ssl_client_identity_cert") {
+    return folly::to<std::string>(isIdentityClientCert);
+  } else if (key == "ssl_cert_cache_size" && certCacheSize.has_value()) {
+    return folly::to<std::string>(certCacheSize.value());
   } else {
     return folly::none;
   }

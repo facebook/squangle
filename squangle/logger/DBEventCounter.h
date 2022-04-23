@@ -52,6 +52,7 @@ class ConnectionContextBase {
   bool isServerCertValidated = false;
   bool isIdentityClientCert = false;
   std::string endpointVersion;
+  std::optional<size_t> certCacheSize;
 };
 
 class ExponentialMovingAverage {
