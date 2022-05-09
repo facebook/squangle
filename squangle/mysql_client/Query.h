@@ -205,7 +205,10 @@ class Query {
   // ones.
   folly::fbstring render(MYSQL* conn) const;
   folly::fbstring render(MYSQL* conn, const std::vector<QueryArgument>& params)
-      const;
+      const {
+    return QueryRenderer(conn, query_text_.getQuery(), params)
+        .render(unsafe_query_);
+  }
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
@@ -323,28 +326,99 @@ class Query {
     folly::StringPiece query_;
   }; // end QueryText class
 
+  class QueryRenderer {
+   public:
+    QueryRenderer(
+        MYSQL* mysql,
+        folly::StringPiece query,
+        const std::vector<QueryArgument>& args)
+        : mysql_(mysql), query_(query), args_(args) {}
+
+    folly::fbstring render(bool unsafe_query);
+
+   private:
+    // append an int, float, or string to the specified buffer
+    void appendValue(char type, const QueryArgument& d);
+
+    void appendValues(const QueryArgument& d);
+
+    void appendList(folly::StringPiece type, const QueryArgument& d);
+
+    // append a dynamic::object param as key=value joined with sep;
+    // values are passed to appendValue
+    void appendValueClauses(const char* sep, const QueryArgument& param);
+
+    void appendIdentifierWithBacktickEscaping(const QueryArgument& d);
+
+    void appendIdentifier(const QueryArgument& d);
+
+    void appendEscapedString(const folly::fbstring& value);
+
+    void appendComment(const QueryArgument& d);
+
+    void processFormatSpec(char c, const QueryArgument& param);
+
+    folly::StringPiece advance(size_t num);
+
+    void parseError(const std::string& message) const;
+    void formatStringParseError(char fmt, folly::StringPiece value_type) const;
+
+    /* Helper function to wrap some data with a starting value and and ending
+     * value.  Will be used in `parenthesize()` and `quote()` below. */
+    template <typename Func>
+    void wrap(Func func, char start, char end) {
+      working_.push_back(start);
+      func();
+      working_.push_back(end);
+    }
+
+    /* Helper function to assist in surrounding some data with parentheses */
+    template <typename Func>
+    void parenthesize(Func func) {
+      wrap(std::move(func), '(', ')');
+    }
+
+    /* Helper function to assist in prepending and append quotes to some data */
+    template <typename Func>
+    void quote(char quote, Func func) {
+      wrap(std::move(func), quote, quote);
+    }
+
+    /* Function to assist in list formatting.  Will manage adding a list
+     * separator between each list entry.  The container must support `.begin()`
+     * and `.end()` and the function will be called for each entry in order.
+     * The function will include the element count (zero-based) in the lambda
+     * and will return the total number of elements at the end. */
+    template <
+        typename Container,
+        typename Func,
+        typename Separator = const char*>
+    size_t
+    formatList(const Container& container, Func func, Separator sep = ", ") {
+      size_t count = 0;
+      for (const auto& elem : container) {
+        if (count != 0) {
+          working_.append(sep);
+        }
+
+        func(elem, count++);
+      }
+
+      return count;
+    }
+
+    MYSQL* mysql_;
+    folly::StringPiece query_;
+    size_t offset_{0};
+    const std::vector<QueryArgument>& args_;
+    folly::fbstring working_;
+  };
+
   // Allow queries that look evil (aka, raw queries).  Don't use this.
   // It's horrible.
   void allowUnsafeEvilQueries() {
     unsafe_query_ = true;
   }
-
-  // append an int, float, or string to the specified buffer
-  void appendValue(
-      folly::fbstring* s,
-      size_t offset,
-      char type,
-      const QueryArgument& d,
-      MYSQL* conn) const;
-
-  // append a dynamic::object param as key=value joined with sep;
-  // values are passed to appendValue
-  void appendValueClauses(
-      folly::fbstring* ret,
-      size_t* idx,
-      const char* sep,
-      const QueryArgument& param,
-      MYSQL* connection) const;
 
   template <typename Arg, typename... Args>
   void unpack(Arg&& arg, Args&&... args);

@@ -227,108 +227,111 @@ Query::Query(
 
 Query::~Query() {}
 
-namespace {
-
 // Some helper functions for encoding/escaping.
-void appendComment(folly::fbstring* s, const QueryArgument& d) {
-  auto str = d.asString();
-  boost::replace_all(str, "/*", " / * ");
-  boost::replace_all(str, "*/", " * / ");
-  s->append(str);
+void Query::QueryRenderer::appendComment(const QueryArgument& d) {
+  // Note this used to use regex processing, but that can be expensive and
+  // required three passes through the string
+  //  auto str = d.asString();
+  //  boost::replace_all(str, "/*", " / * ");
+  //  boost::replace_all(str, "*/", " * / ");
+  //  working_.append(str);
+
+  char last = '\0';
+  for (char c : d.getString()) {
+    if ((c == '/' && last == '*') || (c == '*' && last == '/')) {
+      working_.insert(working_.end() - 1, ' ');
+      working_.push_back(' ');
+      working_.push_back(c);
+      working_.push_back(' ');
+    } else {
+      working_.push_back(c);
+    }
+
+    last = c;
+  }
 }
 
-void appendColumnTableName(folly::fbstring* s, const QueryArgument& d) {
-  if (d.isString()) {
-    s->reserve(s->size() + d.getString().size() + 4);
-    s->push_back('`');
+void Query::QueryRenderer::appendIdentifierWithBacktickEscaping(
+    const QueryArgument& d) {
+  static constexpr const char kBacktick = '`';
+  DCHECK(d.isString());
+  working_.reserve(working_.size() + d.getString().size() + 4);
+  quote(kBacktick, [&]() {
     for (char c : d.getString()) {
       // Toss in an extra ` if we see one.
-      if (c == '`') {
-        s->push_back('`');
+      if (c == kBacktick) {
+        working_.push_back(kBacktick);
       }
-      s->push_back(c);
+      working_.push_back(c);
     }
-    s->push_back('`');
+  });
+}
+
+void Query::QueryRenderer::appendIdentifier(const QueryArgument& d) {
+  if (d.isString()) {
+    appendIdentifierWithBacktickEscaping(d);
   } else if (d.isTwoTuple()) {
     // If a two-tuple is provided we have a qualified column name
-    auto t = d.getTwoTuple();
-    appendColumnTableName(s, std::get<0>(t));
-    s->push_back('.');
-    appendColumnTableName(s, std::get<1>(t));
+    const auto& t = d.getTwoTuple();
+    appendIdentifierWithBacktickEscaping(std::get<0>(t));
+    working_.push_back('.');
+    appendIdentifierWithBacktickEscaping(std::get<1>(t));
   } else if (d.isThreeTuple()) {
     // If a three-tuple is provided we have a qualified column name
     // with an alias. This is helpful for constructing JOIN queries.
-    auto t = d.getThreeTuple();
-    appendColumnTableName(s, std::get<0>(t));
-    s->push_back('.');
-    appendColumnTableName(s, std::get<1>(t));
-    s->append(" AS ");
-    appendColumnTableName(s, std::get<2>(t));
+    const auto& t = d.getThreeTuple();
+    appendIdentifierWithBacktickEscaping(std::get<0>(t));
+    working_.push_back('.');
+    appendIdentifierWithBacktickEscaping(std::get<1>(t));
+    working_.append(" AS ");
+    appendIdentifierWithBacktickEscaping(std::get<2>(t));
   } else {
-    s->append(d.asString());
+    working_.append(d.asString());
   }
 }
 
 // Raise an exception with, hopefully, a helpful error message.
-void parseError(
-    const folly::StringPiece s,
-    size_t offset,
-    const folly::StringPiece message) {
-  const std::string msg =
-      folly::format(
-          "Parse error at offset {}: {}, query: {}", offset, message, s)
-          .str();
-  throw std::invalid_argument(msg);
+void Query::QueryRenderer::parseError(const std::string& message) const {
+  throw std::invalid_argument(fmt::format(
+      "Parse error at offset {}: {}, query: {}", offset_, message, query_));
 }
 
 // Raise an exception for format string/value mismatches
-void formatStringParseError(
-    folly::StringPiece query_text,
-    size_t offset,
-    char format_specifier,
-    folly::StringPiece value_type) {
-  parseError(
-      query_text,
-      offset,
-      folly::sformat(
-          "invalid value type {} for format string %{}",
-          value_type,
-          format_specifier));
+void Query::QueryRenderer::formatStringParseError(
+    char fmt,
+    folly::StringPiece value_type) const {
+  parseError(fmt::format(
+      "invalid value type {} for format string %{}", value_type, fmt));
 }
 
 // Consume the next x bytes from s, updating offset, and raising an
 // exception if there aren't sufficient bytes left.
-folly::StringPiece
-advance(const folly::StringPiece s, size_t* offset, size_t num) {
-  if (s.size() <= *offset + num) {
-    parseError(s, *offset, "unexpected end of string");
+folly::StringPiece Query::QueryRenderer::advance(size_t num) {
+  if (query_.size() <= offset_ + num) {
+    parseError("unexpected end of string");
   }
-  *offset += num;
-  return folly::StringPiece(
-      s.data() + *offset - num + 1, s.data() + *offset + 1);
+
+  auto start = query_.data() + offset_ + 1;
+  offset_ += num;
+  return folly::StringPiece(start, start + num);
 }
 
 // Escape a string (or copy it through unmodified if no connection is
 // available).
-void appendEscapedString(
-    folly::fbstring* dest,
-    const folly::fbstring& value,
-    MYSQL* connection) {
-  if (!connection) {
+void Query::QueryRenderer::appendEscapedString(const folly::fbstring& value) {
+  if (!mysql_) {
     VLOG(3) << "connectionless escape performed; this should only occur in "
             << "testing.";
-    *dest += value;
+    working_ += value;
     return;
   }
 
-  size_t old_size = dest->size();
-  dest->resize(old_size + 2 * value.size() + 1);
+  size_t old_size = working_.size();
+  working_.resize(old_size + 2 * value.size() + 1);
   size_t actual_value_size = mysql_real_escape_string(
-      connection, &(*dest)[old_size], value.data(), value.size());
-  dest->resize(old_size + actual_value_size);
+      mysql_, &working_[old_size], value.data(), value.size());
+  working_.resize(old_size + actual_value_size);
 }
-
-} // namespace
 
 void Query::append(const Query& query2) {
   query_text_ += query2.query_text_;
@@ -347,83 +350,97 @@ void Query::append(Query&& query2) {
 // Append a dynamic to the query string we're building.  We ensure the
 // type matches the dynamic's type (or allow a magic 'v' type to be
 // any value, but this isn't exposed to the users of the library).
-void Query::appendValue(
-    folly::fbstring* s,
-    size_t offset,
-    char type,
-    const QueryArgument& d,
-    MYSQL* connection) const {
-  auto querySp = query_text_.getQuery();
-
+void Query::QueryRenderer::appendValue(char type, const QueryArgument& d) {
   if (d.isString()) {
     if (type != 's' && type != 'v' && type != 'm') {
-      formatStringParseError(querySp, offset, type, "string");
+      formatStringParseError(type, "string");
     }
     auto value = d.asString();
-    s->reserve(s->size() + value.size() + 4);
-    s->push_back('"');
-    appendEscapedString(s, value, connection);
-    s->push_back('"');
+    working_.reserve(working_.size() + value.size() + 4);
+    quote('"', [&]() { appendEscapedString(value); });
   } else if (d.isBool()) {
     if (type != 'v' && type != 'm') {
-      formatStringParseError(querySp, offset, type, "bool");
+      formatStringParseError(type, "bool");
     }
-    s->append(d.asString());
+    working_.append(d.asString());
   } else if (d.isInt()) {
     if (type != 'd' && type != 'v' && type != 'm' && type != 'u') {
-      formatStringParseError(querySp, offset, type, "int");
+      formatStringParseError(type, "int");
     }
     if (type == 'u') {
-      s->append(folly::to<folly::fbstring>(static_cast<uint64_t>(d.getInt())));
+      working_.append(
+          folly::to<folly::fbstring>(static_cast<uint64_t>(d.getInt())));
     } else {
-      s->append(d.asString());
+      working_.append(d.asString());
     }
   } else if (d.isDouble()) {
     if (type != 'f' && type != 'v' && type != 'm') {
-      formatStringParseError(querySp, offset, type, "double");
+      formatStringParseError(type, "double");
     }
-    s->append(d.asString());
+    working_.append(d.asString());
   } else if (d.isQuery()) {
-    s->append(d.getQuery().render(connection));
+    working_.append(d.getQuery().render(mysql_));
   } else if (d.isNull()) {
-    s->append("NULL");
+    working_.append("NULL");
   } else {
-    formatStringParseError(querySp, offset, type, d.typeName());
+    formatStringParseError(type, d.typeName());
   }
 }
 
-void Query::appendValueClauses(
-    folly::fbstring* ret,
-    size_t* idx,
-    const char* sep,
-    const QueryArgument& param,
-    MYSQL* connection) const {
-  auto querySp = query_text_.getQuery();
+void Query::QueryRenderer::appendValues(const QueryArgument& d) {
+  size_t row_len = 0;
+  formatList(d.getList(), [&](const auto& row, size_t count) {
+    size_t col_count = 0;
+    parenthesize([&]() {
+      col_count = formatList(
+          row.getList(),
+          [&](const auto& col, size_t /*count*/) { appendValue('v', col); });
+    });
 
+    if (count == 0) {
+      row_len = col_count;
+    } else if (row_len != col_count) {
+      // All subsequent rows need to have the same number of columns
+      parseError("not all rows provided for %V formatter are the same size");
+    }
+  });
+}
+
+void Query::QueryRenderer::appendList(
+    folly::StringPiece type,
+    const QueryArgument& d) {
+  formatList(d.getList(), [&](const auto& val, size_t /*count*/) {
+    if (type == "C") {
+      appendIdentifier(val);
+    } else {
+      appendValue(type[0], val);
+    }
+  });
+}
+
+void Query::QueryRenderer::appendValueClauses(
+    const char* sep,
+    const QueryArgument& param) {
   if (!param.isPairList()) {
-    parseError(
-        querySp,
-        *idx,
-        folly::format(
-            "object expected for %Lx but received {}", param.typeName())
-            .str());
+    parseError(fmt::format(
+        "object expected for %Lx but received {}", param.typeName()));
   }
+
   // Sort these to get consistent query ordering (mainly for
   // testing, but also aesthetics of the final query).
-  bool first_param = true;
-  for (const auto& key_value : param.getPairs()) {
-    if (!first_param) {
-      ret->append(sep);
-    }
-    first_param = false;
-    appendColumnTableName(ret, key_value.first);
-    if (key_value.second.isNull() && sep[0] != ',') {
-      ret->append(" IS NULL");
-    } else {
-      ret->append(" = ");
-      appendValue(ret, *idx, 'v', key_value.second, connection);
-    }
-  }
+  formatList(
+      param.getPairs(),
+      [&](const auto& pair, size_t /*count*/) {
+        const auto& [column, value] = pair;
+        appendIdentifier(column);
+        if (value.isNull() && sep[0] != ',') {
+          working_.append(" IS NULL");
+        } else {
+          working_.append(" = ");
+          appendValue('v', value);
+        }
+      },
+      sep);
 }
 
 folly::fbstring Query::renderMultiQuery(
@@ -461,32 +478,92 @@ folly::fbstring Query::render(MYSQL* conn) const {
   return render(conn, params_);
 }
 
-folly::fbstring Query::render(
-    MYSQL* conn,
-    const std::vector<QueryArgument>& params) const {
-  auto querySp = query_text_.getQuery();
+void Query::QueryRenderer::processFormatSpec(
+    char c,
+    const QueryArgument& param) {
+  static constexpr const char* kOr = " OR ";
+  static constexpr const char* kAnd = " AND ";
 
-  if (unsafe_query_) {
-    return querySp.to<folly::fbstring>();
+  if (c == 'd' || c == 's' || c == 'f' || c == 'u') {
+    appendValue(c, param);
+  } else if (c == 'm') {
+    if (!(param.isString() || param.isInt() || param.isDouble() ||
+          param.isBool() || param.isNull())) {
+      parseError("%m expects int/float/string/bool");
+    }
+    appendValue(c, param);
+  } else if (c == 'K') {
+    working_.append("/*");
+    appendComment(param);
+    working_.append("*/");
+  } else if (c == 'T' || c == 'C') {
+    appendIdentifier(param);
+  } else if (c == '=') {
+    folly::StringPiece type = advance(1);
+    if (type != "d" && type != "s" && type != "f" && type != "u" &&
+        type != "m") {
+      parseError("expected %=d, %=f, %=s, %=u, or %=m");
+    }
+
+    if (param.isNull()) {
+      working_.append(" IS NULL");
+    } else {
+      working_.append(" = ");
+      appendValue(type[0], param);
+    }
+  } else if (c == 'V') {
+    if (param.isQuery()) {
+      parseError("%V doesn't allow subquery");
+    }
+
+    appendValues(param);
+  } else if (c == 'L') {
+    folly::StringPiece type = advance(1);
+    if (type == "O" || type == "A") {
+      parenthesize(
+          [&]() { appendValueClauses((type == "O") ? kOr : kAnd, param); });
+    } else {
+      if (!param.isList()) {
+        parseError("expected array for %L formatter");
+      }
+
+      appendList(type, param);
+    }
+  } else if (c == 'U') {
+    appendValueClauses(", ", param);
+  } else if (c == 'W') {
+    appendValueClauses(kAnd, param);
+  } else if (c == 'Q') {
+    if (param.isQuery()) {
+      working_.append(param.getQuery().render(mysql_));
+    } else {
+      working_.append((param).asString());
+    }
+  } else {
+    parseError("unknown % code");
+  }
+}
+
+folly::fbstring Query::QueryRenderer::render(bool unsafe_query) {
+  if (unsafe_query) {
+    return query_.to<folly::fbstring>();
   }
 
-  auto offset = querySp.find_first_of(";'\"`");
-  if (offset != folly::StringPiece::npos) {
-    parseError(querySp, offset, "Saw dangerous characters in SQL query");
+  offset_ = query_.find_first_of(";'\"`");
+  if (offset_ != folly::StringPiece::npos) {
+    parseError("Saw dangerous characters in SQL query");
   }
 
-  folly::fbstring ret;
-  ret.reserve(querySp.size() + 8 * params.size());
+  working_.reserve(query_.size() + 8 * args_.size());
 
-  auto current_param = params.begin();
+  auto current_param = args_.begin();
   bool after_percent = false;
-  size_t idx;
   // Walk our string, watching for % values.
-  for (idx = 0; idx < querySp.size(); ++idx) {
-    char c = querySp[idx];
+  for (offset_ = 0; offset_ < query_.size(); ++offset_) {
+    char c = query_[offset_];
     if (!after_percent) {
       if (c != '%') {
-        ret.push_back(c);
+        working_.push_back(c);
       } else {
         after_percent = true;
       }
@@ -495,129 +572,26 @@ folly::fbstring Query::render(
 
     after_percent = false;
     if (c == '%') {
-      ret.push_back('%');
+      working_.push_back('%');
       continue;
     }
 
-    if (current_param == params.end()) {
-      parseError(querySp, idx, "too few parameters for query");
+    if (current_param == args_.end()) {
+      parseError("too few parameters for query");
     }
 
-    const auto& param = *current_param++;
-    if (c == 'd' || c == 's' || c == 'f' || c == 'u') {
-      appendValue(&ret, idx, c, param, conn);
-    } else if (c == 'm') {
-      if (!(param.isString() || param.isInt() || param.isDouble() ||
-            param.isBool() || param.isNull())) {
-        parseError(querySp, idx, "%m expects int/float/string/bool");
-      }
-      appendValue(&ret, idx, c, param, conn);
-    } else if (c == 'K') {
-      ret.append("/*");
-      appendComment(&ret, param);
-      ret.append("*/");
-    } else if (c == 'T' || c == 'C') {
-      appendColumnTableName(&ret, param);
-    } else if (c == '=') {
-      folly::StringPiece type = advance(querySp, &idx, 1);
-      if (type != "d" && type != "s" && type != "f" && type != "u" &&
-          type != "m") {
-        parseError(querySp, idx, "expected %=d, %=f, %=s, %=u, or %=m");
-      }
-
-      if (param.isNull()) {
-        ret.append(" IS NULL");
-      } else {
-        ret.append(" = ");
-        appendValue(&ret, idx, type[0], param, conn);
-      }
-    } else if (c == 'V') {
-      if (param.isQuery()) {
-        parseError(querySp, idx, "%V doesn't allow subquery");
-      }
-      size_t col_idx;
-      size_t row_len = 0;
-      bool first_row = true;
-      bool first_in_row = true;
-      for (const auto& row : param.getList()) {
-        first_in_row = true;
-        col_idx = 0;
-        if (!first_row) {
-          ret.append(", ");
-        }
-        ret.append("(");
-        for (const auto& col : row.getList()) {
-          if (!first_in_row) {
-            ret.append(", ");
-          }
-          appendValue(&ret, idx, 'v', col, conn);
-          col_idx++;
-          first_in_row = false;
-          if (first_row) {
-            row_len++;
-          }
-        }
-        ret.append(")");
-        if (first_row) {
-          first_row = false;
-        } else if (col_idx != row_len) {
-          parseError(
-              querySp,
-              idx,
-              "not all rows provided for %V formatter are the same size");
-        }
-      }
-    } else if (c == 'L') {
-      folly::StringPiece type = advance(querySp, &idx, 1);
-      if (type == "O" || type == "A") {
-        ret.append("(");
-        const char* sep = (type == "O") ? " OR " : " AND ";
-        appendValueClauses(&ret, &idx, sep, param, conn);
-        ret.append(")");
-      } else {
-        if (!param.isList()) {
-          parseError(querySp, idx, "expected array for %L formatter");
-        }
-
-        bool first_param = true;
-        for (const auto& val : param.getList()) {
-          if (!first_param) {
-            ret.append(", ");
-          }
-          first_param = false;
-          if (type == "C") {
-            appendColumnTableName(&ret, val);
-          } else {
-            appendValue(&ret, idx, type[0], val, conn);
-          }
-        }
-      }
-    } else if (c == 'U' || c == 'W') {
-      if (c == 'W') {
-        appendValueClauses(&ret, &idx, " AND ", param, conn);
-      } else {
-        appendValueClauses(&ret, &idx, ", ", param, conn);
-      }
-    } else if (c == 'Q') {
-      if (param.isQuery()) {
-        ret.append(param.getQuery().render(conn));
-      } else {
-        ret.append((param).asString());
-      }
-    } else {
-      parseError(querySp, idx, "unknown % code");
-    }
+    processFormatSpec(c, *current_param++);
   }
 
   if (after_percent) {
-    parseError(querySp, idx, "string ended with unfinished % code");
+    parseError("string ended with unfinished % code");
   }
 
-  if (current_param != params.end()) {
-    parseError(querySp, 0, "too many parameters specified for query");
+  if (current_param != args_.end()) {
+    parseError("too many parameters specified for query");
   }
 
-  return ret;
+  return working_;
 }
 
 folly::StringPiece MultiQuery::renderQuery(MYSQL* conn) {
