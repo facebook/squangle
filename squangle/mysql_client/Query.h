@@ -647,4 +647,38 @@ void Query::unpack(Arg&& arg, Args&&... args /* lol */) {
 } // namespace common
 } // namespace facebook
 
+// A formatter for the Query class for folly::format
+template <>
+class folly::FormatValue<facebook::common::mysql_client::Query> {
+ public:
+  explicit FormatValue(const facebook::common::mysql_client::Query& query)
+      : query_(query) {}
+
+  template <class FormatCallback>
+  void format(FormatArg& /*arg*/, FormatCallback& cb) const {
+    cb(query_.renderInsecure());
+  }
+
+ private:
+  const facebook::common::mysql_client::Query& query_;
+};
+
+// A formatter for the Query class for fmt::format
+template <>
+class fmt::formatter<facebook::common::mysql_client::Query> {
+ public:
+  template <typename ParseContext>
+  constexpr auto parse(const ParseContext& ctx) {
+    // No reading of the format needed
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(
+      const facebook::common::mysql_client::Query& query,
+      FormatContext& ctx) {
+    return fmt::format_to(ctx.out(), "{}", query.renderInsecure());
+  }
+};
+
 #endif // COMMON_ASYNC_MYSQL_QUERY_H
