@@ -122,6 +122,8 @@ class Query {
   struct QueryText;
 
  public:
+  using QueryStringType = folly::fbstring;
+
   // Query can be constructed with or without params.
   // By default we deep copy the query text
   explicit Query(const folly::StringPiece query_text)
@@ -197,25 +199,42 @@ class Query {
     return escaped;
   }
 
-  static folly::fbstring renderMultiQuery(
+  template <typename String = QueryStringType>
+  static String renderMultiQuery(
       MYSQL* conn,
-      const std::vector<Query>& queries);
+      const std::vector<Query>& queries) {
+    std::vector<String> queryStrs;
+    queryStrs.reserve(queries.size());
+    for (const auto& query : queries) {
+      queryStrs.push_back(query.render<String>(conn));
+    }
+
+    String output;
+    folly::join(";", queryStrs, output);
+
+    return output;
+  }
 
   // render either with the parameters to the constructor or specified
   // ones.
-  folly::fbstring render(MYSQL* conn) const;
-  folly::fbstring render(MYSQL* conn, const std::vector<QueryArgument>& params)
-      const {
-    return QueryRenderer(conn, query_text_.getQuery(), params)
-        .render(unsafe_query_);
+  template <typename String = QueryStringType>
+  String render(MYSQL* conn) const {
+    return render<String>(conn, params_);
   }
+  template <typename String = QueryStringType>
+  String render(MYSQL* conn, const std::vector<QueryArgument>& params) const;
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
   // the MySQL strings.
-  folly::fbstring renderInsecure() const;
-  folly::fbstring renderInsecure(
-      const std::vector<QueryArgument>& params) const;
+  template <typename String = QueryStringType>
+  String renderInsecure() const {
+    return render<String>(nullptr, params_);
+  }
+  template <typename String = QueryStringType>
+  String renderInsecure(const std::vector<QueryArgument>& params) const {
+    return render<String>(nullptr, params);
+  }
 
   folly::StringPiece getQueryFormat() const {
     return query_text_.getQuery();
@@ -237,7 +256,7 @@ class Query {
   struct QueryText {
     // By default make a deep copy of the query
     explicit QueryText(folly::StringPiece query) {
-      query_buffer_.assign(folly::fbstring(query.begin(), query.size()));
+      query_buffer_.assign(QueryStringType(query.begin(), query.size()));
       query_ = folly::StringPiece(*query_buffer_);
       sanityChecks();
     }
@@ -295,11 +314,11 @@ class Query {
     QueryText& operator+=(const QueryText& other) {
       if (!query_buffer_.has_value()) {
         // this was a shallow copy before; we need to copy now
-        query_buffer_.assign(folly::fbstring(query_.begin(), query_.size()));
+        query_buffer_.assign(QueryStringType(query_.begin(), query_.size()));
       }
       DCHECK_EQ(query_, *query_buffer_);
       *query_buffer_ += " ";
-      *query_buffer_ += other.getQuery().to<folly::fbstring>();
+      *query_buffer_ += other.getQuery().to<QueryStringType>();
       query_ = folly::StringPiece(*query_buffer_);
       sanityChecks();
       return *this;
@@ -322,7 +341,7 @@ class Query {
       DCHECK_EQ(query_.size(), query_buffer_->length());
     }
 
-    folly::Optional<folly::fbstring> query_buffer_;
+    folly::Optional<QueryStringType> query_buffer_;
     folly::StringPiece query_;
   }; // end QueryText class
 
@@ -334,7 +353,7 @@ class Query {
         const std::vector<QueryArgument>& args)
         : mysql_(mysql), query_(query), args_(args) {}
 
-    folly::fbstring render(bool unsafe_query);
+    QueryStringType render(bool unsafe_query);
 
    private:
     // append an int, float, or string to the specified buffer
@@ -352,7 +371,7 @@ class Query {
 
     void appendIdentifier(const QueryArgument& d);
 
-    void appendEscapedString(const folly::fbstring& value);
+    void appendEscapedString(const QueryStringType& value);
 
     void appendComment(const QueryArgument& d);
 
@@ -411,7 +430,7 @@ class Query {
     folly::StringPiece query_;
     size_t offset_{0};
     const std::vector<QueryArgument>& args_;
-    folly::fbstring working_;
+    QueryStringType working_;
   };
 
   // Allow queries that look evil (aka, raw queries).  Don't use this.
@@ -429,10 +448,25 @@ class Query {
   std::vector<QueryArgument> params_{};
 };
 
+template <>
+inline folly::fbstring Query::render(
+    MYSQL* conn,
+    const std::vector<QueryArgument>& params) const {
+  return QueryRenderer(conn, query_text_.getQuery(), params)
+      .render(unsafe_query_);
+}
+template <>
+inline std::string Query::render(
+    MYSQL* conn,
+    const std::vector<QueryArgument>& params) const {
+  return std::string(render(conn, params));
+}
+
 // Wraps many queries and holds a buffer that contains the rendered multi query
 // from all the subqueries.
 class MultiQuery {
  public:
+  using QueryStringType = Query::QueryStringType;
   explicit MultiQuery(std::vector<Query>&& queries)
       : queries_(std::move(queries)) {}
 
@@ -458,7 +492,7 @@ class MultiQuery {
       : unsafe_multi_query_(multi_query) {}
 
   folly::StringPiece unsafe_multi_query_;
-  folly::fbstring rendered_multi_query_;
+  QueryStringType rendered_multi_query_;
   std::vector<Query> queries_;
 };
 

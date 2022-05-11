@@ -443,41 +443,6 @@ void Query::QueryRenderer::appendValueClauses(
       sep);
 }
 
-folly::fbstring Query::renderMultiQuery(
-    MYSQL* connection,
-    const std::vector<Query>& queries) {
-  auto reserve_size = 0;
-  for (const Query& query : queries) {
-    reserve_size +=
-        query.query_text_.getQuery().size() + 8 * query.params_.size();
-  }
-  folly::fbstring ret;
-  ret.reserve(reserve_size);
-
-  // Not adding `;` in the end
-  for (const Query& query : queries) {
-    if (!ret.empty()) {
-      ret.append(";");
-    }
-    ret.append(query.render(connection));
-  }
-
-  return ret;
-}
-
-folly::fbstring Query::renderInsecure() const {
-  return render(nullptr, params_);
-}
-
-folly::fbstring Query::renderInsecure(
-    const std::vector<QueryArgument>& params) const {
-  return render(nullptr, params);
-}
-
-folly::fbstring Query::render(MYSQL* conn) const {
-  return render(conn, params_);
-}
-
 void Query::QueryRenderer::processFormatSpec(
     char c,
     const QueryArgument& param) {
@@ -544,9 +509,9 @@ void Query::QueryRenderer::processFormatSpec(
   }
 }
 
-folly::fbstring Query::QueryRenderer::render(bool unsafe_query) {
+Query::QueryStringType Query::QueryRenderer::render(bool unsafe_query) {
   if (unsafe_query) {
-    return query_.to<folly::fbstring>();
+    return query_.to<Query::QueryStringType>();
   }
 
   offset_ = query_.find_first_of(";'\"`");
