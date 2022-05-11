@@ -318,7 +318,7 @@ folly::StringPiece Query::QueryRenderer::advance(size_t num) {
 
 // Escape a string (or copy it through unmodified if no connection is
 // available).
-void Query::QueryRenderer::appendEscapedString(const folly::fbstring& value) {
+void Query::QueryRenderer::appendEscapedString(folly::StringPiece value) {
   if (!mysql_) {
     VLOG(3) << "connectionless escape performed; this should only occur in "
             << "testing.";

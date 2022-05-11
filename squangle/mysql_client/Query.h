@@ -122,7 +122,7 @@ class Query {
   struct QueryText;
 
  public:
-  using QueryStringType = folly::fbstring;
+  using QueryStringType = std::string;
 
   // Query can be constructed with or without params.
   // By default we deep copy the query text
@@ -371,7 +371,7 @@ class Query {
 
     void appendIdentifier(const QueryArgument& d);
 
-    void appendEscapedString(const QueryStringType& value);
+    void appendEscapedString(folly::StringPiece value);
 
     void appendComment(const QueryArgument& d);
 
@@ -449,17 +449,17 @@ class Query {
 };
 
 template <>
-inline folly::fbstring Query::render(
+inline std::string Query::render(
     MYSQL* conn,
     const std::vector<QueryArgument>& params) const {
   return QueryRenderer(conn, query_text_.getQuery(), params)
       .render(unsafe_query_);
 }
 template <>
-inline std::string Query::render(
+inline folly::fbstring Query::render(
     MYSQL* conn,
     const std::vector<QueryArgument>& params) const {
-  return std::string(render(conn, params));
+  return folly::fbstring(render(conn, params));
 }
 
 // Wraps many queries and holds a buffer that contains the rendered multi query
