@@ -681,4 +681,13 @@ class fmt::formatter<facebook::common::mysql_client::Query> {
   }
 };
 
+namespace std {
+// A formatter for the Query class for operator<<
+inline std::ostream& operator<<(
+    std::ostream& os,
+    const facebook::common::mysql_client::Query& query) {
+  return os << query.renderInsecure();
+}
+} // namespace std
+
 #endif // COMMON_ASYNC_MYSQL_QUERY_H
