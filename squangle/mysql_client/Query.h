@@ -92,9 +92,9 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
+using QualifiedColumn = std::tuple<std::string, std::string>;
 using AliasedQualifiedColumn =
-    std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
+    std::tuple<std::string, std::string, std::string>;
 typedef std::unordered_map<std::string, std::string> QueryAttributes;
 
 class QueryArgument;
@@ -502,21 +502,21 @@ class QueryArgument {
       int64_t,
       double,
       bool,
-      folly::fbstring,
+      std::string,
       std::nullptr_t,
       Query,
       std::vector<QueryArgument>,
-      std::vector<std::pair<folly::fbstring, QueryArgument>>,
-      std::tuple<folly::fbstring, folly::fbstring>,
-      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>>
+      std::vector<std::pair<std::string, QueryArgument>>,
+      std::tuple<std::string, std::string>,
+      std::tuple<std::string, std::string, std::string>>
       value_;
 
  public:
   /* implicit */ QueryArgument(folly::StringPiece val);
   /* implicit */ QueryArgument(char const* val);
   /* implicit */ QueryArgument(const std::string& string_value);
+  /* implicit */ QueryArgument(std::string&& val);
   /* implicit */ QueryArgument(const folly::fbstring& val);
-  /* implicit */ QueryArgument(folly::fbstring&& val);
   /* implicit */ QueryArgument(Query q);
 
   template <
@@ -533,10 +533,10 @@ class QueryArgument {
 
   /* implicit */ QueryArgument(std::initializer_list<QueryArgument> list);
   /* implicit */ QueryArgument(std::vector<QueryArgument> arg_list);
-  /* implicit */ QueryArgument(std::tuple<folly::fbstring, folly::fbstring> tup)
+  /* implicit */ QueryArgument(std::tuple<std::string, std::string> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(
-      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup)
+      std::tuple<std::string, std::string, std::string> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
 
@@ -622,20 +622,19 @@ class QueryArgument {
   }
 
   QueryArgument&& operator()(folly::StringPiece q1, const QueryArgument& q2);
-  QueryArgument&& operator()(folly::fbstring&& q1, QueryArgument&& q2);
-  folly::fbstring asString() const;
+  QueryArgument&& operator()(std::string&& q1, QueryArgument&& q2);
+  std::string asString() const;
 
   double getDouble() const;
   int64_t getInt() const;
   bool getBool() const;
   const Query& getQuery() const;
-  const folly::fbstring& getString() const;
-  const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
-      const;
+  const std::string& getString() const;
+  const std::vector<std::pair<std::string, QueryArgument>>& getPairs() const;
   const std::vector<QueryArgument>& getList() const;
-  const std::tuple<folly::fbstring, folly::fbstring>& getTwoTuple() const;
-  const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
-  getThreeTuple() const;
+  const std::tuple<std::string, std::string>& getTwoTuple() const;
+  const std::tuple<std::string, std::string, std::string>& getThreeTuple()
+      const;
 
   bool isString() const;
   bool isQuery() const;
@@ -654,7 +653,7 @@ class QueryArgument {
 
  private:
   void initFromDynamic(const folly::dynamic& dyn);
-  std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs();
+  std::vector<std::pair<std::string, QueryArgument>>& getPairs();
 };
 
 template <typename... Args>
