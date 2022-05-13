@@ -199,17 +199,16 @@ class Query {
     return escaped;
   }
 
-  template <typename String = QueryStringType>
-  static String renderMultiQuery(
+  static std::string renderMultiQuery(
       MYSQL* conn,
       const std::vector<Query>& queries) {
-    std::vector<String> queryStrs;
+    std::vector<std::string> queryStrs;
     queryStrs.reserve(queries.size());
     for (const auto& query : queries) {
-      queryStrs.push_back(query.render<String>(conn));
+      queryStrs.push_back(query.render(conn));
     }
 
-    String output;
+    std::string output;
     folly::join(";", queryStrs, output);
 
     return output;
@@ -217,23 +216,23 @@ class Query {
 
   // render either with the parameters to the constructor or specified
   // ones.
-  template <typename String = QueryStringType>
-  String render(MYSQL* conn) const {
-    return render<String>(conn, params_);
+  std::string render(MYSQL* conn) const {
+    return render(conn, params_);
   }
-  template <typename String = QueryStringType>
-  String render(MYSQL* conn, const std::vector<QueryArgument>& params) const;
+  std::string render(MYSQL* conn, const std::vector<QueryArgument>& params)
+      const {
+    return QueryRenderer(conn, query_text_.getQuery(), params)
+        .render(unsafe_query_);
+  }
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
   // the MySQL strings.
-  template <typename String = QueryStringType>
-  String renderInsecure() const {
-    return render<String>(nullptr, params_);
+  std::string renderInsecure() const {
+    return render(nullptr, params_);
   }
-  template <typename String = QueryStringType>
-  String renderInsecure(const std::vector<QueryArgument>& params) const {
-    return render<String>(nullptr, params);
+  std::string renderInsecure(const std::vector<QueryArgument>& params) const {
+    return render(nullptr, params);
   }
 
   folly::StringPiece getQueryFormat() const {
@@ -447,20 +446,6 @@ class Query {
   bool unsafe_query_ = false;
   std::vector<QueryArgument> params_{};
 };
-
-template <>
-inline std::string Query::render(
-    MYSQL* conn,
-    const std::vector<QueryArgument>& params) const {
-  return QueryRenderer(conn, query_text_.getQuery(), params)
-      .render(unsafe_query_);
-}
-template <>
-inline folly::fbstring Query::render(
-    MYSQL* conn,
-    const std::vector<QueryArgument>& params) const {
-  return folly::fbstring(render(conn, params));
-}
 
 // Wraps many queries and holds a buffer that contains the rendered multi query
 // from all the subqueries.
