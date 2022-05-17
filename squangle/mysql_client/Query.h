@@ -375,6 +375,8 @@ class Query {
     void appendComment(const QueryArgument& d);
 
     void processFormatSpec(char c, const QueryArgument& param);
+    void processEqualitySpec(const QueryArgument& param);
+    void processListSpec(const QueryArgument& param);
 
     folly::StringPiece advance(size_t num);
 
@@ -424,6 +426,9 @@ class Query {
 
       return count;
     }
+
+    static constexpr const char* kOr = " OR ";
+    static constexpr const char* kAnd = " AND ";
 
     MYSQL* mysql_;
     folly::StringPiece query_;

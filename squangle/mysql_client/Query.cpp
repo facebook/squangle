@@ -442,12 +442,37 @@ void Query::QueryRenderer::appendValueClauses(
       sep);
 }
 
+void Query::QueryRenderer::processEqualitySpec(const QueryArgument& param) {
+  folly::StringPiece type = advance(1);
+  if (type != "d" && type != "s" && type != "f" && type != "u" && type != "m") {
+    parseError("expected %=d, %=f, %=s, %=u, or %=m");
+  }
+
+  if (param.isNull()) {
+    working_.append(" IS NULL");
+  } else {
+    working_.append(" = ");
+    appendValue(type[0], param);
+  }
+}
+
+void Query::QueryRenderer::processListSpec(const QueryArgument& param) {
+  folly::StringPiece type = advance(1);
+  if (type == "O" || type == "A") {
+    parenthesize(
+        [&]() { appendValueClauses((type == "O") ? kOr : kAnd, param); });
+  } else {
+    if (!param.isList()) {
+      parseError("expected array for %L formatter");
+    }
+
+    appendList(type, param);
+  }
+}
+
 void Query::QueryRenderer::processFormatSpec(
     char c,
     const QueryArgument& param) {
-  static constexpr const char* kOr = " OR ";
-  static constexpr const char* kAnd = " AND ";
-
   if (c == 'd' || c == 's' || c == 'f' || c == 'u') {
     appendValue(c, param);
   } else if (c == 'm') {
@@ -463,18 +488,7 @@ void Query::QueryRenderer::processFormatSpec(
   } else if (c == 'T' || c == 'C') {
     appendIdentifier(param);
   } else if (c == '=') {
-    folly::StringPiece type = advance(1);
-    if (type != "d" && type != "s" && type != "f" && type != "u" &&
-        type != "m") {
-      parseError("expected %=d, %=f, %=s, %=u, or %=m");
-    }
-
-    if (param.isNull()) {
-      working_.append(" IS NULL");
-    } else {
-      working_.append(" = ");
-      appendValue(type[0], param);
-    }
+    processEqualitySpec(param);
   } else if (c == 'V') {
     if (param.isQuery()) {
       parseError("%V doesn't allow subquery");
@@ -482,17 +496,7 @@ void Query::QueryRenderer::processFormatSpec(
 
     appendValues(param);
   } else if (c == 'L') {
-    folly::StringPiece type = advance(1);
-    if (type == "O" || type == "A") {
-      parenthesize(
-          [&]() { appendValueClauses((type == "O") ? kOr : kAnd, param); });
-    } else {
-      if (!param.isList()) {
-        parseError("expected array for %L formatter");
-      }
-
-      appendList(type, param);
-    }
+    processListSpec(param);
   } else if (c == 'U') {
     appendValueClauses(", ", param);
   } else if (c == 'W') {
