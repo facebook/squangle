@@ -538,19 +538,14 @@ class QueryArgument {
     }
   }
 
-  template <typename T, typename std::enable_if<std::is_enum_v<T>, T>::type>
-  /* implicit */ QueryArgument(const std::optional<T>& opt) {
-    if (opt) {
-      value_ = static_cast<int64_t>(opt.value());
-    } else {
-      value_ = nullptr;
-    }
-  }
-
   template <typename T>
   /* implicit */ QueryArgument(const std::optional<T>& opt) {
     if (opt) {
-      value_ = opt.value();
+      if constexpr (std::is_enum_v<T>) {
+        value_ = static_cast<int64_t>(opt.value());
+      } else {
+        value_ = opt.value();
+      }
     } else {
       value_ = nullptr;
     }
@@ -570,19 +565,14 @@ class QueryArgument {
     }
   }
 
-  template <typename T, typename std::enable_if<std::is_enum_v<T>, T>::type>
-  /* implicit */ QueryArgument(const folly::Optional<T>& opt) {
-    if (opt) {
-      value_ = static_cast<int64_t>(opt.value());
-    } else {
-      value_ = nullptr;
-    }
-  }
-
   template <typename T>
   /* implicit */ QueryArgument(const folly::Optional<T>& opt) {
     if (opt) {
-      value_ = opt.value();
+      if constexpr (std::is_enum_v<T>) {
+        value_ = static_cast<int64_t>(opt.value());
+      } else {
+        value_ = opt.value();
+      }
     } else {
       value_ = nullptr;
     }
