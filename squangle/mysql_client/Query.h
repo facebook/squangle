@@ -68,6 +68,12 @@
 // %K - an SQL comment.  Will put the /* and */ for you.
 // %% - literal % character.
 //
+// The `renderNormalize` function attempts to render the string without any
+// values or comments.  Comments are simply omitted.  Values are replace with
+// with "{S}" for strings and "{N}" for numeric values.  Note that this *only*
+// works for values provide as arguments - any values included in the format
+// string will not be converted.
+//
 // For more details, check out queryfx in the www codebase.
 
 #ifndef COMMON_ASYNC_MYSQL_QUERY_H
@@ -217,22 +223,30 @@ class Query {
   // render either with the parameters to the constructor or specified
   // ones.
   std::string render(MYSQL* conn) const {
-    return render(conn, params_);
+    return render(conn, false);
   }
   std::string render(MYSQL* conn, const std::vector<QueryArgument>& params)
       const {
-    return QueryRenderer(conn, query_text_.getQuery(), params)
-        .render(unsafe_query_);
+    return render(conn, params, false);
   }
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
   // the MySQL strings.
   std::string renderInsecure() const {
-    return render(nullptr, params_);
+    return render(nullptr, false);
   }
   std::string renderInsecure(const std::vector<QueryArgument>& params) const {
-    return render(nullptr, params);
+    return render(nullptr, params, false);
+  }
+
+  // Normalized version of the query - comments are stripped out and values are
+  // replaced by {S} (strings) and {N} (numbers)
+  std::string renderNormalized() const {
+    return render(nullptr, true);
+  }
+  std::string renderNormalized(const std::vector<QueryArgument>& params) const {
+    return render(nullptr, params, true);
   }
 
   folly::StringPiece getQueryFormat() const {
@@ -240,6 +254,17 @@ class Query {
   }
 
  private:
+  std::string render(MYSQL* conn, bool normalize) const {
+    return render(conn, params_, normalize);
+  }
+  std::string render(
+      MYSQL* conn,
+      const std::vector<QueryArgument>& params,
+      bool normalize) const {
+    return QueryRenderer(conn, query_text_.getQuery(), params, normalize)
+        .render(unsafe_query_);
+  }
+
   // QueryText is a container for query stmt used by the Query (see below).
   // Its a union like structure that supports managing either a shallow copy
   // or a deep copy of a query stmt. If QueryText holds a shallow reference
@@ -349,36 +374,43 @@ class Query {
     QueryRenderer(
         MYSQL* mysql,
         folly::StringPiece query,
-        const std::vector<QueryArgument>& args)
-        : mysql_(mysql), query_(query), args_(args) {}
+        const std::vector<QueryArgument>& args,
+        bool normalize = false)
+        : mysql_(mysql), query_(query), normalize_(normalize), args_(args) {}
 
     QueryStringType render(bool unsafe_query);
 
    private:
     // append an int, float, or string to the specified buffer
-    void appendValue(char type, const QueryArgument& d);
+    void appendValue(char type, const QueryArgument& arg);
 
-    void appendValues(const QueryArgument& d);
+    void appendValues(const QueryArgument& arg);
 
-    void appendList(folly::StringPiece type, const QueryArgument& d);
+    void appendList(char code, const QueryArgument& arg);
 
     // append a dynamic::object param as key=value joined with sep;
     // values are passed to appendValue
-    void appendValueClauses(const char* sep, const QueryArgument& param);
+    void appendValueClauses(const char* sep, const QueryArgument& arg);
 
-    void appendIdentifierWithBacktickEscaping(const QueryArgument& d);
+    void appendIdentifierWithBacktickEscaping(const QueryArgument& arg);
 
-    void appendIdentifier(const QueryArgument& d);
+    void appendIdentifier(const QueryArgument& arg);
 
     void appendEscapedString(folly::StringPiece value);
 
-    void appendComment(const QueryArgument& d);
+    void appendComment(const QueryArgument& arg);
 
-    void processFormatSpec(char c, const QueryArgument& param);
-    void processEqualitySpec(const QueryArgument& param);
-    void processListSpec(const QueryArgument& param);
-
-    folly::StringPiece advance(size_t num);
+    void renderFormatSpec(std::string_view spec, const QueryArgument& arg);
+    void renderModifiedFormatSpec(
+        char modifier,
+        char code,
+        const QueryArgument& arg);
+    void renderEqualitySpec(char code, const QueryArgument& arg);
+    void renderListSpec(char code, const QueryArgument& arg);
+    void renderDynamic(char code, const QueryArgument& arg);
+    void renderComment(const QueryArgument& arg);
+    void renderValues(const QueryArgument& arg);
+    void renderSubQuery(const QueryArgument& arg);
 
     void parseError(const std::string& message) const;
     void formatStringParseError(char fmt, folly::StringPiece value_type) const;
@@ -404,6 +436,20 @@ class Query {
       wrap(std::move(func), quote, quote);
     }
 
+    template <typename Container, typename Func, typename SepFunc>
+    size_t processList(const Container& container, Func func, SepFunc sepfunc) {
+      size_t count = 0;
+      for (const auto& elem : container) {
+        if (count != 0) {
+          sepfunc();
+        }
+
+        func(elem, count++);
+      }
+
+      return count;
+    }
+
     /* Function to assist in list formatting.  Will manage adding a list
      * separator between each list entry.  The container must support `.begin()`
      * and `.end()` and the function will be called for each entry in order.
@@ -415,17 +461,14 @@ class Query {
         typename Separator = const char*>
     size_t
     formatList(const Container& container, Func func, Separator sep = ", ") {
-      size_t count = 0;
-      for (const auto& elem : container) {
-        if (count != 0) {
-          working_.append(sep);
-        }
-
-        func(elem, count++);
-      }
-
-      return count;
+      return processList(
+          container, std::move(func), [&]() { working_.append(sep); });
     }
+
+    using DataFunc = std::function<void(std::string_view)>;
+    using FormatFunc =
+        std::function<void(std::string_view, const QueryArgument&)>;
+    void walkFormat(DataFunc dataFunc, FormatFunc formatFunc);
 
     static constexpr const char* kOr = " OR ";
     static constexpr const char* kAnd = " AND ";
@@ -433,6 +476,7 @@ class Query {
     MYSQL* mysql_;
     folly::StringPiece query_;
     size_t offset_{0};
+    bool normalize_;
     const std::vector<QueryArgument>& args_;
     QueryStringType working_;
   };
@@ -633,7 +677,7 @@ class QueryArgument {
 
  private:
   void initFromDynamic(const folly::dynamic& dyn);
-  std::vector<std::pair<std::string, QueryArgument>>& getPairs();
+  std::vector<std::pair<std::string, QueryArgument>>& pairs();
 };
 
 template <typename... Args>

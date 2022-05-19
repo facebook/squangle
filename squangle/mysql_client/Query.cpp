@@ -52,7 +52,7 @@ QueryArgument::QueryArgument() : value_(std::vector<ArgPair>()) {}
 
 QueryArgument::QueryArgument(folly::StringPiece param1, QueryArgument param2)
     : value_(std::vector<ArgPair>()) {
-  getPairs().emplace_back(ArgPair(param1.str(), param2));
+  pairs().emplace_back(ArgPair(param1.str(), param2));
 }
 
 QueryArgument::QueryArgument(Query q) : value_(std::move(q)) {}
@@ -101,14 +101,14 @@ bool QueryArgument::isThreeTuple() const {
 QueryArgument&& QueryArgument::operator()(
     folly::StringPiece q1,
     const QueryArgument& q2) {
-  getPairs().emplace_back(ArgPair(q1.str(), q2));
+  pairs().emplace_back(ArgPair(q1.str(), q2));
   return std::move(*this);
 }
 
 QueryArgument&& QueryArgument::operator()(
     std::string&& q1,
     QueryArgument&& q2) {
-  getPairs().emplace_back(ArgPair(std::move(q1), std::move(q2)));
+  pairs().emplace_back(ArgPair(std::move(q1), std::move(q2)));
   return std::move(*this);
 }
 
@@ -215,7 +215,7 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
   }
 }
 
-std::vector<ArgPair>& QueryArgument::getPairs() {
+std::vector<ArgPair>& QueryArgument::pairs() {
   return boost::get<std::vector<ArgPair>>(value_);
 }
 
@@ -227,7 +227,7 @@ Query::Query(
 Query::~Query() {}
 
 // Some helper functions for encoding/escaping.
-void Query::QueryRenderer::appendComment(const QueryArgument& d) {
+void Query::QueryRenderer::appendComment(const QueryArgument& arg) {
   // Note this used to use regex processing, but that can be expensive and
   // required three passes through the string
   //  auto str = d.asString();
@@ -236,7 +236,7 @@ void Query::QueryRenderer::appendComment(const QueryArgument& d) {
   //  working_.append(str);
 
   char last = '\0';
-  for (char c : d.getString()) {
+  for (char c : arg.getString()) {
     if ((c == '/' && last == '*') || (c == '*' && last == '/')) {
       working_.insert(working_.end() - 1, ' ');
       working_.push_back(' ');
@@ -251,12 +251,12 @@ void Query::QueryRenderer::appendComment(const QueryArgument& d) {
 }
 
 void Query::QueryRenderer::appendIdentifierWithBacktickEscaping(
-    const QueryArgument& d) {
+    const QueryArgument& arg) {
   static constexpr const char kBacktick = '`';
-  DCHECK(d.isString());
-  working_.reserve(working_.size() + d.getString().size() + 4);
+  DCHECK(arg.isString());
+  working_.reserve(working_.size() + arg.getString().size() + 4);
   quote(kBacktick, [&]() {
-    for (char c : d.getString()) {
+    for (char c : arg.getString()) {
       // Toss in an extra ` if we see one.
       if (c == kBacktick) {
         working_.push_back(kBacktick);
@@ -266,26 +266,26 @@ void Query::QueryRenderer::appendIdentifierWithBacktickEscaping(
   });
 }
 
-void Query::QueryRenderer::appendIdentifier(const QueryArgument& d) {
-  if (d.isString()) {
-    appendIdentifierWithBacktickEscaping(d);
-  } else if (d.isTwoTuple()) {
+void Query::QueryRenderer::appendIdentifier(const QueryArgument& arg) {
+  if (arg.isString()) {
+    appendIdentifierWithBacktickEscaping(arg);
+  } else if (arg.isTwoTuple()) {
     // If a two-tuple is provided we have a qualified column name
-    const auto& t = d.getTwoTuple();
+    const auto& t = arg.getTwoTuple();
     appendIdentifierWithBacktickEscaping(std::get<0>(t));
     working_.push_back('.');
     appendIdentifierWithBacktickEscaping(std::get<1>(t));
-  } else if (d.isThreeTuple()) {
+  } else if (arg.isThreeTuple()) {
     // If a three-tuple is provided we have a qualified column name
     // with an alias. This is helpful for constructing JOIN queries.
-    const auto& t = d.getThreeTuple();
+    const auto& t = arg.getThreeTuple();
     appendIdentifierWithBacktickEscaping(std::get<0>(t));
     working_.push_back('.');
     appendIdentifierWithBacktickEscaping(std::get<1>(t));
     working_.append(" AS ");
     appendIdentifierWithBacktickEscaping(std::get<2>(t));
   } else {
-    working_.append(d.asString());
+    working_.append(arg.asString());
   }
 }
 
@@ -301,18 +301,6 @@ void Query::QueryRenderer::formatStringParseError(
     folly::StringPiece value_type) const {
   parseError(fmt::format(
       "invalid value type {} for format string %{}", value_type, fmt));
-}
-
-// Consume the next x bytes from s, updating offset, and raising an
-// exception if there aren't sufficient bytes left.
-folly::StringPiece Query::QueryRenderer::advance(size_t num) {
-  if (query_.size() <= offset_ + num) {
-    parseError("unexpected end of string");
-  }
-
-  auto start = query_.data() + offset_ + 1;
-  offset_ += num;
-  return folly::StringPiece(start, start + num);
 }
 
 // Escape a string (or copy it through unmodified if no connection is
@@ -354,31 +342,48 @@ void Query::QueryRenderer::appendValue(char type, const QueryArgument& d) {
     if (type != 's' && type != 'v' && type != 'm') {
       formatStringParseError(type, "string");
     }
-    auto value = d.asString();
-    working_.reserve(working_.size() + value.size() + 4);
-    quote('"', [&]() { appendEscapedString(value); });
+
+    if (normalize_) {
+      working_.append("{S}");
+    } else {
+      auto value = d.asString();
+      working_.reserve(working_.size() + value.size() + 4);
+      quote('"', [&]() { appendEscapedString(value); });
+    }
   } else if (d.isBool()) {
     if (type != 'v' && type != 'm') {
       formatStringParseError(type, "bool");
     }
-    working_.append(d.asString());
+    if (normalize_) {
+      working_.append("{N}");
+    } else {
+      working_.append(d.asString());
+    }
   } else if (d.isInt()) {
     if (type != 'd' && type != 'v' && type != 'm' && type != 'u') {
       formatStringParseError(type, "int");
     }
-    if (type == 'u') {
-      working_.append(
-          folly::to<std::string>(static_cast<uint64_t>(d.getInt())));
+    if (normalize_) {
+      working_.append("{N}");
     } else {
-      working_.append(d.asString());
+      if (type == 'u') {
+        working_.append(
+            folly::to<std::string>(static_cast<uint64_t>(d.getInt())));
+      } else {
+        working_.append(d.asString());
+      }
     }
   } else if (d.isDouble()) {
     if (type != 'f' && type != 'v' && type != 'm') {
       formatStringParseError(type, "double");
     }
-    working_.append(d.asString());
+    if (normalize_) {
+      working_.append("{N}");
+    } else {
+      working_.append(d.asString());
+    }
   } else if (d.isQuery()) {
-    working_.append(d.getQuery().render(mysql_));
+    working_.append(d.getQuery().render(mysql_, normalize_));
   } else if (d.isNull()) {
     working_.append("NULL");
   } else {
@@ -386,49 +391,51 @@ void Query::QueryRenderer::appendValue(char type, const QueryArgument& d) {
   }
 }
 
-void Query::QueryRenderer::appendValues(const QueryArgument& d) {
-  size_t row_len = 0;
-  formatList(d.getList(), [&](const auto& row, size_t count) {
-    size_t col_count = 0;
-    parenthesize([&]() {
-      col_count = formatList(
-          row.getList(),
-          [&](const auto& col, size_t /*count*/) { appendValue('v', col); });
-    });
+void Query::QueryRenderer::appendValues(const QueryArgument& arg) {
+  if (normalize_) {
+    working_.append("{...}");
+  } else {
+    size_t row_len = 0;
+    formatList(arg.getList(), [&](const auto& row, size_t count) {
+      size_t col_count = 0;
+      parenthesize([&]() {
+        col_count = formatList(
+            row.getList(),
+            [&](const auto& col, size_t /*count*/) { appendValue('v', col); });
+      });
 
-    if (count == 0) {
-      row_len = col_count;
-    } else if (row_len != col_count) {
-      // All subsequent rows need to have the same number of columns
-      parseError("not all rows provided for %V formatter are the same size");
-    }
-  });
+      if (count == 0) {
+        row_len = col_count;
+      } else if (row_len != col_count) {
+        // All subsequent rows need to have the same number of columns
+        parseError("not all rows provided for %V formatter are the same size");
+      }
+    });
+  }
 }
 
-void Query::QueryRenderer::appendList(
-    folly::StringPiece type,
-    const QueryArgument& d) {
-  formatList(d.getList(), [&](const auto& val, size_t /*count*/) {
-    if (type == "C") {
+void Query::QueryRenderer::appendList(char code, const QueryArgument& arg) {
+  formatList(arg.getList(), [&](const auto& val, size_t /*count*/) {
+    if (code == 'C') {
       appendIdentifier(val);
     } else {
-      appendValue(type[0], val);
+      appendValue(code, val);
     }
   });
 }
 
 void Query::QueryRenderer::appendValueClauses(
     const char* sep,
-    const QueryArgument& param) {
-  if (!param.isPairList()) {
-    parseError(fmt::format(
-        "object expected for %Lx but received {}", param.typeName()));
+    const QueryArgument& arg) {
+  if (!arg.isPairList()) {
+    parseError(
+        fmt::format("object expected for %Lx but received {}", arg.typeName()));
   }
 
   // Sort these to get consistent query ordering (mainly for
   // testing, but also aesthetics of the final query).
   formatList(
-      param.getPairs(),
+      arg.getPairs(),
       [&](const auto& pair, size_t /*count*/) {
         const auto& [column, value] = pair;
         appendIdentifier(column);
@@ -442,73 +449,174 @@ void Query::QueryRenderer::appendValueClauses(
       sep);
 }
 
-void Query::QueryRenderer::processEqualitySpec(const QueryArgument& param) {
-  folly::StringPiece type = advance(1);
-  if (type != "d" && type != "s" && type != "f" && type != "u" && type != "m") {
+void Query::QueryRenderer::renderEqualitySpec(
+    char code,
+    const QueryArgument& arg) {
+  if (code != 'd' && code != 's' && code != 'f' && code != 'u' && code != 'm') {
     parseError("expected %=d, %=f, %=s, %=u, or %=m");
   }
 
-  if (param.isNull()) {
+  if (arg.isNull()) {
     working_.append(" IS NULL");
   } else {
     working_.append(" = ");
-    appendValue(type[0], param);
+    appendValue(code, arg);
   }
 }
 
-void Query::QueryRenderer::processListSpec(const QueryArgument& param) {
-  folly::StringPiece type = advance(1);
-  if (type == "O" || type == "A") {
+void Query::QueryRenderer::renderListSpec(char code, const QueryArgument& arg) {
+  if (code == 'O' || code == 'A') {
     parenthesize(
-        [&]() { appendValueClauses((type == "O") ? kOr : kAnd, param); });
+        [&]() { appendValueClauses((code == 'O') ? kOr : kAnd, arg); });
   } else {
-    if (!param.isList()) {
+    if (!arg.isList()) {
       parseError("expected array for %L formatter");
     }
 
-    appendList(type, param);
+    appendList(code, arg);
   }
 }
 
-void Query::QueryRenderer::processFormatSpec(
-    char c,
-    const QueryArgument& param) {
-  if (c == 'd' || c == 's' || c == 'f' || c == 'u') {
-    appendValue(c, param);
-  } else if (c == 'm') {
-    if (!(param.isString() || param.isInt() || param.isDouble() ||
-          param.isBool() || param.isNull())) {
-      parseError("%m expects int/float/string/bool");
-    }
-    appendValue(c, param);
-  } else if (c == 'K') {
+void Query::QueryRenderer::renderModifiedFormatSpec(
+    char modifier,
+    char code,
+    const QueryArgument& arg) {
+  if (modifier == 'L') {
+    renderListSpec(code, arg);
+  } else {
+    DCHECK_EQ(modifier, '=');
+    renderEqualitySpec(code, arg);
+  }
+}
+
+void Query::QueryRenderer::renderDynamic(char code, const QueryArgument& arg) {
+  if (!(arg.isString() || arg.isInt() || arg.isDouble() || arg.isBool() ||
+        arg.isNull())) {
+    parseError("%m expects int/float/string/bool");
+  }
+  appendValue(code, arg);
+}
+
+void Query::QueryRenderer::renderComment(const QueryArgument& arg) {
+  if (!normalize_) {
     working_.append("/*");
-    appendComment(param);
+    appendComment(arg);
     working_.append("*/");
-  } else if (c == 'T' || c == 'C') {
-    appendIdentifier(param);
-  } else if (c == '=') {
-    processEqualitySpec(param);
-  } else if (c == 'V') {
-    if (param.isQuery()) {
-      parseError("%V doesn't allow subquery");
+  }
+}
+
+void Query::QueryRenderer::renderValues(const QueryArgument& arg) {
+  if (arg.isQuery()) {
+    parseError("%V doesn't allow subquery");
+  }
+
+  appendValues(arg);
+}
+
+void Query::QueryRenderer::renderSubQuery(const QueryArgument& arg) {
+  if (arg.isQuery()) {
+    working_.append(arg.getQuery().render(mysql_, normalize_));
+  } else {
+    working_.append(arg.asString());
+  }
+}
+
+void Query::QueryRenderer::renderFormatSpec(
+    std::string_view format_spec,
+    const QueryArgument& arg) {
+  DCHECK_GE(format_spec.size(), 2);
+  DCHECK_LE(format_spec.size(), 3);
+  DCHECK_EQ(format_spec[0], '%');
+
+  char code = format_spec.back();
+  if (format_spec.size() == 3) {
+    renderModifiedFormatSpec(format_spec[1], code, arg);
+  } else {
+    if (code == 'd' || code == 's' || code == 'f' || code == 'u') {
+      appendValue(code, arg);
+    } else if (code == 'm') {
+      renderDynamic(code, arg);
+    } else if (code == 'K') {
+      renderComment(arg);
+    } else if (code == 'T' || code == 'C') {
+      appendIdentifier(arg);
+    } else if (code == 'V') {
+      renderValues(arg);
+    } else if (code == 'U') {
+      appendValueClauses(", ", arg);
+    } else if (code == 'W') {
+      appendValueClauses(kAnd, arg);
+    } else if (code == 'Q') {
+      renderSubQuery(arg);
+    } else {
+      parseError("unknown % code");
+    }
+  }
+}
+
+void Query::QueryRenderer::walkFormat(
+    DataFunc datafunc,
+    FormatFunc formatfunc) {
+  auto it = args_.begin();
+  size_t start = 0;
+
+  enum State {
+    NORMAL,
+    SEEN_PCT,
+    SEEN_MODIFIER,
+  };
+
+  State state = NORMAL;
+
+  // walk through the string looking for % specs
+  for (offset_ = 0; offset_ < query_.size(); ++offset_) {
+    char c = query_[offset_];
+    if (state == NORMAL) {
+      if (c == '%') {
+        if (offset_ != start) {
+          datafunc(std::string_view(query_.data() + start, offset_ - start));
+          start = offset_;
+        }
+        state = SEEN_PCT;
+      }
+
+      continue;
     }
 
-    appendValues(param);
-  } else if (c == 'L') {
-    processListSpec(param);
-  } else if (c == 'U') {
-    appendValueClauses(", ", param);
-  } else if (c == 'W') {
-    appendValueClauses(kAnd, param);
-  } else if (c == 'Q') {
-    if (param.isQuery()) {
-      working_.append(param.getQuery().render(mysql_));
-    } else {
-      working_.append((param).asString());
+    if (state == SEEN_PCT && c == '%') {
+      datafunc(std::string_view("%"));
+      state = NORMAL;
+      start = offset_ + 1;
+      continue;
     }
-  } else {
-    parseError("unknown % code");
+
+    if (state != SEEN_MODIFIER && (c == 'L' || c == '=')) {
+      state = SEEN_MODIFIER;
+      continue;
+    }
+
+    if (it == args_.end()) {
+      parseError("too few parameters for query");
+    }
+
+    formatfunc(
+        std::string_view(query_.data() + start, offset_ - start + 1), *it);
+    ++it;
+    start = offset_ + 1;
+    state = NORMAL;
+  }
+
+  if (state != NORMAL) {
+    parseError("string ended with unfinished % code");
+  }
+
+  if (it != args_.end()) {
+    parseError("too many parameters specified for query");
+  }
+
+  // Don't forget any normal data after the last format spec
+  if (start != offset_) {
+    datafunc(std::string_view(query_.data() + start, offset_ - start));
   }
 }
 
@@ -517,47 +625,27 @@ Query::QueryStringType Query::QueryRenderer::render(bool unsafe_query) {
     return query_.to<Query::QueryStringType>();
   }
 
-  offset_ = query_.find_first_of(";'\"`");
-  if (offset_ != folly::StringPiece::npos) {
+  auto offset = query_.find_first_of(";'\"`");
+  if (offset != folly::StringPiece::npos) {
     parseError("Saw dangerous characters in SQL query");
   }
 
   working_.reserve(query_.size() + 8 * args_.size());
 
-  auto current_param = args_.begin();
-  bool after_percent = false;
-  // Walk our string, watching for % values.
-  for (offset_ = 0; offset_ < query_.size(); ++offset_) {
-    char c = query_[offset_];
-    if (!after_percent) {
-      if (c != '%') {
-        working_.push_back(c);
-      } else {
-        after_percent = true;
-      }
-      continue;
-    }
-
-    after_percent = false;
-    if (c == '%') {
-      working_.push_back('%');
-      continue;
-    }
-
-    if (current_param == args_.end()) {
-      parseError("too few parameters for query");
-    }
-
-    processFormatSpec(c, *current_param++);
-  }
-
-  if (after_percent) {
-    parseError("string ended with unfinished % code");
-  }
-
-  if (current_param != args_.end()) {
-    parseError("too many parameters specified for query");
-  }
+  walkFormat(
+      [&](auto data) {
+        // String data just needs to be appended to the output
+        DCHECK(!data.empty());
+        working_.append(data);
+      },
+      [&](auto data, const auto& arg) {
+        // Format spec:
+        //   `data` contains %[modifier]spec
+        //   `arg` contains the current QueryArgument
+        DCHECK(!data.empty());
+        DCHECK_EQ(data[0], '%');
+        renderFormatSpec(data, arg);
+      });
 
   return working_;
 }
