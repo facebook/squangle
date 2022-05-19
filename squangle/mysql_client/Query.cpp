@@ -69,10 +69,6 @@ bool QueryArgument::isPairList() const {
   return value_.type() == typeid(std::vector<ArgPair>);
 }
 
-bool QueryArgument::isBool() const {
-  return value_.type() == typeid(bool);
-}
-
 bool QueryArgument::isNull() const {
   return value_.type() == typeid(std::nullptr_t);
 }
@@ -149,10 +145,6 @@ int64_t QueryArgument::getInt() const {
   return boost::get<int64_t>(value_);
 }
 
-bool QueryArgument::getBool() const {
-  return boost::get<bool>(value_);
-}
-
 const Query& QueryArgument::getQuery() const {
   return boost::get<Query>(value_);
 }
@@ -205,7 +197,7 @@ void QueryArgument::initFromDynamic(const folly::dynamic& param) {
   } else if (param.isString()) {
     value_ = param.getString();
   } else if (param.isBool()) {
-    value_ = param.asBool();
+    value_ = static_cast<int64_t>(param.asBool());
   } else if (param.isDouble()) {
     value_ = param.asDouble();
   } else if (param.isInt()) {
@@ -350,15 +342,6 @@ void Query::QueryRenderer::appendValue(char type, const QueryArgument& d) {
       working_.reserve(working_.size() + value.size() + 4);
       quote('"', [&]() { appendEscapedString(value); });
     }
-  } else if (d.isBool()) {
-    if (type != 'v' && type != 'm') {
-      formatStringParseError(type, "bool");
-    }
-    if (normalize_) {
-      working_.append("{N}");
-    } else {
-      working_.append(d.asString());
-    }
   } else if (d.isInt()) {
     if (type != 'd' && type != 'v' && type != 'm' && type != 'u') {
       formatStringParseError(type, "int");
@@ -490,8 +473,7 @@ void Query::QueryRenderer::renderModifiedFormatSpec(
 }
 
 void Query::QueryRenderer::renderDynamic(char code, const QueryArgument& arg) {
-  if (!(arg.isString() || arg.isInt() || arg.isDouble() || arg.isBool() ||
-        arg.isNull())) {
+  if (!(arg.isString() || arg.isInt() || arg.isDouble() || arg.isNull())) {
     parseError("%m expects int/float/string/bool");
   }
   appendValue(code, arg);

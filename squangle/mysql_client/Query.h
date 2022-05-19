@@ -535,7 +535,6 @@ class QueryArgument {
   boost::variant<
       int64_t,
       double,
-      bool,
       std::string,
       std::nullptr_t,
       Query,
@@ -651,7 +650,6 @@ class QueryArgument {
 
   double getDouble() const;
   int64_t getInt() const;
-  bool getBool() const;
   const Query& getQuery() const;
   const std::string& getString() const;
   const std::vector<std::pair<std::string, QueryArgument>>& getPairs() const;
@@ -663,7 +661,6 @@ class QueryArgument {
   bool isString() const;
   bool isQuery() const;
   bool isPairList() const;
-  bool isBool() const;
   bool isNull() const;
   bool isList() const;
   bool isDouble() const;
