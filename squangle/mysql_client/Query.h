@@ -253,6 +253,37 @@ class Query {
     return query_text_.getQuery();
   }
 
+  // This will return a vector pairs where each pair contains the format spec
+  // (i.e. "%s" or "%d" or "%V") and the QueryArgument that maps to it.
+  // Example:
+  //   Query query(
+  //       "SELECT %C, %C FROM %T WHERE %C = %S",
+  //       "column1",
+  //       "column2",
+  //       "my_table",
+  //       "column3",
+  //       "some_value");
+  //   auto data = query.introspect();
+  //
+  //   "data" will contain the following:
+  //   {
+  //     { "%C", "column1" },
+  //     { "%C", "column2" },
+  //     { "%T", "my_table" },
+  //     { "%C", "column3" },
+  //     { "%S", "some_value" }
+  //   }
+  using FormatArgumentPair =
+      std::pair<std::string_view, std::reference_wrapper<const QueryArgument>>;
+  std::vector<FormatArgumentPair> introspect() const {
+    return introspect(params_);
+  }
+  std::vector<FormatArgumentPair> introspect(
+      const std::vector<QueryArgument>& params) const {
+    return QueryRenderer(nullptr, query_text_.getQuery(), params, false)
+        .introspect(unsafe_query_);
+  }
+
  private:
   std::string render(MYSQL* conn, bool normalize) const {
     return render(conn, params_, normalize);
@@ -379,6 +410,8 @@ class Query {
         : mysql_(mysql), query_(query), normalize_(normalize), args_(args) {}
 
     QueryStringType render(bool unsafe_query);
+
+    std::vector<FormatArgumentPair> introspect(bool unsafe_query);
 
    private:
     // append an int, float, or string to the specified buffer

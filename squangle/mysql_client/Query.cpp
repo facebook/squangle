@@ -632,6 +632,25 @@ Query::QueryStringType Query::QueryRenderer::render(bool unsafe_query) {
   return working_;
 }
 
+std::vector<Query::FormatArgumentPair> Query::QueryRenderer::introspect(
+    bool unsafe_query) {
+  if (unsafe_query) {
+    return {};
+  }
+
+  std::vector<FormatArgumentPair> result;
+  walkFormat(
+      [&](auto data) { /* Do nothing with regular data */ },
+      [&](auto data, const QueryArgument& arg) {
+        DCHECK(!data.empty());
+        DCHECK_EQ(data[0], '%');
+        result.push_back(std::make_pair(
+            data, std::reference_wrapper<const QueryArgument>(arg)));
+      });
+
+  return result;
+}
+
 folly::StringPiece MultiQuery::renderQuery(MYSQL* conn) {
   if (!unsafe_multi_query_.empty()) {
     return unsafe_multi_query_;
