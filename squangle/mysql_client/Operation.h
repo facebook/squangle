@@ -595,7 +595,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   // Retrieve the shared pointer that holds this instance.
   std::shared_ptr<Operation> getSharedPointer();
 
-  MysqlClientBase* client();
+  MysqlClientBase* client() const;
 
   // Flag internal async client errors; this always becomes a MySQL
   // error 2000 (CR_UNKNOWN_ERROR) with a suitable descriptive message.
@@ -731,7 +731,8 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return cancel_on_run_;
   }
 
-  std::string threadOverloadMessage(double cbDelayUs);
+  std::string threadOverloadMessage(double cbDelayUs) const;
+  std::string timeoutMessage(std::chrono::milliseconds delta) const;
 
   // Data members; subclasses freely interact with these.
   OperationState state_;

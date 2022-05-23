@@ -920,23 +920,30 @@ void ConnectPoolOperation::specializedTimeoutTriggered() {
     if (!(num_open == 0 &&
           (num_opening > 0 ||
            locked_pool->canCreateMoreConnections(pool_key)))) {
-      auto delta = std::chrono::steady_clock::now() - start_time_;
-      int64_t delta_micros =
-          std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
-      auto msg = folly::stringPrintf(
-          "[%d](%s)Connection to %s:%d timed out in pool"
-          "(open %lu, opening %lu, key limit %lu) (took %.2fms)",
+      auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - start_time_);
+      auto cbDelayUs = client()->callbackDelayMicrosAvg();
+      bool stalled = (cbDelayUs >= kCallbackDelayStallThresholdUs);
+
+      std::vector<std::string> parts;
+      parts.push_back(fmt::format(
+          "[{}]({})Connection to {}:{} timed out in pool",
           static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_POOL_CONN_TIMEOUT),
           kErrorPrefix,
           host().c_str(),
-          port(),
+          port()));
+      parts.push_back(fmt::format(
+          "(open {}, opening {}, key limit {})",
           num_open,
           num_opening,
-          locked_pool->conn_per_key_limit_,
-          delta_micros / 1000.0);
+          locked_pool->conn_per_key_limit_));
+      parts.push_back(timeoutMessage(delta));
+      if (stalled) {
+        parts.push_back(threadOverloadMessage(cbDelayUs));
+      }
       setAsyncClientError(
           static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_POOL_CONN_TIMEOUT),
-          msg,
+          folly::join(" ", parts),
           "Connection timed out in pool");
       attemptFailed(OperationResult::TimedOut);
       return;

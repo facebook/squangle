@@ -302,7 +302,7 @@ void Operation::wait() {
   return conn()->wait();
 }
 
-MysqlClientBase* Operation::client() {
+MysqlClientBase* Operation::client() const {
   return mysql_client_;
 }
 
@@ -749,46 +749,41 @@ void ConnectOperation::timeoutHandler(
     bool isTcpTimeout,
     bool isPoolConnection) {
   auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
-      chrono::steady_clock::now() - start_time_);
+      std::chrono::steady_clock::now() - start_time_);
 
-  std::string timeoutStage = "N/A";
-  if (!isPoolConnection) {
-    // mysql_get_connect_stage is a non-standard fb specific to get the
-    // current internal stage of the nonblocking connection
-    enum connect_stage stage = mysql_get_connect_stage(conn()->mysql());
-    timeoutStage = connectStageString(stage);
-  }
-  // Check for an overloaded EventBase
   auto cbDelayUs = client()->callbackDelayMicrosAvg();
-  if (cbDelayUs < kCallbackDelayStallThresholdUs) {
-    auto msg = fmt::format(
-        "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms). TcpTimeout:{}",
-        static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
-        kErrorPrefix,
-        isPoolConnection ? "Pool" : "",
-        host(),
-        port(),
-        timeoutStage,
-        delta.count(),
-        (isTcpTimeout ? 1 : 0));
-    setAsyncClientError(CR_SERVER_LOST, msg, "Connect timed out");
-  } else {
-    auto msg = fmt::format(
-        "[{}]({}) Connect{} to {}:{} timed out at stage {} (took {} ms)"
-        " ({}). TcpTimeout:{}",
-        static_cast<uint16_t>(
-            SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED),
-        kErrorPrefix,
-        isPoolConnection ? "Pool" : "",
-        host(),
-        port(),
-        timeoutStage,
-        delta.count(),
-        threadOverloadMessage(cbDelayUs),
-        (isTcpTimeout ? 1 : 0));
-    setAsyncClientError(
-        CR_SERVER_LOST, msg, "Connect timed out (loop stalled)");
+  bool stalled = (cbDelayUs >= kCallbackDelayStallThresholdUs);
+
+  // Overall the message looks like this:
+  //   [<errno>](Mysql Client) Connect[Pool] to <host>:<port> timed out
+  //   [at stage <connect_stage>] (took Nms, timeout was Nms)
+  //   [(THREAD_OVERLOAD: cb delay Nms, N active conns)] [TcpTimeout:N]
+  std::vector<std::string> parts;
+  parts.push_back(fmt::format(
+      "[{}]({})Connect{} to {}:{} timed out",
+      static_cast<uint16_t>(
+          stalled ? SquangleErrno::SQ_ERRNO_CONN_TIMEOUT_LOOP_STALLED
+                  : SquangleErrno::SQ_ERRNO_CONN_TIMEOUT),
+      kErrorPrefix,
+      isPoolConnection ? "Pool" : "",
+      host(),
+      port()));
+  if (!isPoolConnection) {
+    parts.push_back(fmt::format(
+        "at stage {}",
+        connectStageString(mysql_get_connect_stage(conn()->mysql()))));
   }
+
+  parts.push_back(timeoutMessage(delta));
+  if (stalled) {
+    parts.push_back(threadOverloadMessage(cbDelayUs));
+  }
+  parts.push_back(fmt::format("(TcpTimeout:{})", (isTcpTimeout ? 1 : 0)));
+
+  setAsyncClientError(
+      CR_SERVER_LOST,
+      folly::join(" ", parts),
+      fmt::format("Connect timed out{}", stalled ? " (loop stalled)" : ""));
   attemptFailed(OperationResult::TimedOut);
 }
 
@@ -1372,10 +1367,8 @@ RowBlock makeRowBlockFromStream(
 
 void FetchOperation::specializedTimeoutTriggered() {
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
-  auto delta = chrono::steady_clock::now() - start_time_;
-  int64_t delta_micros =
-      chrono::duration_cast<chrono::microseconds>(delta).count();
-  std::string msg;
+  auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(
+      chrono::steady_clock::now() - start_time_);
 
   if (conn()->getKillOnQueryTimeout()) {
     killRunningQuery();
@@ -1410,34 +1403,34 @@ void FetchOperation::specializedTimeoutTriggered() {
   std::string rows;
   if (rowStream() && rowStream()->numRowsSeen()) {
     rows = fmt::format(
-        "{} rows, {} bytes seen",
+        "({} rows, {} bytes seen)",
         rowStream()->numRowsSeen(),
         rowStream()->query_result_size_);
   } else {
-    rows = "no rows seen";
+    rows = "(no rows seen)";
   }
 
   auto cbDelayUs = client()->callbackDelayMicrosAvg();
-  if (cbDelayUs < kCallbackDelayStallThresholdUs) {
-    msg = fmt::format(
-        "[{}]({}) Query timed out ({}, took {} ms)",
-        static_cast<uint16_t>(SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
-        kErrorPrefix,
-        rows,
-        std::lround(delta_micros / 1000.0));
-    setAsyncClientError(CR_NET_READ_INTERRUPTED, msg, "Query timed out");
-  } else {
-    msg = fmt::format(
-        "[{}]({}) Query timed out ({}, took {} ms) ({})",
-        static_cast<uint16_t>(
-            SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED),
-        kErrorPrefix,
-        rows,
-        std::lround(delta_micros / 1000.0),
-        threadOverloadMessage(cbDelayUs));
-    setAsyncClientError(
-        CR_NET_READ_INTERRUPTED, msg, "Query timed out (loop stalled)");
+  bool stalled = cbDelayUs >= kCallbackDelayStallThresholdUs;
+
+  std::vector<std::string> parts;
+  parts.push_back(fmt::format(
+      "[{}]({}) Query timeout out",
+      static_cast<uint16_t>(
+          stalled ? SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT_LOOP_STALLED
+                  : SquangleErrno::SQ_ERRNO_QUERY_TIMEOUT),
+      kErrorPrefix));
+
+  parts.push_back(std::move(rows));
+  parts.push_back(timeoutMessage(delta));
+  if (stalled) {
+    parts.push_back(threadOverloadMessage(cbDelayUs));
   }
+
+  setAsyncClientError(
+      CR_NET_READ_INTERRUPTED,
+      folly::join(" ", parts),
+      fmt::format("Query timed out{}", stalled ? " (loop stalled)" : ""));
   completeOperation(OperationResult::TimedOut);
 }
 
@@ -1983,11 +1976,18 @@ std::unique_ptr<Connection>&& Operation::ConnectionProxy::releaseConnection() {
   throw std::runtime_error("Releasing connection from referenced conn");
 }
 
-std::string Operation::threadOverloadMessage(double cbDelayUs) {
+std::string Operation::threadOverloadMessage(double cbDelayUs) const {
   return fmt::format(
-      "THREAD_OVERLOAD: cb delay {}ms, {} active conns",
+      "(THREAD_OVERLOAD: cb delay {}ms, {} active conns)",
       std::lround(cbDelayUs / 1000.0),
       client()->numStartedAndOpenConnections());
+}
+
+std::string Operation::timeoutMessage(std::chrono::milliseconds delta) const {
+  return fmt::format(
+      "(took {}ms, timeout was {}ms)",
+      delta.count(),
+      std::chrono::duration_cast<std::chrono::milliseconds>(timeout_).count());
 }
 
 } // namespace mysql_client
