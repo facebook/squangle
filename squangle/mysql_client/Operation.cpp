@@ -845,7 +845,14 @@ void ConnectOperation::specializedCompleteOperation() {
   // Pass the callbacks to the Connection now that we are done with them
   conn()->setCallbacks(std::move(callbacks_));
 
-  maybeStoreSSLSession();
+  // Operations that don't directly initiate a new TLS conneciton
+  // shouldn't update the TLS session because it can propagate the
+  // session object from a connection created usisn one client cert
+  // to an SSL provider initialized with a different cert.
+  if (getOperationType() == db::OperationType::Connect) {
+    maybeStoreSSLSession();
+  }
+
   // Can only log this on successful connections because unsuccessful
   // ones call mysql_close_free inside libmysql
   if (result_ == OperationResult::Succeeded && conn()->ok() &&
