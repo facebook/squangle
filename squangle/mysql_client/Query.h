@@ -68,12 +68,6 @@
 // %K - an SQL comment.  Will put the /* and */ for you.
 // %% - literal % character.
 //
-// The `renderNormalize` function attempts to render the string without any
-// values or comments.  Comments are simply omitted.  Values are replace with
-// with "{S}" for strings and "{N}" for numeric values.  Note that this *only*
-// works for values provide as arguments - any values included in the format
-// string will not be converted.
-//
 // For more details, check out queryfx in the www codebase.
 
 #ifndef COMMON_ASYNC_MYSQL_QUERY_H
@@ -98,9 +92,9 @@ namespace facebook {
 namespace common {
 namespace mysql_client {
 
-using QualifiedColumn = std::tuple<std::string, std::string>;
+using QualifiedColumn = std::tuple<folly::fbstring, folly::fbstring>;
 using AliasedQualifiedColumn =
-    std::tuple<std::string, std::string, std::string>;
+    std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>;
 typedef std::unordered_map<std::string, std::string> QueryAttributes;
 
 class QueryArgument;
@@ -128,8 +122,6 @@ class Query {
   struct QueryText;
 
  public:
-  using QueryStringType = std::string;
-
   // Query can be constructed with or without params.
   // By default we deep copy the query text
   explicit Query(const folly::StringPiece query_text)
@@ -205,97 +197,28 @@ class Query {
     return escaped;
   }
 
-  static std::string renderMultiQuery(
+  static folly::fbstring renderMultiQuery(
       MYSQL* conn,
-      const std::vector<Query>& queries) {
-    std::vector<std::string> queryStrs;
-    queryStrs.reserve(queries.size());
-    for (const auto& query : queries) {
-      queryStrs.push_back(query.render(conn));
-    }
-
-    std::string output;
-    folly::join(";", queryStrs, output);
-
-    return output;
-  }
+      const std::vector<Query>& queries);
 
   // render either with the parameters to the constructor or specified
   // ones.
-  std::string render(MYSQL* conn) const {
-    return render(conn, false);
-  }
-  std::string render(MYSQL* conn, const std::vector<QueryArgument>& params)
-      const {
-    return render(conn, params, false);
-  }
+  folly::fbstring render(MYSQL* conn) const;
+  folly::fbstring render(MYSQL* conn, const std::vector<QueryArgument>& params)
+      const;
 
   // render either with the parameters to the constructor or specified
   // ones.  This is mainly for testing as it does not properly escape
   // the MySQL strings.
-  std::string renderInsecure() const {
-    return render(nullptr, false);
-  }
-  std::string renderInsecure(const std::vector<QueryArgument>& params) const {
-    return render(nullptr, params, false);
-  }
-
-  // Normalized version of the query - comments are stripped out and values are
-  // replaced by {S} (strings) and {N} (numbers)
-  std::string renderNormalized() const {
-    return render(nullptr, true);
-  }
-  std::string renderNormalized(const std::vector<QueryArgument>& params) const {
-    return render(nullptr, params, true);
-  }
+  folly::fbstring renderInsecure() const;
+  folly::fbstring renderInsecure(
+      const std::vector<QueryArgument>& params) const;
 
   folly::StringPiece getQueryFormat() const {
     return query_text_.getQuery();
   }
 
-  // This will return a vector pairs where each pair contains the format spec
-  // (i.e. "%s" or "%d" or "%V") and the QueryArgument that maps to it.
-  // Example:
-  //   Query query(
-  //       "SELECT %C, %C FROM %T WHERE %C = %S",
-  //       "column1",
-  //       "column2",
-  //       "my_table",
-  //       "column3",
-  //       "some_value");
-  //   auto data = query.introspect();
-  //
-  //   "data" will contain the following:
-  //   {
-  //     { "%C", "column1" },
-  //     { "%C", "column2" },
-  //     { "%T", "my_table" },
-  //     { "%C", "column3" },
-  //     { "%S", "some_value" }
-  //   }
-  using FormatArgumentPair =
-      std::pair<std::string_view, std::reference_wrapper<const QueryArgument>>;
-  std::vector<FormatArgumentPair> introspect() const {
-    return introspect(params_);
-  }
-  std::vector<FormatArgumentPair> introspect(
-      const std::vector<QueryArgument>& params) const {
-    return QueryRenderer(nullptr, query_text_.getQuery(), params, false)
-        .introspect(unsafe_query_);
-  }
-
  private:
-  std::string render(MYSQL* conn, bool normalize) const {
-    return render(conn, params_, normalize);
-  }
-  std::string render(
-      MYSQL* conn,
-      const std::vector<QueryArgument>& params,
-      bool normalize) const {
-    return QueryRenderer(conn, query_text_.getQuery(), params, normalize)
-        .render(unsafe_query_);
-  }
-
   // QueryText is a container for query stmt used by the Query (see below).
   // Its a union like structure that supports managing either a shallow copy
   // or a deep copy of a query stmt. If QueryText holds a shallow reference
@@ -311,7 +234,7 @@ class Query {
   struct QueryText {
     // By default make a deep copy of the query
     explicit QueryText(folly::StringPiece query) {
-      query_buffer_.assign(QueryStringType(query.begin(), query.size()));
+      query_buffer_.assign(folly::fbstring(query.begin(), query.size()));
       query_ = folly::StringPiece(*query_buffer_);
       sanityChecks();
     }
@@ -369,11 +292,11 @@ class Query {
     QueryText& operator+=(const QueryText& other) {
       if (!query_buffer_.has_value()) {
         // this was a shallow copy before; we need to copy now
-        query_buffer_.assign(QueryStringType(query_.begin(), query_.size()));
+        query_buffer_.assign(folly::fbstring(query_.begin(), query_.size()));
       }
       DCHECK_EQ(query_, *query_buffer_);
       *query_buffer_ += " ";
-      *query_buffer_ += other.getQuery().to<QueryStringType>();
+      *query_buffer_ += other.getQuery().to<folly::fbstring>();
       query_ = folly::StringPiece(*query_buffer_);
       sanityChecks();
       return *this;
@@ -396,129 +319,32 @@ class Query {
       DCHECK_EQ(query_.size(), query_buffer_->length());
     }
 
-    folly::Optional<QueryStringType> query_buffer_;
+    folly::Optional<folly::fbstring> query_buffer_;
     folly::StringPiece query_;
   }; // end QueryText class
-
-  class QueryRenderer {
-   public:
-    QueryRenderer(
-        MYSQL* mysql,
-        folly::StringPiece query,
-        const std::vector<QueryArgument>& args,
-        bool normalize = false)
-        : mysql_(mysql), query_(query), normalize_(normalize), args_(args) {}
-
-    QueryStringType render(bool unsafe_query);
-
-    std::vector<FormatArgumentPair> introspect(bool unsafe_query);
-
-   private:
-    // append an int, float, or string to the specified buffer
-    void appendValue(char type, const QueryArgument& arg);
-
-    void appendValues(const QueryArgument& arg);
-
-    void appendList(char code, const QueryArgument& arg);
-
-    // append a dynamic::object param as key=value joined with sep;
-    // values are passed to appendValue
-    void appendValueClauses(const char* sep, const QueryArgument& arg);
-
-    void appendIdentifierWithBacktickEscaping(const QueryArgument& arg);
-
-    void appendIdentifier(const QueryArgument& arg);
-
-    void appendEscapedString(folly::StringPiece value);
-
-    void appendComment(const QueryArgument& arg);
-
-    void renderFormatSpec(std::string_view spec, const QueryArgument& arg);
-    void renderModifiedFormatSpec(
-        char modifier,
-        char code,
-        const QueryArgument& arg);
-    void renderEqualitySpec(char code, const QueryArgument& arg);
-    void renderListSpec(char code, const QueryArgument& arg);
-    void renderDynamic(char code, const QueryArgument& arg);
-    void renderComment(const QueryArgument& arg);
-    void renderValues(const QueryArgument& arg);
-    void renderSubQuery(const QueryArgument& arg);
-
-    void parseError(const std::string& message) const;
-    void formatStringParseError(char fmt, folly::StringPiece value_type) const;
-
-    /* Helper function to wrap some data with a starting value and and ending
-     * value.  Will be used in `parenthesize()` and `quote()` below. */
-    template <typename Func>
-    void wrap(Func func, char start, char end) {
-      working_.push_back(start);
-      func();
-      working_.push_back(end);
-    }
-
-    /* Helper function to assist in surrounding some data with parentheses */
-    template <typename Func>
-    void parenthesize(Func func) {
-      wrap(std::move(func), '(', ')');
-    }
-
-    /* Helper function to assist in prepending and append quotes to some data */
-    template <typename Func>
-    void quote(char quote, Func func) {
-      wrap(std::move(func), quote, quote);
-    }
-
-    template <typename Container, typename Func, typename SepFunc>
-    size_t processList(const Container& container, Func func, SepFunc sepfunc) {
-      size_t count = 0;
-      for (const auto& elem : container) {
-        if (count != 0) {
-          sepfunc();
-        }
-
-        func(elem, count++);
-      }
-
-      return count;
-    }
-
-    /* Function to assist in list formatting.  Will manage adding a list
-     * separator between each list entry.  The container must support `.begin()`
-     * and `.end()` and the function will be called for each entry in order.
-     * The function will include the element count (zero-based) in the lambda
-     * and will return the total number of elements at the end. */
-    template <
-        typename Container,
-        typename Func,
-        typename Separator = const char*>
-    size_t
-    formatList(const Container& container, Func func, Separator sep = ", ") {
-      return processList(
-          container, std::move(func), [&]() { working_.append(sep); });
-    }
-
-    using DataFunc = std::function<void(std::string_view)>;
-    using FormatFunc =
-        std::function<void(std::string_view, const QueryArgument&)>;
-    void walkFormat(DataFunc dataFunc, FormatFunc formatFunc);
-
-    static constexpr const char* kOr = " OR ";
-    static constexpr const char* kAnd = " AND ";
-
-    MYSQL* mysql_;
-    folly::StringPiece query_;
-    size_t offset_{0};
-    bool normalize_;
-    const std::vector<QueryArgument>& args_;
-    QueryStringType working_;
-  };
 
   // Allow queries that look evil (aka, raw queries).  Don't use this.
   // It's horrible.
   void allowUnsafeEvilQueries() {
     unsafe_query_ = true;
   }
+
+  // append an int, float, or string to the specified buffer
+  void appendValue(
+      folly::fbstring* s,
+      size_t offset,
+      char type,
+      const QueryArgument& d,
+      MYSQL* conn) const;
+
+  // append a dynamic::object param as key=value joined with sep;
+  // values are passed to appendValue
+  void appendValueClauses(
+      folly::fbstring* ret,
+      size_t* idx,
+      const char* sep,
+      const QueryArgument& param,
+      MYSQL* connection) const;
 
   template <typename Arg, typename... Args>
   void unpack(Arg&& arg, Args&&... args);
@@ -533,7 +359,6 @@ class Query {
 // from all the subqueries.
 class MultiQuery {
  public:
-  using QueryStringType = Query::QueryStringType;
   explicit MultiQuery(std::vector<Query>&& queries)
       : queries_(std::move(queries)) {}
 
@@ -559,7 +384,7 @@ class MultiQuery {
       : unsafe_multi_query_(multi_query) {}
 
   folly::StringPiece unsafe_multi_query_;
-  QueryStringType rendered_multi_query_;
+  folly::fbstring rendered_multi_query_;
   std::vector<Query> queries_;
 };
 
@@ -568,21 +393,22 @@ class QueryArgument {
   boost::variant<
       int64_t,
       double,
-      std::string,
+      bool,
+      folly::fbstring,
       std::nullptr_t,
       Query,
       std::vector<QueryArgument>,
-      std::vector<std::pair<std::string, QueryArgument>>,
-      std::tuple<std::string, std::string>,
-      std::tuple<std::string, std::string, std::string>>
+      std::vector<std::pair<folly::fbstring, QueryArgument>>,
+      std::tuple<folly::fbstring, folly::fbstring>,
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>>
       value_;
 
  public:
   /* implicit */ QueryArgument(folly::StringPiece val);
   /* implicit */ QueryArgument(char const* val);
   /* implicit */ QueryArgument(const std::string& string_value);
-  /* implicit */ QueryArgument(std::string&& val);
   /* implicit */ QueryArgument(const folly::fbstring& val);
+  /* implicit */ QueryArgument(folly::fbstring&& val);
   /* implicit */ QueryArgument(Query q);
 
   template <
@@ -599,10 +425,10 @@ class QueryArgument {
 
   /* implicit */ QueryArgument(std::initializer_list<QueryArgument> list);
   /* implicit */ QueryArgument(std::vector<QueryArgument> arg_list);
-  /* implicit */ QueryArgument(std::tuple<std::string, std::string> tup)
+  /* implicit */ QueryArgument(std::tuple<folly::fbstring, folly::fbstring> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(
-      std::tuple<std::string, std::string, std::string> tup)
+      std::tuple<folly::fbstring, folly::fbstring, folly::fbstring> tup)
       : value_(tup) {}
   /* implicit */ QueryArgument(std::nullptr_t n) : value_(n) {}
 
@@ -678,22 +504,25 @@ class QueryArgument {
   }
 
   QueryArgument&& operator()(folly::StringPiece q1, const QueryArgument& q2);
-  QueryArgument&& operator()(std::string&& q1, QueryArgument&& q2);
-  std::string asString() const;
+  QueryArgument&& operator()(folly::fbstring&& q1, QueryArgument&& q2);
+  folly::fbstring asString() const;
 
   double getDouble() const;
   int64_t getInt() const;
+  bool getBool() const;
   const Query& getQuery() const;
-  const std::string& getString() const;
-  const std::vector<std::pair<std::string, QueryArgument>>& getPairs() const;
-  const std::vector<QueryArgument>& getList() const;
-  const std::tuple<std::string, std::string>& getTwoTuple() const;
-  const std::tuple<std::string, std::string, std::string>& getThreeTuple()
+  const folly::fbstring& getString() const;
+  const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
       const;
+  const std::vector<QueryArgument>& getList() const;
+  const std::tuple<folly::fbstring, folly::fbstring>& getTwoTuple() const;
+  const std::tuple<folly::fbstring, folly::fbstring, folly::fbstring>&
+  getThreeTuple() const;
 
   bool isString() const;
   bool isQuery() const;
   bool isPairList() const;
+  bool isBool() const;
   bool isNull() const;
   bool isList() const;
   bool isDouble() const;
@@ -707,7 +536,7 @@ class QueryArgument {
 
  private:
   void initFromDynamic(const folly::dynamic& dyn);
-  std::vector<std::pair<std::string, QueryArgument>>& pairs();
+  std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs();
 };
 
 template <typename... Args>
