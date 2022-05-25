@@ -1475,7 +1475,7 @@ void FetchOperation::specializedCompleteOperation() {
             total_result_size_,
             no_index_used_,
             use_checksum_ || conn()->getConnectionOptions().getUseChecksum(),
-            {},
+            attributes_,
             readResponseAttributes()),
         reason,
         mysql_errno(),
