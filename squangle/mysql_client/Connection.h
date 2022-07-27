@@ -268,7 +268,7 @@ class Connection {
   //
   // This is provided so that non-Facebook users of the HHVM extension have
   // a familiar API.
-  std::string escapeString(folly::StringPiece unescaped) {
+  std::string escapeString(folly::StringPiece unescaped) const {
     CHECK_THROW(mysql_connection_ != nullptr, db::InvalidConnectionException);
     return Query::escapeString<std::string>(
         mysql_connection_->mysql(), unescaped);
