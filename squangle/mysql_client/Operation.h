@@ -430,6 +430,15 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return timeout_;
   }
 
+  Duration getMaxThreadBlockTime() {
+    return max_thread_block_time_;
+  }
+
+  Operation* setMaxThreadBlockTime(Duration max_thread_block_time) {
+    max_thread_block_time_ = max_thread_block_time;
+    return this;
+  }
+
   // Did the operation succeed?
   bool ok() const {
     return done() && result_ == OperationResult::Succeeded;
@@ -742,6 +751,9 @@ class Operation : public std::enable_shared_from_this<Operation> {
   Duration timeout_;
   Timepoint start_time_;
   Timepoint end_time_;
+
+  // This will contain the max block time of the thread
+  Duration max_thread_block_time_ = Duration(0);
 
   // Our Connection object.  Created by ConnectOperation and moved
   // into QueryOperations.

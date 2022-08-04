@@ -100,10 +100,16 @@ struct SquangleLoggingData {
 };
 
 struct CommonLoggingData {
-  CommonLoggingData(OperationType op, Duration duration)
-      : operation_type(op), operation_duration(duration) {}
+  CommonLoggingData(
+      OperationType op,
+      Duration duration,
+      Duration max_thread_block_time = Duration(0))
+      : operation_type(op),
+        operation_duration(duration),
+        max_thread_block_time(max_thread_block_time) {}
   OperationType operation_type;
   Duration operation_duration;
+  Duration max_thread_block_time;
 };
 
 struct QueryLoggingData : CommonLoggingData {
@@ -119,8 +125,9 @@ struct QueryLoggingData : CommonLoggingData {
       const std::unordered_map<std::string, std::string>& queryAttributes =
           std::unordered_map<std::string, std::string>(),
       std::unordered_map<std::string, std::string> responseAttributes =
-          std::unordered_map<std::string, std::string>())
-      : CommonLoggingData(op, duration),
+          std::unordered_map<std::string, std::string>(),
+      Duration maxThreadBlockTime = Duration(0))
+      : CommonLoggingData(op, duration, maxThreadBlockTime),
         queries_executed(queries),
         query(queryString),
         rows_received(rows),

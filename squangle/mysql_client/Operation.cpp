@@ -694,9 +694,20 @@ ConnectOperation::~ConnectOperation() {
 
 void ConnectOperation::socketActionable() {
   DCHECK(isInEventBaseThread());
+
+  Timepoint started = chrono::steady_clock::now();
+  SCOPE_EXIT {
+    auto thread_time = std::chrono::duration_cast<Duration>(
+        chrono::steady_clock::now() - started);
+    if (getMaxThreadBlockTime() < thread_time) {
+      setMaxThreadBlockTime(thread_time);
+    }
+  };
+
   auto& handler = conn()->client()->getMysqlHandler();
   MYSQL* mysql = conn()->mysql();
   auto status = handler.tryConnect(mysql, conn_options_, conn_key_, flags_);
+
   if (status == MysqlHandler::ERROR) {
     snapshotMysqlErrors();
     attemptFailed(OperationResult::Failed);
@@ -801,7 +812,8 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
       context->sslVersion = conn()->getTlsVersion();
     }
     client()->logConnectionSuccess(
-        db::CommonLoggingData(getOperationType(), elapsed),
+        db::CommonLoggingData(
+            getOperationType(), elapsed, getMaxThreadBlockTime()),
         *conn()->getKey(),
         context);
   } else {
@@ -812,7 +824,8 @@ void ConnectOperation::logConnectCompleted(OperationResult result) {
       reason = db::FailureReason::CANCELLED;
     }
     client()->logConnectionFailure(
-        db::CommonLoggingData(getOperationType(), elapsed),
+        db::CommonLoggingData(
+            getOperationType(), elapsed, getMaxThreadBlockTime()),
         reason,
         *conn()->getKey(),
         mysql_errno(),
@@ -1137,6 +1150,16 @@ void FetchOperation::socketActionable() {
   DCHECK(isInEventBaseThread());
   DCHECK(active_fetch_action_ != FetchAction::WaitForConsumer);
 
+  Timepoint started = chrono::steady_clock::now();
+
+  SCOPE_EXIT {
+    auto thread_time = std::chrono::duration_cast<Duration>(
+        chrono::steady_clock::now() - started);
+    if (getMaxThreadBlockTime() < thread_time) {
+      setMaxThreadBlockTime(thread_time);
+    }
+  };
+
   auto& handler = conn()->client()->getMysqlHandler();
   MYSQL* mysql = conn()->mysql();
 
@@ -1456,7 +1479,8 @@ void FetchOperation::specializedCompleteOperation() {
         no_index_used_,
         use_checksum_ || conn()->getConnectionOptions().getUseChecksum(),
         attributes_,
-        readResponseAttributes());
+        readResponseAttributes(),
+        getMaxThreadBlockTime());
     client()->logQuerySuccess(logging_data, *conn().get());
   } else {
     db::FailureReason reason = db::FailureReason::DATABASE_ERROR;
@@ -1476,7 +1500,8 @@ void FetchOperation::specializedCompleteOperation() {
             no_index_used_,
             use_checksum_ || conn()->getConnectionOptions().getUseChecksum(),
             attributes_,
-            readResponseAttributes()),
+            readResponseAttributes(),
+            getMaxThreadBlockTime()),
         reason,
         mysql_errno(),
         mysql_error(),
