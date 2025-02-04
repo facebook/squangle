@@ -83,7 +83,7 @@ InternalResult::FetchRowRet AsyncMysqlResult::fetchRow() {
   VLOG(4) << fmt::format(
       "mysql_fetch_row_nonblocking({}) returned {}, MYSQL_ROW = {}",
       (void*)res_.get(),
-      ret,
+      fmt::underlying(ret),
       (void*)mysqlRow);
 
   if (ret == NET_ASYNC_COMPLETE) {

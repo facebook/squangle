@@ -13,7 +13,11 @@
 #include <folly/ScopeGuard.h>
 #include <glog/logging.h>
 
+#ifndef SQUANGLE_OSS
 #include "secure_lib/secure_string.h"
+#else
+#include <cstring>
+#endif
 
 namespace facebook::common::mysql_client {
 
@@ -168,6 +172,15 @@ class StorageRow {
     offsets.curr += sizeof(res);
     return res;
   }
+
+#ifdef SQUANGLE_OSS
+  // Bounds-checked memcpy() shim for Squangle/HHVM OSS.
+  inline static void checked_memcpy(
+      void* dest, std::size_t dest_size, const void* src, std::size_t count) {
+    CHECK(dest_size >= count);
+    std::memcpy(dest, src, count);
+  }
+#endif
 
   double readDouble(Offsets& offsets) const;
   folly::StringPiece readShortString(Offsets& offsets) const;
