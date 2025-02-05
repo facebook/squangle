@@ -7,7 +7,9 @@
  */
 
 #include "squangle/mysql_client/Connection.h"
+#ifndef SQUANGLE_OSS
 #include "common/db/sql_builder/logging/OdsCounterHelper.h"
+#endif
 #include "squangle/mysql_client/ChangeUserOperation.h"
 #include "squangle/mysql_client/ResetOperation.h"
 #include "squangle/mysql_client/SemiFutureAdapter.h"
@@ -15,6 +17,14 @@
 using namespace std::chrono_literals;
 
 namespace facebook::common::mysql_client {
+
+#ifdef SQUANGLE_OSS
+namespace sql_builder {
+struct OdsCounterHelper {
+  constexpr static void bumpOdsOverallCounter() {}
+};
+} // namespace sql_builder
+#endif
 
 namespace {
 // Helper function to return QueryException when conn is invalid/null

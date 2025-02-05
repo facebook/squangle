@@ -142,18 +142,15 @@ class Query {
   struct QueryText;
 
  public:
-  // Query can be constructed with or without params.
-  // By default we deep copy the query text
-  explicit Query(const folly::StringPiece query_text)
-      : query_text_(query_text) {}
+  explicit Query(const folly::StringPiece query_text);
 
-  explicit Query(QueryText&& query_text) : query_text_(std::move(query_text)) {}
+  explicit Query(QueryText&& query_text);
 
   ~Query();
 
   // default copy and move constructible
-  Query(const Query&) = default;
-  Query(Query&&) = default;
+  Query(Query&&);
+  Query(const Query& other);
 
   Query& operator=(const Query&) = default;
   Query& operator=(Query&&) = default;

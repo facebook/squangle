@@ -222,12 +222,23 @@ std::vector<ArgPair>& QueryArgument::getPairs() {
   return boost::get<std::vector<ArgPair>>(value_);
 }
 
+// Query can be constructed with or without params.
+// By default we deep copy the query text
+Query::Query(const folly::StringPiece query_text)
+    : query_text_(query_text) {}
+
+Query::Query(QueryText&& query_text) : query_text_(std::move(query_text)) {}
+
 Query::Query(
     const folly::StringPiece query_text,
     std::vector<QueryArgument> params)
     : query_text_(query_text),
       unsafe_query_(false),
       params_(std::move(params)) {}
+
+Query::Query(Query&&) = default;
+
+Query::Query(const Query&) = default;
 
 Query::~Query() {}
 

@@ -601,7 +601,7 @@ InternalConnection::Status AsyncMysqlConnection::tryConnect(
       port,
       unixSocket,
       flags,
-      ret);
+      fmt::underlying(ret));
   return toHandlerStatus(ret);
 }
 
@@ -629,7 +629,7 @@ InternalConnection::Status AsyncMysqlConnection::runQuery(
       (void*)mysql_,
       query,
       query.size(),
-      ret);
+      fmt::underlying(ret));
   return toHandlerStatus(ret);
 }
 
@@ -647,7 +647,9 @@ InternalConnection::Status AsyncMysqlConnection::resetConn() const {
 
   auto ret = mysql_reset_connection_nonblocking(mysql_);
   VLOG(4) << fmt::format(
-      "mysql_reset_connection_nonblocking({}) returned {}", (void*)mysql_, ret);
+      "mysql_reset_connection_nonblocking({}) returned {}",
+      (void*)mysql_,
+      fmt::underlying(ret));
   return toHandlerStatus(ret);
 }
 
@@ -691,7 +693,7 @@ InternalConnection::Status AsyncMysqlConnection::changeUser(
       user,
       password,
       database,
-      ret);
+      fmt::underlying(ret));
   return toHandlerStatus(ret);
 }
 
@@ -709,7 +711,7 @@ InternalConnection::Status AsyncMysqlConnection::nextResult() const {
 
   auto ret = mysql_next_result_nonblocking(mysql_);
   VLOG(4) << fmt::format(
-      "mysql_next_result_nonblocking({}) returned {}", (void*)mysql_, ret);
+      "mysql_next_result_nonblocking({}) returned {}", (void*)mysql_, fmt::underlying(ret));
   return toHandlerStatus(ret);
 }
 
@@ -771,7 +773,7 @@ MysqlConnection::MySqlConnectStage MysqlConnection::getMySqlConnectStage()
 
   auto ret = mysql_get_connect_stage(mysql_);
   VLOG(4) << fmt::format(
-      "mysql_get_connect_stage({}) returned {}", (void*)mysql_, ret);
+      "mysql_get_connect_stage({}) returned {}", (void*)mysql_, fmt::underlying(ret));
   return ret;
 }
 
