@@ -242,6 +242,7 @@ void MysqlFetchOperationImpl::actionable() {
 
       bool more_results = false;
       if (mysql_errno() != 0 || cancel_) {
+        current_resp_attrs_ = readResponseAttributes();
         setActiveFetchAction(FetchAction::CompleteOperation);
       } else {
         current_last_insert_id_ = mysql_conn->getLastInsertId();
@@ -408,7 +409,7 @@ void MysqlFetchOperationImpl::specializedCompleteOperation() {
       no_index_used_,
       use_checksum_ || connection.getConnectionOptions().getUseChecksum(),
       getAttributes(),
-      readResponseAttributes(),
+      std::move(current_resp_attrs_),
       getMaxThreadBlockTime(),
       getTotalThreadBlockTime(),
       was_slow_,
