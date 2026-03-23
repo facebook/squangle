@@ -148,6 +148,12 @@ class MysqlConnection : public InternalConnection {
       const MysqlCertValidatorCallback& cb,
       void* context);
 
+  // Clear any previously registered cert validator callback and its context
+  // pointer from the MYSQL* handle.  Must be called before the context object
+  // is destroyed to prevent a dangling-pointer dereference if libmysql later
+  // triggers an SSL renegotiation or auto-reconnect.
+  void clearCertValidatorCallback();
+
   bool storeSession(SSLOptionsProviderBase& provider) {
     return provider.storeMysqlSSLSession(mysql_);
   }

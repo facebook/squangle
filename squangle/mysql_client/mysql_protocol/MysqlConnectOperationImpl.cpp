@@ -298,6 +298,16 @@ void MysqlConnectOperationImpl::specializedCompleteOperation() {
   // Pass the callbacks to the Connection now that we are done with them
   conn().setCallbacks(std::move(callbacks_));
 
+  // Clear the cert validator callback from the MYSQL* handle before this
+  // ConnectOperation is destroyed.  The callback was registered with a raw
+  // pointer to this operation as context (&getOp()), which becomes dangling
+  // once the operation is freed.  If the MYSQL* handle later triggers an
+  // SSL renegotiation or auto-reconnect, libmysql would invoke the callback
+  // with the stale pointer, causing a use-after-free crash.
+  if (conn_options_.getCertValidationCallback() && conn().ok()) {
+    getMysqlConnection()->clearCertValidatorCallback();
+  }
+
   // Operations that don't directly initiate a new TLS conneciton
   // shouldn't update the TLS session because it can propagate the
   // session object from a connection created usisn one client cert

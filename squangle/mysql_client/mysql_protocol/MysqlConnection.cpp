@@ -354,6 +354,24 @@ void MysqlConnection::setCertValidatorCallback(
   DCHECK_EQ(ret, 0); // should always succeed
 }
 
+void MysqlConnection::clearCertValidatorCallback() {
+  if (mysql_ == nullptr) {
+    return;
+  }
+
+  MysqlCertValidatorCallback nullCb = nullptr;
+  void* nullCtx = nullptr;
+
+  auto ret = mysql_options(mysql_, MYSQL_OPT_TLS_CERT_CALLBACK, &nullCb);
+  VLOG(4) << logMysqlOptions("MYSQL_OPT_TLS_CERT_CALLBACK", nullptr, ret);
+  DCHECK_EQ(ret, 0);
+
+  ret = mysql_options(mysql_, MYSQL_OPT_TLS_CERT_CALLBACK_CONTEXT, &nullCtx);
+  VLOG(4) << logMysqlOptions(
+      "MYSQL_OPT_TLS_CERT_CALLBACK_CONTEXT", nullptr, ret);
+  DCHECK_EQ(ret, 0);
+}
+
 void MysqlConnection::setConnectTimeout(Millis timeout) const {
   CHECK_THROW(mysql_ != nullptr, db::InvalidConnectionException);
 
