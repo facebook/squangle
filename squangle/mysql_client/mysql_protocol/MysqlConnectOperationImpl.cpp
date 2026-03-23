@@ -192,6 +192,9 @@ void MysqlConnectOperationImpl::actionable() {
 }
 
 bool MysqlConnectOperationImpl::isDoneWithTcpHandShake() {
+  if (!conn().ok()) {
+    return true;
+  }
   auto mysql_conn = getMysqlConnection();
   return mysql_conn->isDoneWithTcpHandShake();
 }
@@ -211,7 +214,7 @@ void MysqlConnectOperationImpl::timeoutHandler(
     bool isTcpTimeout,
     bool isPoolConnection) {
   std::optional<std::string> location;
-  if (!isPoolConnection) {
+  if (!isPoolConnection && conn().ok()) {
     location =
         fmt::format("at stage {}", getMysqlConnection()->getConnectStageName());
   }
