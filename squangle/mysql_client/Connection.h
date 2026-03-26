@@ -27,6 +27,7 @@ namespace facebook::common::mysql_client {
 
 class ChangeUserOperation;
 class ResetOperation;
+class MultiQueryStreamHandler;
 
 using ConnectionDyingCallback =
     std::function<void(std::unique_ptr<ConnectionHolder>)>;
@@ -144,7 +145,6 @@ class Connection {
         std::move(conn), std::move(queries), nullptr, std::move(options));
   }
 
-  // Experimental
   [[nodiscard]] virtual std::shared_ptr<MultiQueryStreamOperation>
   createOperation(
       std::unique_ptr<OperationBase::ConnectionProxy> proxy,
@@ -191,12 +191,16 @@ class Connection {
       std::unique_ptr<QueryGenerator>&& query_generator,
       Args&&... args);
 
-  // EXPERIMENTAL
-
-  // StreamResultHandler
-  [[nodiscard]] static MultiQueryStreamHandler streamMultiQuery(
+  [[nodiscard]] static std::unique_ptr<MultiQueryStreamHandler>
+  streamMultiQuery(
       std::unique_ptr<Connection> connection,
-      std::vector<Query>&& queries,
+      std::vector<Query> queries,
+      const AttributeMap& attributes = AttributeMap());
+
+  [[nodiscard]] static std::unique_ptr<MultiQueryStreamHandler>
+  streamMultiQuery(
+      std::unique_ptr<Connection> connection,
+      Query query,
       const AttributeMap& attributes = AttributeMap());
 
   // Called in the libevent thread to create the MYSQL* client.
@@ -490,6 +494,7 @@ class Connection {
   friend class FetchOperationImpl;
   friend class QueryOperationImpl;
   friend class MultiQueryOperationImpl;
+  friend class MultiQueryStreamHandler;
   friend class MultiQueryStreamOperation;
   friend class SpecialOperationImpl;
   friend class ResetOperation;

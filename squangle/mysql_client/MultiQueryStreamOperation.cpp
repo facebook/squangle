@@ -29,11 +29,7 @@ MultiQueryStreamOperation::MultiQueryStreamOperation(
     : FetchOperation(std::move(opImpl), std::move(queries)) {}
 
 void MultiQueryStreamOperation::invokeCallback(StreamState reason) {
-  // Construct a CallbackVistor object and pass to apply_vistor. It will
-  // call the appropriate overaload of 'operator()' depending on the type
-  // of callback stored in stream_callback_ i.e. either MultiQueryStreamHandler
-  // or MultiQueryStreamOperation::Callback.
-  std::visit(CallbackVisitor(*this, reason), stream_callback_);
+  stream_callback_(*this, reason);
 }
 
 void MultiQueryStreamOperation::notifyInitQuery() {

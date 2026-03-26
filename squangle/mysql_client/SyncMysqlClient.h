@@ -63,6 +63,7 @@ class SyncMysqlClient : public MysqlClientBase {
   // Private methods, primarily used by Operations and its subclasses.
   template <typename Client>
   friend class ConnectionPool;
+  friend class SyncConnection;
 
   std::unique_ptr<ConnectOperationImpl> createConnectOperationImpl(
       MysqlClientBase* client,
@@ -74,6 +75,14 @@ class SyncMysqlClient : public MysqlClientBase {
 
   std::unique_ptr<SpecialOperationImpl> createSpecialOperationImpl(
       std::unique_ptr<OperationBase::ConnectionProxy> conn) const override;
+
+  /***************************************************************************
+   * Special code for handling MultiQueryStreamedHandler
+   ***************************************************************************/
+
+  bool useDirectStreamMode() const override {
+    return true;
+  }
 };
 
 // SyncConnection is a specialization of Connection to handle inline loops.

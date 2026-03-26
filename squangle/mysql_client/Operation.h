@@ -55,6 +55,7 @@ class ConnectOperation;
 template <typename Client>
 class ConnectionPool;
 class QueryOperation;
+class FetchOperation;
 class Operation;
 
 enum class QueryCallbackReason;
@@ -472,6 +473,7 @@ class OperationBase {
  private:
   friend class Connection;
   friend class SyncConnection;
+  friend class MultiQueryStreamHandler;
 
   // Data members; subclasses freely interact with these.
   std::atomic<OperationState> state_{OperationState::Unstarted};

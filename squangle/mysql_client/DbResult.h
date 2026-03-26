@@ -8,14 +8,13 @@
 
 #pragma once
 
+#include <folly/Exception.h>
+#include <folly/ExceptionWrapper.h>
+
 #include "squangle/base/Base.h"
 #include "squangle/base/ConnectionKey.h"
 #include "squangle/base/ExceptionUtil.h"
 #include "squangle/mysql_client/Row.h"
-
-#include <folly/Exception.h>
-#include <folly/ExceptionWrapper.h>
-#include <folly/fibers/Baton.h>
 
 namespace facebook::common::mysql_client {
 
@@ -240,7 +239,7 @@ class QueryResult {
   QueryResult(QueryResult&& other) noexcept;
 
   // Move assignment
-  QueryResult& operator=(QueryResult&& other);
+  QueryResult& operator=(QueryResult&& other) noexcept;
 
   int queryNum() const {
     return query_num_;
@@ -497,234 +496,6 @@ class QueryResult {
   OperationResult operation_result_;
 
   std::vector<RowBlock> row_blocks_;
-};
-
-class FetchOperation;
-class MultiQueryStreamOperation;
-class StreamedQueryResult;
-class MultiQueryStreamHandler;
-enum class StreamState;
-
-/// The StreamedQueryResult support move assignment and construction, but
-/// its unsafe to move assign in the middle of fetching results
-class StreamedQueryResult {
- public:
-  uint64_t numAffectedRows() {
-    checkAccessToResult();
-    return num_affected_rows_;
-  }
-  uint64_t lastInsertId() {
-    // Will throw exception if there was an error
-    checkAccessToResult();
-    return last_insert_id_;
-  }
-
-  const std::string& recvGtid() {
-    // Will throw exception if there was an error
-    checkAccessToResult();
-    return recv_gtid_;
-  }
-
-  using RespAttrs = AttributeMap;
-  const RespAttrs& responseAttributes() {
-    // Will throw exception if there was an error
-    checkAccessToResult();
-    return resp_attrs_;
-  }
-
-  unsigned int warningsCount() {
-    // Will throw exception if there was an error
-    checkAccessToResult();
-    return warnings_count_;
-  }
-
-  class Iterator;
-
-  class Iterator : public boost::iterator_facade<
-                       Iterator,
-                       const EphemeralRow,
-                       boost::forward_traversal_tag> {
-   public:
-    Iterator(StreamedQueryResult* query_res, int row_num)
-        : query_res_(query_res), row_num_(row_num) {}
-
-    void increment();
-    const EphemeralRow& dereference() const;
-
-    bool equal(const Iterator& other) const {
-      return row_num_ == other.row_num_;
-    }
-
-   private:
-    friend class StreamedQueryResult;
-
-    StreamedQueryResult* query_res_;
-    folly::Optional<EphemeralRow> current_row_;
-    int row_num_;
-  };
-
-  Iterator begin();
-
-  Iterator end();
-
-  StreamedQueryResult(MultiQueryStreamHandler* handler, size_t query_id_);
-  ~StreamedQueryResult();
-
-  StreamedQueryResult(const StreamedQueryResult&) = delete;
-  StreamedQueryResult& operator=(StreamedQueryResult const&) = delete;
-
-  // only move construction and assignment allowed
-  StreamedQueryResult(StreamedQueryResult&& other) = default;
-
-  StreamedQueryResult& operator=(StreamedQueryResult&& other) /* may throw */ {
-    if (this != &other) {
-      this->~StreamedQueryResult();
-      new (this) StreamedQueryResult(std::move(other));
-    }
-    return *this;
-  }
-
-  EphemeralRowFields* getRowFields() const;
-
-  folly::Optional<EphemeralRow> nextRow();
-
-  bool hasDataInNativeFormat() const;
-
- private:
-  friend class Iterator;
-  friend class MultiQueryStreamHandler;
-
-  void setResult(
-      int64_t affected_rows,
-      int64_t last_insert_id,
-      const std::string& recv_gtid,
-      const RespAttrs& resp_attrs,
-      unsigned int warnings_count);
-  void setException(folly::exception_wrapper ex);
-  void freeHandler();
-
-  void checkStoredException();
-  void checkAccessToResult();
-
-  struct MultiQueryStreamHandlerDeleter {
-    void operator()(void*) const {}
-  };
-  using MultiQueryStreamHandlerPtr =
-      std::unique_ptr<MultiQueryStreamHandler, MultiQueryStreamHandlerDeleter>;
-
-  MultiQueryStreamHandlerPtr stream_handler_ = nullptr;
-
-  const size_t query_idx_;
-  size_t num_rows_ = 0;
-  int64_t num_affected_rows_ = 0;
-  int64_t last_insert_id_ = 0;
-  std::string recv_gtid_;
-  RespAttrs resp_attrs_;
-  unsigned int warnings_count_ = 0;
-
-  folly::exception_wrapper exception_wrapper_;
-};
-
-class MultiQueryStreamHandler {
- public:
-  // This allows the User Thread to know what to read from `FetchOperation`.
-  // The states `InitResult`, `ReadRows`, `ReadResult` are synchronization
-  // points. So the FetchOperation is going to be paused and will require
-  // `resume` to proceed.
-  enum class State {
-    RunQuery,
-    WaitForInitResult,
-    InitResult,
-    ReadRows,
-    ReadResult,
-    OperationSucceeded,
-    OperationFailed,
-  };
-
-  static std::string toString(State state);
-
-  explicit MultiQueryStreamHandler(
-      std::shared_ptr<MultiQueryStreamOperation> op);
-
-  ~MultiQueryStreamHandler();
-
-  MultiQueryStreamHandler(const MultiQueryStreamHandler&) = delete;
-  MultiQueryStreamHandler& operator=(const MultiQueryStreamHandler&) = delete;
-
-  // NOTE: Its unsafe to move MultiQueryStreamHandler after invoking nextQuery
-  // to retrieve the first query's result. Its safe to do this only before the
-  // first invocation of nextQuery or after all queries are done.
-  MultiQueryStreamHandler(MultiQueryStreamHandler&& other) noexcept;
-  MultiQueryStreamHandler& operator=(MultiQueryStreamHandler&& other) {
-    if (this != &other) {
-      this->~MultiQueryStreamHandler();
-      new (this) MultiQueryStreamHandler(std::move(other));
-    }
-    return *this;
-  }
-
-  // Returns the next Query or nullptr if there are no more query results to be
-  // read.
-  folly::Optional<StreamedQueryResult> nextQuery();
-
-  std::unique_ptr<Connection> releaseConnection();
-
-  // This is a dangerous function.  Please use it with utmost care.  It allows
-  // someone to do something with the raw connection outside of the bounds of
-  // this class.  We added it to support a specific use-case: TAO calls
-  // escapeString will the connection is running a query.  Please do not use
-  // this for other purposes.
-  template <typename Func>
-  auto& accessConn(Func func) const {
-    return func(connection());
-  }
-
-  unsigned int mysql_errno() const;
-  const std::string& mysql_error() const;
-
-  bool hasDataInNativeFormat() const;
-
- private:
-  friend class Connection;
-  friend class StreamedQueryResult;
-  friend class FetchOperation;
-  friend class MultiQueryStreamOperation;
-
-  // This schedules the operation to be run and starts the result retreival
-  // process
-  void start();
-
-  void streamCallback(FetchOperation& op, StreamState state);
-
-  std::atomic<State> state_{State::RunQuery};
-
-  // Provider to StreamedQueryResult call
-  folly::Optional<EphemeralRow> fetchOneRow(StreamedQueryResult* result);
-
-  void fetchQueryEnd(StreamedQueryResult* result);
-
-  void resumeOperation();
-  void handleQueryEnded(StreamedQueryResult* result);
-  void handleQueryFailed(StreamedQueryResult* result);
-  void handleBadState();
-
-  // sanity checks on StreamedQueryResult
-  void checkStreamedQueryResult(StreamedQueryResult* result);
-
-  Connection& connection() const;
-
-  folly::exception_wrapper exception_wrapper_;
-
-  // Created in `NextQuery` and unique_ptr is returned to the user. The one
-  // given to the user will only get destroyed when the query ends and we
-  // clear this pointer.
-  // This is only used when `StreamQueryResult` itself calls the Handler for
-  // events.
-  StreamedQueryResult* current_result_ = nullptr;
-
-  size_t curr_query_ = 0; // the current query whose results we are fetching
-
-  std::shared_ptr<MultiQueryStreamOperation> operation_;
 };
 
 using DbMultiQueryResult = FetchResult<std::vector<QueryResult>>;

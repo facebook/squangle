@@ -178,6 +178,8 @@ class MysqlClientBase {
   friend class ConnectionHolder;
   friend class AsyncConnection;
   friend class SyncConnection;
+  friend class MultiQueryStreamHandler;
+
   virtual db::SquangleLoggingData makeSquangleLoggingData(
       std::shared_ptr<const ConnectionKey> connKey,
       const db::ConnectionContextBase* connContext) {
@@ -192,6 +194,16 @@ class MysqlClientBase {
   std::unique_ptr<db::DBCounterBase> client_stats_;
   ObserverCallback connection_cb_;
   std::unique_ptr<const MysqlExceptionBuilder> exception_builder_;
+
+  /***************************************************************************
+   * Special code for handling MultiQueryStreamedHandler
+   ***************************************************************************/
+
+  // Returns true if the streaming handler should use direct (non-pipe) mode
+  // for data delivery.  The sync client overrides this to true.
+  virtual bool useDirectStreamMode() const {
+    return false;
+  }
 };
 
 } // namespace facebook::common::mysql_client

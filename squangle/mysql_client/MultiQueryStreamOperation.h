@@ -23,8 +23,7 @@ class MultiQueryStreamOperation : public FetchOperation {
  public:
   ~MultiQueryStreamOperation() override = default;
 
-  using Callback = std::function<void(FetchOperation&, StreamState)>;
-  using StreamCallback = std::variant<MultiQueryStreamHandler*, Callback>;
+  using StreamCallback = std::function<void(FetchOperation&, StreamState)>;
 
   void notifyInitQuery() override;
   void notifyRowsReady() override;
@@ -62,32 +61,8 @@ class MultiQueryStreamOperation : public FetchOperation {
       std::unique_ptr<FetchOperationImpl> opImpl,
       std::vector<Query>&& queries);
 
-  // wrapper to construct CallbackVistor and invoke the
-  // right callback
+  // wrapper to invoke the stream callback
   void invokeCallback(StreamState state);
-
-  // Vistor to invoke the right callback depending on the type stored
-  // in the variant 'stream_callback_'
-  struct CallbackVisitor {
-    CallbackVisitor(MultiQueryStreamOperation& op, StreamState state)
-        : op_(op), state_(state) {}
-
-    void operator()(MultiQueryStreamHandler* handler) const {
-      if (handler != nullptr) {
-        handler->streamCallback(op_, state_);
-      }
-    }
-
-    void operator()(const Callback& cb) const {
-      if (cb != nullptr) {
-        cb(op_, state_);
-      }
-    }
-
-   private:
-    MultiQueryStreamOperation& op_;
-    StreamState state_;
-  };
 
   StreamCallback stream_callback_;
 };

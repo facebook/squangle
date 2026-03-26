@@ -36,7 +36,7 @@ class InitMysqlLibrary {
 namespace facebook::common::mysql_client {
 
 // mysql_library_init() and mysql_library_end() need to run on the same thread
-[[maybe_unused]] static InitMysqlLibrary unused;
+[[maybe_unused]] static const InitMysqlLibrary unused;
 
 MysqlClientBase::MysqlClientBase(
     std::unique_ptr<db::SquangleLoggerBase> db_logger,

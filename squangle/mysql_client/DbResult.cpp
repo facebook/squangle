@@ -8,19 +8,10 @@
 
 #include "squangle/mysql_client/DbResult.h"
 
-#include <ostream>
-
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/Operation.h"
 
 namespace facebook::common::mysql_client {
-
-std::ostream& operator<<(
-    std::ostream& stream,
-    MultiQueryStreamHandler::State state) {
-  stream << MultiQueryStreamHandler::toString(state);
-  return stream;
-}
 
 MysqlException::MysqlException(
     OperationResult failure_type,
@@ -84,8 +75,15 @@ QueryResult::QueryResult(int query_num)
       last_insert_id_(0),
       operation_result_(OperationResult::Unknown) {}
 
+// In the constructor below, the code does not move `row_fields_info_` over to
+// the new QueryResult.  It breaks if you change it.  When I debugged it, I see
+// that inside the callback the customer is allowed to move the result into
+// their own storage (i.e. https://fburl.com/code/1l7wvull).  Apparently we are
+// reusing the QueryResult internally and if we row fields info over the reused
+// one will no longer have a copy of the shared_ptr.  This is not an ideal
+// situation, but for now, just leave it.
 QueryResult::QueryResult(QueryResult&& other) noexcept
-    : row_fields_info_(other.row_fields_info_),
+    : row_fields_info_(other.row_fields_info_), // don't use std::move()
       query_num_(other.query_num_),
       partial_(other.partial_),
       was_slow_(other.was_slow_),
@@ -106,7 +104,7 @@ QueryResult::QueryResult(QueryResult&& other) noexcept
   other.rows_matched_ = std::nullopt;
 }
 
-QueryResult& QueryResult::operator=(QueryResult&& other) {
+QueryResult& QueryResult::operator=(QueryResult&& other) noexcept {
   if (this != &other) {
     row_fields_info_ = other.row_fields_info_;
     query_num_ = other.query_num_;
@@ -143,320 +141,6 @@ bool QueryResult::succeeded() const {
 
 void QueryResult::setOperationResult(OperationResult op_result) {
   operation_result_ = op_result;
-}
-
-StreamedQueryResult::StreamedQueryResult(
-    MultiQueryStreamHandler* stream_handler,
-    size_t query_idx)
-    : stream_handler_(stream_handler), query_idx_(query_idx) {}
-
-StreamedQueryResult::~StreamedQueryResult() {
-  // In case of premature deletion.
-  checkAccessToResult();
-}
-
-StreamedQueryResult::Iterator StreamedQueryResult::begin() {
-  StreamedQueryResult::Iterator begin_it(this, 0);
-  begin_it.increment();
-  return begin_it;
-}
-
-StreamedQueryResult::Iterator StreamedQueryResult::end() {
-  return StreamedQueryResult::Iterator(this, -1);
-}
-
-void StreamedQueryResult::Iterator::increment() {
-  auto row = query_res_->nextRow();
-  if (!row) {
-    row_num_ = -1;
-    return;
-  }
-  ++row_num_;
-  current_row_ = std::move(row);
-}
-
-const EphemeralRow& StreamedQueryResult::Iterator::dereference() const {
-  return *current_row_;
-}
-
-folly::Optional<EphemeralRow> StreamedQueryResult::nextRow() {
-  checkStoredException();
-  // Blocks when the stream is over and we need to handle IO
-  auto current_row = stream_handler_->fetchOneRow(this);
-  if (!current_row) {
-    checkStoredException();
-  } else {
-    ++num_rows_;
-  }
-  return current_row;
-}
-
-bool StreamedQueryResult::hasDataInNativeFormat() const {
-  return stream_handler_ && stream_handler_->hasDataInNativeFormat();
-}
-
-void StreamedQueryResult::checkStoredException() {
-  if (exception_wrapper_) {
-    SCOPE_EXIT {
-      exception_wrapper_ = {};
-    };
-    exception_wrapper_.throw_exception();
-  }
-}
-
-void StreamedQueryResult::checkAccessToResult() {
-  checkStoredException();
-  if (stream_handler_) {
-    stream_handler_->fetchQueryEnd(this);
-  }
-}
-
-void StreamedQueryResult::setResult(
-    int64_t affected_rows,
-    int64_t last_insert_id,
-    const std::string& recv_gtid,
-    const RespAttrs& resp_attrs,
-    unsigned int warnings_count) {
-  num_affected_rows_ = affected_rows;
-  last_insert_id_ = last_insert_id;
-  recv_gtid_ = recv_gtid;
-  resp_attrs_ = resp_attrs;
-  warnings_count_ = warnings_count;
-}
-
-void StreamedQueryResult::setException(folly::exception_wrapper ex) {
-  exception_wrapper_ = std::move(ex);
-}
-
-void StreamedQueryResult::freeHandler() {
-  stream_handler_.reset();
-}
-
-MultiQueryStreamHandler::MultiQueryStreamHandler(
-    std::shared_ptr<MultiQueryStreamOperation> op)
-    : operation_(std::move(op)) {}
-
-folly::Optional<StreamedQueryResult> MultiQueryStreamHandler::nextQuery() {
-  if (state_ == State::RunQuery) {
-    start();
-  }
-
-  // Runs in User thread
-  connection().wait();
-  DCHECK(operation_->isPaused() || operation_->done());
-
-  folly::Optional<StreamedQueryResult> res;
-  // Accepted states: InitResult, OperationSucceeded or OperationFailed
-  if (state_ == State::InitResult) {
-    res.assign(StreamedQueryResult(this, ++curr_query_));
-    resumeOperation();
-  } else if (state_ == State::OperationFailed) {
-    handleQueryFailed(nullptr);
-  } else if (state_ != State::OperationSucceeded) {
-    LOG(DFATAL) << "Bad state transition. Perhaps reading next result without"
-                << " deleting or consuming current stream? Current state is "
-                << toString(state_) << ".";
-    handleBadState();
-  }
-  return res;
-}
-
-std::unique_ptr<Connection> MultiQueryStreamHandler::releaseConnection() {
-  // Runs in User thread
-  connection().wait();
-  if (state_ == State::OperationSucceeded || state_ == State::OperationFailed) {
-    return operation_->releaseConnection();
-  }
-
-  exception_wrapper_ =
-      folly::make_exception_wrapper<db::OperationStateException>(
-          "Trying to release connection without consuming stream");
-  LOG(DFATAL) << "Releasing the Connection without reading result. Read stream"
-              << " content or delete stream result. Current state "
-              << toString(state_) << ".";
-  handleBadState();
-
-  // Should throw above.
-  return nullptr;
-}
-
-// Information about why this operation failed.
-unsigned int MultiQueryStreamHandler::mysql_errno() const {
-  return operation_->mysql_errno();
-}
-
-const std::string& MultiQueryStreamHandler::mysql_error() const {
-  return operation_->mysql_error();
-}
-
-bool MultiQueryStreamHandler::hasDataInNativeFormat() const {
-  return operation_->hasDataInNativeFormat();
-}
-
-void MultiQueryStreamHandler::streamCallback(
-    FetchOperation& op,
-    StreamState op_state) {
-  // Runs in IO Thread
-  if (op_state == StreamState::InitQuery) {
-    op.pauseForConsumer();
-    state_ = State::InitResult;
-  } else if (op_state == StreamState::RowsReady) {
-    op.pauseForConsumer();
-    state_ = State::ReadRows;
-  } else if (op_state == StreamState::QueryEnded) {
-    op.pauseForConsumer();
-    state_ = State::ReadResult;
-  } else if (op_state == StreamState::Success) {
-    state_ = State::OperationSucceeded;
-  } else {
-    exception_wrapper_ = folly::make_exception_wrapper<QueryException>(
-        op.numCurrentQuery(),
-        op.result(),
-        op.mysql_errno(),
-        op.mysql_error(),
-        op.connection()->getKey(),
-        op.opElapsed());
-    state_ = State::OperationFailed;
-  }
-  op.connection()->notify();
-}
-
-folly::Optional<EphemeralRow> MultiQueryStreamHandler::fetchOneRow(
-    StreamedQueryResult* result) {
-  checkStreamedQueryResult(result);
-  connection().wait();
-  // Accepted states: ReadRows, ReadResult, OperationFailed
-  if (state_ == State::ReadRows) {
-    if (!operation_->rowStream()->hasNext()) {
-      resumeOperation();
-      // Recursion to get `wait` and double check the stream.
-      return fetchOneRow(result);
-    }
-    return folly::Optional<EphemeralRow>(operation_->rowStream()->consumeRow());
-  }
-
-  if (state_ == State::ReadResult) {
-    handleQueryEnded(result);
-  } else if (state_ == State::OperationFailed) {
-    handleQueryFailed(result);
-  } else {
-    LOG(DFATAL) << "Bad state transition. Only ReadRows, ReadResult and "
-                << "OperationFailed are allowed. Received " << toString(state_)
-                << ".";
-    handleBadState();
-  }
-  return folly::Optional<EphemeralRow>();
-}
-
-void MultiQueryStreamHandler::fetchQueryEnd(StreamedQueryResult* result) {
-  checkStreamedQueryResult(result);
-  connection().wait();
-  // Accepted states: ReadResult, OperationFailed
-  if (state_ == State::ReadResult) {
-    handleQueryEnded(result);
-  } else if (state_ == State::OperationFailed) {
-    handleQueryFailed(result);
-  } else if (state_ != State::ReadRows || fetchOneRow(result)) {
-    LOG(DFATAL) << "Expected end of query, but received " << toString(state_)
-                << ".";
-    handleBadState();
-  }
-}
-
-void MultiQueryStreamHandler::resumeOperation() {
-  connection().resetActionable();
-  operation_->resume();
-}
-
-void MultiQueryStreamHandler::handleQueryEnded(StreamedQueryResult* result) {
-  result->setResult(
-      operation_->currentAffectedRows(),
-      operation_->currentLastInsertId(),
-      operation_->currentRecvGtid(),
-      operation_->currentRespAttrs(),
-      operation_->currentWarningsCount());
-  result->freeHandler();
-  resumeOperation();
-}
-
-void MultiQueryStreamHandler::handleQueryFailed(StreamedQueryResult* result) {
-  DCHECK(exception_wrapper_);
-  if (result) {
-    result->setException(exception_wrapper_);
-    result->freeHandler();
-  } else {
-    exception_wrapper_.throw_exception();
-  }
-}
-
-void MultiQueryStreamHandler::handleBadState() {
-  operation_->cancel();
-  resumeOperation();
-}
-
-void MultiQueryStreamHandler::start() {
-  CHECK_EQ(state_, State::RunQuery);
-  CHECK(operation_);
-  operation_->setCallback(this);
-  state_ = State::WaitForInitResult;
-  operation_->run();
-}
-
-void MultiQueryStreamHandler::checkStreamedQueryResult(
-    StreamedQueryResult* result) {
-  CHECK_EQ(result->stream_handler_.get(), this);
-  CHECK_EQ(result->query_idx_, curr_query_);
-}
-
-std::string MultiQueryStreamHandler::toString(State state) {
-  switch (state) {
-    case State::RunQuery:
-      return "RunQuery";
-    case State::WaitForInitResult:
-      return "WaitForInitResult";
-    case State::InitResult:
-      return "InitResult";
-    case State::ReadRows:
-      return "ReadRows";
-    case State::ReadResult:
-      return "ReadResult";
-    case State::OperationSucceeded:
-      return "OperationSucceeded";
-    case State::OperationFailed:
-      return "OperationFailed";
-    default:
-      LOG(DFATAL) << "Illegal state" << (int64_t)state;
-  }
-  return "Unknown";
-}
-
-MultiQueryStreamHandler::MultiQueryStreamHandler(
-    MultiQueryStreamHandler&& other) noexcept {
-  // Its OK to move another object only if we haven't
-  // yet invoked nextQuery on it or if the operation
-  // is done()
-  CHECK(other.state_ == State::RunQuery || other.operation_->done());
-  operation_ = std::move(other.operation_);
-  other.operation_ = nullptr;
-}
-
-MultiQueryStreamHandler::~MultiQueryStreamHandler() {
-  if (operation_) {
-    CHECK(
-        state_ == State::OperationSucceeded ||
-        state_ == State::OperationFailed);
-    CHECK(operation_->done());
-  }
-}
-
-Connection& MultiQueryStreamHandler::connection() const {
-  return *operation_->connection();
-}
-
-EphemeralRowFields* StreamedQueryResult::getRowFields() const {
-  CHECK(stream_handler_ != nullptr)
-      << "Trying to get the row fileds after " << "query end";
-  return stream_handler_->operation_->rowStream()->getEphemeralRowFields();
 }
 
 } // namespace facebook::common::mysql_client

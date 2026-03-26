@@ -35,7 +35,14 @@ class RowStream {
   bool hasNext();
 
   EphemeralRowFields* getEphemeralRowFields() noexcept {
+    if (!row_fields_) {
+      return nullptr;
+    }
     return &*row_fields_;
+  }
+
+  std::shared_ptr<EphemeralRowFields> getEphemeralRowFieldsShared() {
+    return row_fields_;
   }
 
   const folly::Optional<EphemeralRow>& getCurrentRow() noexcept {

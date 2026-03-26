@@ -8,6 +8,7 @@
 
 #include "squangle/mysql_client/Connection.h"
 #include "squangle/mysql_client/ChangeUserOperation.h"
+#include "squangle/mysql_client/MultiQueryStreamHandler.h"
 #include "squangle/mysql_client/ResetOperation.h"
 #include "squangle/mysql_client/SemiFutureAdapter.h"
 
@@ -571,13 +572,11 @@ DbMultiQueryResult Connection::multiQueryWithGenerator(
   return Connection::multiQueryWithGenerators(std::move(query_generators));
 }
 
-MultiQueryStreamHandler Connection::streamMultiQuery(
+std::unique_ptr<MultiQueryStreamHandler> Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
-    std::vector<Query>&& queries,
+    std::vector<Query> queries,
     const AttributeMap& attributes) {
-  // MultiQueryStreamHandler needs to be alive while the operation is running.
-  // To accomplish that, ~MultiQueryStreamHandler waits until
-  // `postOperationEnded` is called.
+  auto& client = conn->client();
   auto op = beginAnyQuery<MultiQueryStreamOperation>(
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
       nullptr,
@@ -585,7 +584,16 @@ MultiQueryStreamHandler Connection::streamMultiQuery(
   if (attributes.size() > 0) {
     op->setAttributes(attributes);
   }
-  return MultiQueryStreamHandler(std::move(op));
+  return MultiQueryStreamHandler::create(client, std::move(op));
+}
+
+/*static*/ std::unique_ptr<MultiQueryStreamHandler>
+Connection::streamMultiQuery(
+    std::unique_ptr<Connection> connection,
+    Query query,
+    const AttributeMap& attributes) {
+  return streamMultiQuery(
+      std::move(connection), std::vector<Query>{std::move(query)}, attributes);
 }
 
 void Connection::mergePersistentQueryAttributes(QueryAttributes& attrs) const {
