@@ -118,8 +118,9 @@ class DBCounterBase {
   virtual void incrSucceededQueries(
       const db::ConnectionContextBase* context) = 0;
 
-  // reused ssl connections
-  virtual void incrReusedSSLSessions() = 0;
+  // SSL session reuse tracking, split by TLS version (e.g. "TLSv1.2")
+  virtual void incrReusedSSLSessions(std::string_view tlsVersion) = 0;
+  virtual void incrSSLSessionNotReused(std::string_view tlsVersion) = 0;
 };
 
 // Holds the stats for a client, thread safe and allows some good stats in
@@ -193,9 +194,11 @@ class SimpleDbCounter : public DBCounterBase {
     return reused_ssl_sessions_.load(std::memory_order_relaxed);
   }
 
-  void incrReusedSSLSessions() override {
+  void incrReusedSSLSessions(std::string_view /* tlsVersion */) override {
     reused_ssl_sessions_.fetch_add(1, std::memory_order_relaxed);
   }
+
+  void incrSSLSessionNotReused(std::string_view /* tlsVersion */) override {}
 
   // For logging porpuses
   void printStats();

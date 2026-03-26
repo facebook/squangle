@@ -285,11 +285,14 @@ void MysqlConnectOperationImpl::maybeStoreSSLSession() {
 
   // if there is an ssl provider set
   conn_options_.withPossibleSSLOptionsProvider([&](auto& provider) {
+    auto tlsVersion = getMysqlConnection()->getTlsVersion();
     if (getMysqlConnection()->storeSession(provider)) {
       if (connection_context_) {
         connection_context_->sslSessionReused = true;
       }
-      client_.stats()->incrReusedSSLSessions();
+      client_.stats()->incrReusedSSLSessions(tlsVersion);
+    } else {
+      client_.stats()->incrSSLSessionNotReused(tlsVersion);
     }
   });
 }
