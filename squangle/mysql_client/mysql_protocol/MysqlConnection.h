@@ -9,6 +9,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <folly/CppAttributes.h>
 #include "mysql/server/include/mysql.h" // @manual=//mysql/server/include:mysql_namespaced
 
 #include "squangle/base/Base.h"
@@ -83,6 +84,10 @@ class MysqlConnection : public InternalConnection {
   [[nodiscard]] bool sslSessionReused() const override;
 
   [[nodiscard]] std::string getTlsVersion() const;
+
+  // Returns the raw SSL* handle (as void*), or nullptr if not an SSL
+  // connection. Useful for testing TLS-level operations like KeyUpdate.
+  [[nodiscard]] void* FOLLY_NULLABLE getSSLHandle() const;
 
   [[nodiscard]] unsigned int warningCount() const override;
 

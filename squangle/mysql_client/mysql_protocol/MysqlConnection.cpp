@@ -6,10 +6,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/CppAttributes.h>
 #include <folly/Exception.h>
 #include <memory>
 #include <string>
 #include "mysql/server/include/mysql_async.h" // @manual=//mysql/server/include:mysql_async_namespaced
+#include "mysql/server/include/violite.h" // @manual=//mysql/server/include:violite_namespaced
 
 #include "squangle/base/ExceptionUtil.h"
 #include "squangle/mysql_client/ConnectionOptions.h"
@@ -93,6 +95,14 @@ std::string MysqlConnection::getTlsVersion() const {
   }
 
   return "";
+}
+
+void* FOLLY_NULLABLE MysqlConnection::getSSLHandle() const {
+  CHECK_THROW(mysql_ != nullptr, db::InvalidConnectionException);
+  if (mysql_->net.vio) {
+    return mysql_->net.vio->ssl_arg;
+  }
+  return nullptr;
 }
 
 unsigned int MysqlConnection::warningCount() const {
