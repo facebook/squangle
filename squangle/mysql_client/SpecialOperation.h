@@ -20,8 +20,14 @@ using SpecialOperationCallback =
 
 class SpecialOperationImpl : virtual public OperationBase {
  public:
-  // SpecialOperationImpl() : OperationBase(nullptr) {}
+  explicit SpecialOperationImpl(db::OperationType operation_type)
+      : operation_type_(operation_type) {}
   virtual ~SpecialOperationImpl() override = default;
+
+  // Returns the operation type (Reset, ChangeUser, etc.)
+  db::OperationType getOperationType() const override {
+    return operation_type_;
+  }
 
   void setCallback(SpecialOperationCallback callback) {
     callback_ = std::move(callback);
@@ -33,6 +39,9 @@ class SpecialOperationImpl : virtual public OperationBase {
   [[nodiscard]] SpecialOperation& getOp() const;
 
   SpecialOperationCallback callback_{nullptr};
+
+ private:
+  db::OperationType operation_type_;
 };
 
 // SpecialOperation means operations like COM_RESET_CONNECTION,
@@ -47,7 +56,7 @@ class SpecialOperation : public Operation {
   explicit SpecialOperation(std::unique_ptr<SpecialOperationImpl> impl)
       : impl_(std::move(impl)) {
     if (!impl_) {
-      throw std::runtime_error("ConnectOperationImpl is null");
+      throw std::runtime_error("SpecialOperationImpl is null");
     }
 
     impl_->setOperation(*this);

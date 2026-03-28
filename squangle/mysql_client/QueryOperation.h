@@ -23,6 +23,8 @@ using QueryCallback =
 // Constructed via Connection::beginQuery.
 class QueryOperation : public FetchOperation {
  public:
+  static constexpr db::OperationType kOperationType = db::OperationType::Query;
+
   ~QueryOperation() override = default;
 
   void setCallback(QueryCallback cb) {

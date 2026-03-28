@@ -55,8 +55,9 @@ Connection::~Connection() {
 std::shared_ptr<ResetOperation> Connection::resetConn(
     std::unique_ptr<Connection> conn) {
   const auto& client = conn->mysql_client_;
-  auto resetOperationPtr = std::make_shared<ResetOperation>(
-      client.createSpecialOperationImpl(std::move(conn)));
+  auto resetOperationPtr =
+      std::make_shared<ResetOperation>(client.createSpecialOperationImpl(
+          std::move(conn), db::OperationType::Reset));
   Duration timeout =
       resetOperationPtr->connection()->conn_options_.getQueryTimeout();
   if (timeout.count() > 0) {
@@ -70,7 +71,9 @@ std::shared_ptr<ChangeUserOperation> Connection::changeUser(
     std::shared_ptr<const ConnectionKey> key) {
   const auto& client = conn->mysql_client_;
   auto changeUserOperationPtr = std::make_shared<ChangeUserOperation>(
-      client.createSpecialOperationImpl(std::move(conn)), std::move(key));
+      client.createSpecialOperationImpl(
+          std::move(conn), db::OperationType::ChangeUser),
+      std::move(key));
   Duration timeout =
       changeUserOperationPtr->connection()->conn_options_.getTimeout();
   if (timeout.count() > 0) {
@@ -141,7 +144,9 @@ std::shared_ptr<QueryType> Connection::beginAnyQuery(
   const auto& client = conn_proxy->get()->mysql_client_;
   auto ret = std::shared_ptr<QueryType>(new QueryType(
       client.createFetchOperationImpl(
-          std::move(conn_proxy), std::move(logging_funcs)),
+          std::move(conn_proxy),
+          QueryType::kOperationType,
+          std::move(logging_funcs)),
       std::forward<QueryArg>(query)));
   auto& conn = ret->conn();
   Duration timeout = conn.conn_options_.getQueryTimeout();

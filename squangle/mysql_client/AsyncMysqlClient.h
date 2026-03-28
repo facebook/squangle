@@ -275,10 +275,12 @@ class AsyncMysqlClient : public MysqlClientBase {
 
   std::unique_ptr<FetchOperationImpl> createFetchOperationImpl(
       std::unique_ptr<OperationBase::ConnectionProxy> conn,
+      db::OperationType operation_type,
       LoggingFuncsPtr logging_funcs) const override;
 
   std::unique_ptr<SpecialOperationImpl> createSpecialOperationImpl(
-      std::unique_ptr<OperationBase::ConnectionProxy> conn) const override;
+      std::unique_ptr<OperationBase::ConnectionProxy> conn,
+      db::OperationType operation_type) const override;
 
   bool isInCorrectThread(bool expectMysqlThread) const override {
     auto eb = getEventBase();

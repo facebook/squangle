@@ -21,6 +21,9 @@ class SyncConnection;
 // This is an experimental class. Please don't use directly.
 class MultiQueryStreamOperation : public FetchOperation {
  public:
+  static constexpr db::OperationType kOperationType =
+      db::OperationType::MultiQueryStream;
+
   ~MultiQueryStreamOperation() override = default;
 
   using StreamCallback = std::function<void(FetchOperation&, StreamState)>;

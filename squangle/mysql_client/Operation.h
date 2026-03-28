@@ -152,6 +152,8 @@ class OperationBase {
   explicit OperationBase(const Operation&) = delete;
   OperationBase& operator=(const Operation&) = delete;
 
+  virtual db::OperationType getOperationType() const = 0;
+
   void run();
 
   // Try to cancel a pending operation.  This is inherently racey with
@@ -170,8 +172,19 @@ class OperationBase {
   }
 
   // Information about why this operation failed.
-  unsigned int mysql_errno() const;
-  const std::string& mysql_error() const;
+  unsigned int mysql_errno() const {
+    return mysql_errno_;
+  }
+  const std::string& mysql_error() const {
+    return mysql_error_;
+  }
+
+  // Save any mysql errors that occurred (since we may hand off the
+  // Connection before the user wants this information).
+  void snapshotMysqlErrors(unsigned int errnum, std::string error);
+
+  // Same as above, but specify the error code.
+  void setAsyncClientError(unsigned int mysql_errno, folly::StringPiece msg);
 
   OperationResult result() const {
     return result_;
@@ -426,6 +439,10 @@ class OperationBase {
 
   Operation* op_;
 
+  // Errors that may have occurred.
+  unsigned int mysql_errno_{0};
+  std::string mysql_error_;
+
   virtual void specializedRun() = 0;
   virtual void protocolCompleteOperation(OperationResult result) = 0;
 
@@ -533,10 +550,10 @@ class Operation : public std::enable_shared_from_this<Operation> {
   Operation& setAttribute(const std::string& key, const std::string& value);
 
   unsigned int mysql_errno() const {
-    return mysql_errno_;
+    return impl()->mysql_errno();
   }
   const std::string& mysql_error() const {
-    return mysql_error_;
+    return impl()->mysql_error();
   }
 
   Duration elapsed() const {
@@ -656,7 +673,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   static folly::StringPiece toString(StreamState state);
 
  protected:
-  Operation() : mysql_errno_(0) {}
+  Operation() = default;
 
   virtual OperationBase* impl() = 0;
   virtual const OperationBase* impl() const = 0;
@@ -680,10 +697,6 @@ class Operation : public std::enable_shared_from_this<Operation> {
   }
 
  private:
-  // Errors that may have occurred.
-  unsigned int mysql_errno_;
-  std::string mysql_error_;
-
   friend class SyncConnectionPool;
 };
 

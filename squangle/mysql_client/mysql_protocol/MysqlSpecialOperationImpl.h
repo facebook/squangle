@@ -16,8 +16,10 @@ namespace facebook::common::mysql_client::mysql_protocol {
 class MysqlSpecialOperationImpl : public MysqlOperationImpl,
                                   public SpecialOperationImpl {
  public:
-  explicit MysqlSpecialOperationImpl(std::unique_ptr<ConnectionProxy> conn)
-      : OperationBase(std::move(conn)) {}
+  explicit MysqlSpecialOperationImpl(
+      std::unique_ptr<ConnectionProxy> conn,
+      db::OperationType operation_type)
+      : OperationBase(std::move(conn)), SpecialOperationImpl(operation_type) {}
 
  protected:
   void actionable() override;

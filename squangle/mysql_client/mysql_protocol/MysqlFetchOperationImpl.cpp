@@ -48,14 +48,14 @@ void MysqlFetchOperationImpl::specializedRunImpl() {
 
     auto* mysql_conn = getMysqlConnection();
     if (auto ret = mysql_conn->setQueryAttributes(getAttributes())) {
-      getOp().setAsyncClientError(ret, "Failed to set query attributes");
+      setAsyncClientError(ret, "Failed to set query attributes");
       completeOperation(OperationResult::Failed);
       return;
     }
 
     if ((use_checksum_ || conn().getConnectionOptions().getUseChecksum())) {
       if (auto ret = mysql_conn->setQueryAttribute(kQueryChecksumKey, "ON")) {
-        getOp().setAsyncClientError(ret, "Failed to set checksum = ON");
+        setAsyncClientError(ret, "Failed to set checksum = ON");
         completeOperation(OperationResult::Failed);
         return;
       }
@@ -63,7 +63,7 @@ void MysqlFetchOperationImpl::specializedRunImpl() {
 
     actionable();
   } catch (std::invalid_argument& e) {
-    getOp().setAsyncClientError(
+    setAsyncClientError(
         static_cast<uint16_t>(SquangleErrno::SQ_INVALID_API_USAGE),
         std::string("Unable to parse Query: ") + e.what());
     completeOperation(OperationResult::Failed);
@@ -237,7 +237,7 @@ void MysqlFetchOperationImpl::actionable() {
     //                       no more results to read.
     //  - WaitForConsumer: In case `pause` is called during notification.
     if (getActiveFetchAction() == FetchAction::CompleteQuery) {
-      getOp().snapshotMysqlErrors(
+      snapshotMysqlErrors(
           mysql_conn->getErrno(), mysql_conn->getErrorMessage());
 
       bool more_results = false;
@@ -386,7 +386,7 @@ void MysqlFetchOperationImpl::specializedTimeoutTriggered() {
 
   auto errorStr = generateTimeoutError(std::move(rows), delta);
 
-  getOp().setAsyncClientError(CR_NET_READ_INTERRUPTED, errorStr);
+  setAsyncClientError(CR_NET_READ_INTERRUPTED, errorStr);
   completeOperation(OperationResult::TimedOut);
 }
 

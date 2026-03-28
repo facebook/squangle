@@ -156,8 +156,7 @@ void MysqlConnectOperationImpl::actionable() {
   auto status = mysql_conn->tryConnect(conn_options_, conn_key_, flags_);
 
   if (status == ERROR) {
-    getOp().snapshotMysqlErrors(
-        mysql_conn->getErrno(), mysql_conn->getErrorMessage());
+    snapshotMysqlErrors(mysql_conn->getErrno(), mysql_conn->getErrorMessage());
     guard.dismiss();
     attemptFailed(OperationResult::Failed);
   } else {
@@ -172,7 +171,7 @@ void MysqlConnectOperationImpl::actionable() {
       LOG(ERROR) << "Unexpected invalid socket descriptor on completed, "
                  << (status == DONE ? "errorless" : "pending")
                  << " connect.  fd=" << fd;
-      getOp().setAsyncClientError(
+      setAsyncClientError(
           static_cast<uint16_t>(SquangleErrno::SQ_INITIALIZATION_FAILED),
           "mysql_get_socket_descriptor returned an invalid descriptor");
       guard.dismiss();
@@ -229,7 +228,7 @@ void MysqlConnectOperationImpl::timeoutHandler(
       std::move(location),
       fmt::format("(TcpTimeout:{})", (isTcpTimeout ? 1 : 0)));
 
-  getOp().setAsyncClientError(CR_SERVER_LOST, errorStr);
+  setAsyncClientError(CR_SERVER_LOST, errorStr);
   attemptFailed(OperationResult::TimedOut);
 }
 
@@ -246,7 +245,7 @@ void MysqlConnectOperationImpl::logConnectCompleted(OperationResult result) {
     });
     client_.logConnectionSuccess(
         db::CommonLoggingData(
-            getOp().getOperationType(),
+            getOperationType(),
             elapsed(),
             getTimeout(),
             conn().serverInfo(),
@@ -263,7 +262,7 @@ void MysqlConnectOperationImpl::logConnectCompleted(OperationResult result) {
     }
     client_.logConnectionFailure(
         db::CommonLoggingData(
-            getOp().getOperationType(),
+            getOperationType(),
             elapsed(),
             getTimeout(),
             std::nullopt,
@@ -315,7 +314,7 @@ void MysqlConnectOperationImpl::specializedCompleteOperation() {
   // shouldn't update the TLS session because it can propagate the
   // session object from a connection created usisn one client cert
   // to an SSL provider initialized with a different cert.
-  if (getOp().getOperationType() == db::OperationType::Connect) {
+  if (getOperationType() == db::OperationType::Connect) {
     maybeStoreSSLSession();
   }
 

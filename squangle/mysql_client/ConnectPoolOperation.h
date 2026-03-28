@@ -35,6 +35,10 @@ class ConnectPoolOperationImpl : virtual public ConnectOperationImpl {
  public:
   virtual ~ConnectPoolOperationImpl() override = default;
 
+  db::OperationType getOperationType() const override {
+    return db::OperationType::PoolConnect;
+  }
+
   virtual void prepWait() = 0;
   virtual bool syncWait() = 0;
   virtual void cleanupWait() = 0;

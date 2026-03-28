@@ -104,9 +104,17 @@ class FetchOperationImpl : virtual public OperationBase {
  public:
   using RespAttrs = AttributeMap;
 
-  explicit FetchOperationImpl(LoggingFuncsPtr logging_funcs)
-      : logging_funcs_(std::move(logging_funcs)) {}
+  explicit FetchOperationImpl(
+      db::OperationType operation_type,
+      LoggingFuncsPtr logging_funcs)
+      : logging_funcs_(std::move(logging_funcs)),
+        operation_type_(operation_type) {}
   virtual ~FetchOperationImpl() override = default;
+
+  // Returns the operation type (Query, MultiQuery, MultiQueryStream)
+  db::OperationType getOperationType() const override {
+    return operation_type_;
+  }
 
   std::shared_ptr<folly::fbstring> getRenderedQuery() const noexcept {
     return rendered_query_;
@@ -245,6 +253,7 @@ class FetchOperationImpl : virtual public OperationBase {
   FetchAction paused_action_ = FetchAction::StartQuery;
 
   LoggingFuncsPtr logging_funcs_;
+  db::OperationType operation_type_;
 
  private:
   std::atomic<FetchAction> active_fetch_action_ = FetchAction::StartQuery;

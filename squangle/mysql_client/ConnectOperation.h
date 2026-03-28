@@ -29,6 +29,10 @@ class ConnectOperationImpl : virtual public OperationBase {
       std::shared_ptr<const ConnectionKey> conn_key);
   virtual ~ConnectOperationImpl() override = default;
 
+  db::OperationType getOperationType() const override {
+    return db::OperationType::Connect;
+  }
+
   const std::string& database() const {
     return conn_key_->db_name();
   }

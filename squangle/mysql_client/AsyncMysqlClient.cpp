@@ -170,16 +170,18 @@ AsyncMysqlClient::createConnectOperationImpl(
 
 std::unique_ptr<FetchOperationImpl> AsyncMysqlClient::createFetchOperationImpl(
     std::unique_ptr<OperationBase::ConnectionProxy> conn,
+    db::OperationType operation_type,
     LoggingFuncsPtr logging_funcs) const {
   return std::make_unique<mysql_protocol::MysqlFetchOperationImpl>(
-      std::move(conn), std::move(logging_funcs));
+      std::move(conn), operation_type, std::move(logging_funcs));
 }
 
 std::unique_ptr<SpecialOperationImpl>
 AsyncMysqlClient::createSpecialOperationImpl(
-    std::unique_ptr<OperationBase::ConnectionProxy> conn) const {
+    std::unique_ptr<OperationBase::ConnectionProxy> conn,
+    db::OperationType operation_type) const {
   return std::make_unique<mysql_protocol::MysqlSpecialOperationImpl>(
-      std::move(conn));
+      std::move(conn), operation_type);
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {

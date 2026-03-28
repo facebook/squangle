@@ -149,7 +149,8 @@ class Connection {
   createOperation(
       std::unique_ptr<OperationBase::ConnectionProxy> proxy,
       MultiQuery&& multi_query) {
-    auto impl = client().createFetchOperationImpl(std::move(proxy), nullptr);
+    auto impl = client().createFetchOperationImpl(
+        std::move(proxy), db::OperationType::MultiQueryStream, nullptr);
     return MultiQueryStreamOperation::create(
         std::move(impl), std::move(multi_query));
   }

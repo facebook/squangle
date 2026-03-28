@@ -26,6 +26,9 @@ using MultiQueryCallback = std::function<
 // Constructed via Connection::beginMultiQuery.
 class MultiQueryOperation : public FetchOperation {
  public:
+  static constexpr db::OperationType kOperationType =
+      db::OperationType::MultiQuery;
+
   ~MultiQueryOperation() override = default;
 
   // Set our callback.  This is invoked multiple times -- once for

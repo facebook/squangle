@@ -45,7 +45,7 @@ void OperationBase::run() {
     setState(OperationState::Pending);
   }
 
-  if (getOp().getOperationType() == db::OperationType::Connect) {
+  if (getOperationType() == db::OperationType::Connect) {
     setTimeoutInternal(
         std::min(
             Duration(FLAGS_async_mysql_max_connect_timeout_micros),
@@ -79,11 +79,24 @@ void OperationBase::setAttribute(
   attributes_[key] = value;
 }
 
-unsigned int OperationBase::mysql_errno() const {
-  return getOp().mysql_errno();
+void OperationBase::snapshotMysqlErrors(
+    unsigned int errnum,
+    std::string error) {
+  mysql_errno_ = errnum;
+  if (mysql_errno_ != 0) {
+    if (mysql_errno_ == CR_TLS_SERVER_NOT_FOUND) {
+      mysql_error_ = "Server loadshedded the connection request.";
+    } else {
+      mysql_error_ = std::move(error);
+    }
+  }
 }
-const std::string& OperationBase::mysql_error() const {
-  return getOp().mysql_error();
+
+void OperationBase::setAsyncClientError(
+    unsigned int mysql_errno,
+    folly::StringPiece msg) {
+  mysql_errno_ = mysql_errno;
+  mysql_error_ = msg.toString();
 }
 
 void OperationBase::setObserverCallback(ObserverCallback obs_cb) {
@@ -166,21 +179,13 @@ std::unique_ptr<Connection> OperationBase::releaseConnection() {
 }
 
 void Operation::snapshotMysqlErrors(unsigned int errnum, std::string error) {
-  mysql_errno_ = errnum;
-  if (mysql_errno_ != 0) {
-    if (mysql_errno_ == CR_TLS_SERVER_NOT_FOUND) {
-      mysql_error_ = "Server loadshedded the connection request.";
-    } else {
-      mysql_error_ = std::move(error);
-    }
-  }
+  impl()->snapshotMysqlErrors(errnum, std::move(error));
 }
 
 void Operation::setAsyncClientError(
     unsigned int mysql_errno,
     folly::StringPiece msg) {
-  mysql_errno_ = mysql_errno;
-  mysql_error_ = msg.toString();
+  impl()->setAsyncClientError(mysql_errno, msg);
 }
 
 std::shared_ptr<Operation> Operation::getSharedPointer() {

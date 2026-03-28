@@ -136,16 +136,20 @@ std::shared_ptr<ConnectOperation> MysqlClientBase::beginConnection(
 // ConnectionProxy
 std::unique_ptr<FetchOperationImpl> MysqlClientBase::createFetchOperationImpl(
     std::unique_ptr<Connection> conn,
+    db::OperationType operation_type,
     LoggingFuncsPtr logging_funcs) const {
   return createFetchOperationImpl(
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
+      operation_type,
       std::move(logging_funcs));
 }
 std::unique_ptr<SpecialOperationImpl>
 MysqlClientBase::createSpecialOperationImpl(
-    std::unique_ptr<Connection> conn) const {
+    std::unique_ptr<Connection> conn,
+    db::OperationType operation_type) const {
   return createSpecialOperationImpl(
-      std::make_unique<OperationBase::OwnedConnection>(std::move(conn)));
+      std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
+      operation_type);
 }
 
 } // namespace facebook::common::mysql_client
