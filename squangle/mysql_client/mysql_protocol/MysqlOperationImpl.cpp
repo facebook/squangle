@@ -83,6 +83,14 @@ void MysqlOperationImpl::waitForActionable() {
 
 void MysqlOperationImpl::handlerReady(uint16_t /*events*/) noexcept {
   DCHECK(conn().isInEventBaseThread());
+  // Guard against late-delivered libevent events that arrive after the
+  // operation has already completed (e.g. socket readability queued before
+  // unregisterHandler ran). CHECK_THROW below would throw inside this
+  // noexcept function, turning a benign late event into std::terminate.
+  if (state() == OperationState::Completed ||
+      state() == OperationState::Unstarted) {
+    return;
+  }
   CHECK_THROW(
       state() != OperationState::Completed &&
           state() != OperationState::Unstarted,
