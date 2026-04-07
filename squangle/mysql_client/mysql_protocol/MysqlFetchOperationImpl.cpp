@@ -40,6 +40,10 @@ void MysqlFetchOperationImpl::specializedRun() {
 
 void MysqlFetchOperationImpl::specializedRunImpl() {
   try {
+    // Initialize EventHandler/AsyncTimeout now that we're in the event base
+    // thread
+    initializeFromConnection();
+
     folly::fbstring prefix;
     if (callbacks_.render_prefix_callback_) {
       prefix = callbacks_.render_prefix_callback_();
@@ -421,10 +425,10 @@ void MysqlFetchOperationImpl::specializedCompleteOperation() {
   if (result() == OperationResult::Succeeded) {
     // set last successful query time to MysqlConnectionHolder
     connection.setLastActivityTime(Clock::now());
-    client_.logQuerySuccess(logging_data, connection);
+    client().logQuerySuccess(logging_data, connection);
   } else {
     auto reason = operationResultToFailureReason(result());
-    client_.logQueryFailure(
+    client().logQueryFailure(
         logging_data, reason, mysql_errno(), mysql_error(), connection);
   }
 
@@ -455,7 +459,7 @@ void MysqlFetchOperationImpl::killRunningQuery() {
   auto thread_id = conn().mysqlThreadId();
   auto host = conn().host();
   auto port = conn().port();
-  auto conn_op = client_.beginConnection(conn().getKey());
+  auto conn_op = client().beginConnection(conn().getKey());
   conn_op->setConnectionOptions(conn().getConnectionOptions());
   conn_op->setCallback([thread_id, host, port](ConnectOperation& conn_op) {
     if (conn_op.ok()) {

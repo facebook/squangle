@@ -20,9 +20,22 @@ void MysqlOperationImpl::protocolCompleteOperation(OperationResult result) {
 }
 
 MysqlOperationImpl::MysqlOperationImpl()
-    : OperationBase(nullptr),
-      EventHandler(client_.getEventBase()),
-      AsyncTimeout(client_.getEventBase()) {}
+    : OperationBase(),
+      EventHandler(nullptr, folly::NetworkSocket()),
+      AsyncTimeout() {}
+
+void MysqlOperationImpl::initializeFromConnection() {
+  // Re-initialize EventHandler and AsyncTimeout with the correct event base
+  // now that the connection is set up.
+  // Note: For sync clients, getEventBase() returns nullptr, and that's OK -
+  // we only attach when there's actually an EventBase available.
+  auto* eventBase = conn().getEventBase();
+  if (eventBase) {
+    EventHandler::changeHandlerFD(folly::NetworkSocket());
+    EventHandler::attachEventBase(eventBase);
+    AsyncTimeout::attachEventBase(eventBase);
+  }
+}
 
 bool MysqlOperationImpl::isInEventBaseThread() const {
   return conn().isInEventBaseThread();

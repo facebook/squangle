@@ -50,6 +50,10 @@ class MysqlOperationImpl : virtual public OperationBase,
  protected:
   MysqlOperationImpl();
 
+  // Must be called after the connection is set up to properly initialize
+  // the EventHandler and AsyncTimeout with the correct event base.
+  void initializeFromConnection();
+
   MysqlConnection* getMysqlConnection();
   const MysqlConnection* getMysqlConnection() const;
 
