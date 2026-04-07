@@ -55,33 +55,31 @@ Connection::~Connection() {
 std::shared_ptr<ResetOperation> Connection::resetConn(
     std::unique_ptr<Connection> conn) {
   const auto& client = conn->mysql_client_;
-  auto resetOperationPtr =
-      std::make_shared<ResetOperation>(client.createSpecialOperationImpl(
-          std::move(conn), db::OperationType::Reset));
-  Duration timeout =
-      resetOperationPtr->connection()->conn_options_.getQueryTimeout();
+  Duration timeout = conn->conn_options_.getQueryTimeout();
+  auto resetOp = client.createResetOperation(std::move(conn));
   if (timeout.count() > 0) {
-    resetOperationPtr->setTimeout(timeout);
+    resetOp->setTimeout(timeout);
   }
-  return resetOperationPtr;
+  // Cast to ResetOperation for backward compatibility
+  // The new unified classes (MysqlResetOperation) inherit from SpecialOperation
+  // which is compatible with ResetOperation's interface
+  return std::static_pointer_cast<ResetOperation>(resetOp);
 }
 
 std::shared_ptr<ChangeUserOperation> Connection::changeUser(
     std::unique_ptr<Connection> conn,
     std::shared_ptr<const ConnectionKey> key) {
   const auto& client = conn->mysql_client_;
-  auto changeUserOperationPtr = std::make_shared<ChangeUserOperation>(
-      client.createSpecialOperationImpl(
-          std::move(conn), db::OperationType::ChangeUser),
-      std::move(key));
-  Duration timeout =
-      changeUserOperationPtr->connection()->conn_options_.getTimeout();
+  Duration timeout = conn->conn_options_.getTimeout();
+  auto changeUserOp =
+      client.createChangeUserOperation(std::move(conn), std::move(key));
   if (timeout.count() > 0) {
     // set its timeout longer than connection timeout to prevent change user
     // operation from hitting timeout earlier than connection timeout itself
-    changeUserOperationPtr->setTimeout(timeout + std::chrono::seconds(1));
+    changeUserOp->setTimeout(timeout + std::chrono::seconds(1));
   }
-  return changeUserOperationPtr;
+  // Cast to ChangeUserOperation for backward compatibility
+  return std::static_pointer_cast<ChangeUserOperation>(changeUserOp);
 }
 
 template <>

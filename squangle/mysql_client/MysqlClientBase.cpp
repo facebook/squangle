@@ -7,8 +7,10 @@
  */
 
 #include "squangle/mysql_client/MysqlClientBase.h"
+#include "squangle/mysql_client/ChangeUserOperation.h"
 #include "squangle/mysql_client/ConnectOperation.h"
 #include "squangle/mysql_client/Connection.h"
+#include "squangle/mysql_client/ResetOperation.h"
 #include "squangle/mysql_client/SpecialOperation.h"
 
 namespace {
@@ -150,6 +152,29 @@ MysqlClientBase::createSpecialOperationImpl(
   return createSpecialOperationImpl(
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
       operation_type);
+}
+
+std::shared_ptr<SpecialOperation> MysqlClientBase::createResetOperation(
+    std::unique_ptr<Connection> conn) const {
+  // Default implementation uses legacy pattern with impl_
+  // Subclasses (AsyncMysqlClient, SyncMysqlClient) can override to return
+  // unified classes like MysqlResetOperation
+  auto resetOp = std::make_shared<ResetOperation>(
+      createSpecialOperationImpl(std::move(conn), db::OperationType::Reset));
+  return resetOp;
+}
+
+std::shared_ptr<SpecialOperation> MysqlClientBase::createChangeUserOperation(
+    std::unique_ptr<Connection> conn,
+    std::shared_ptr<const ConnectionKey> key) const {
+  // Default implementation uses legacy pattern with impl_
+  // Subclasses (AsyncMysqlClient, SyncMysqlClient) can override to return
+  // unified classes like MysqlChangeUserOperation
+  auto changeUserOp = std::make_shared<ChangeUserOperation>(
+      createSpecialOperationImpl(
+          std::move(conn), db::OperationType::ChangeUser),
+      std::move(key));
+  return changeUserOp;
 }
 
 } // namespace facebook::common::mysql_client

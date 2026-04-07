@@ -69,10 +69,10 @@ class SpecialOperation : public Operation {
   virtual const char* getErrorMsg() const = 0;
 
   virtual OperationBase* impl() override {
-    return (OperationBase*)impl_.get();
+    return static_cast<OperationBase*>(impl_.get());
   }
   virtual const OperationBase* impl() const override {
-    return (OperationBase*)impl_.get();
+    return static_cast<const OperationBase*>(impl_.get());
   }
 
   std::unique_ptr<SpecialOperationImpl> impl_;

@@ -23,6 +23,7 @@ class ConnectOperationImpl;
 template <typename Client>
 class ConnectPoolOperationImpl;
 class FetchOperationImpl;
+class SpecialOperation;
 class SpecialOperationImpl;
 
 class MysqlClientBase {
@@ -144,6 +145,15 @@ class MysqlClientBase {
   virtual std::unique_ptr<SpecialOperationImpl> createSpecialOperationImpl(
       std::unique_ptr<OperationBase::ConnectionProxy> conn,
       db::OperationType operation_type) const = 0;
+
+  // New unified factory methods - create concrete protocol-specific Operation
+  // classes directly instead of separate impl objects.   These return
+  // shared_ptr because Operation classes use enable_shared_from_this.
+  virtual std::shared_ptr<SpecialOperation> createResetOperation(
+      std::unique_ptr<Connection> conn) const;
+  virtual std::shared_ptr<SpecialOperation> createChangeUserOperation(
+      std::unique_ptr<Connection> conn,
+      std::shared_ptr<const ConnectionKey> key) const;
 
   // Helper versions of the above that take a Connection instead of a
   // ConnectionProxy
