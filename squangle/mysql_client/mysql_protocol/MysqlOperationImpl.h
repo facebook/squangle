@@ -73,9 +73,7 @@ class MysqlOperationImpl : virtual public OperationBase,
   void handlerReady(uint16_t /*events*/) noexcept override;
 
   // AsyncTimeout override
-  void timeoutExpired() noexcept override {
-    timeoutTriggered();
-  }
+  void timeoutExpired() noexcept override;
 
   // Called by AsyncTimeout::timeoutExpired when the operation timed out
   void timeoutTriggered() override;

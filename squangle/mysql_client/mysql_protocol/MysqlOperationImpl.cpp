@@ -95,24 +95,34 @@ void MysqlOperationImpl::waitForActionable() {
 }
 
 void MysqlOperationImpl::handlerReady(uint16_t /*events*/) noexcept {
-  DCHECK(conn().isInEventBaseThread());
-  // Guard against late-delivered libevent events that arrive after the
-  // operation has already completed (e.g. socket readability queued before
-  // unregisterHandler ran). CHECK_THROW below would throw inside this
-  // noexcept function, turning a benign late event into std::terminate.
-  if (state() == OperationState::Completed ||
-      state() == OperationState::Unstarted) {
-    return;
-  }
-  CHECK_THROW(
-      state() != OperationState::Completed &&
-          state() != OperationState::Unstarted,
-      db::OperationStateException);
+  // handlerReady is `noexcept` so we can't throw from it.
+  try {
+    DCHECK(conn().isInEventBaseThread());
 
-  if (state() == OperationState::Cancelling) {
-    cancel();
-  } else {
-    invokeActionable();
+    auto st = state();
+    if (st == OperationState::Cancelling) {
+      cancel();
+    } else if (
+        st != OperationState::Completed && st != OperationState::Unstarted) {
+      invokeActionable();
+    } else {
+      LOG(WARNING) << "handlerReady() called in unexpected state: " << st;
+    }
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Exception in handlerReady: " << ex.what();
+  } catch (...) {
+    LOG(ERROR) << "Unknown exception in handlerReady";
+  }
+}
+
+void MysqlOperationImpl::timeoutExpired() noexcept {
+  // timeoutExpired is `noexcept` so we can't throw from it.
+  try {
+    timeoutTriggered();
+  } catch (const std::exception& ex) {
+    LOG(ERROR) << "Exception in timeoutExpired: " << ex.what();
+  } catch (...) {
+    LOG(ERROR) << "Unknown exception in timeoutExpired";
   }
 }
 
