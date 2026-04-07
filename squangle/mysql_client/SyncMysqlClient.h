@@ -85,6 +85,13 @@ class SyncMysqlClient : public MysqlClientBase {
   bool useDirectStreamMode() const override {
     return true;
   }
+
+  // Override to return unified MySQL special operation classes
+  std::shared_ptr<SpecialOperation> createResetOperation(
+      std::unique_ptr<Connection> conn) const override;
+  std::shared_ptr<SpecialOperation> createChangeUserOperation(
+      std::unique_ptr<Connection> conn,
+      std::shared_ptr<const ConnectionKey> key) const override;
 };
 
 // SyncConnection is a specialization of Connection to handle inline loops.

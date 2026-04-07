@@ -282,6 +282,13 @@ class AsyncMysqlClient : public MysqlClientBase {
       std::unique_ptr<OperationBase::ConnectionProxy> conn,
       db::OperationType operation_type) const override;
 
+  // Override to return unified MySQL special operation classes
+  std::shared_ptr<SpecialOperation> createResetOperation(
+      std::unique_ptr<Connection> conn) const override;
+  std::shared_ptr<SpecialOperation> createChangeUserOperation(
+      std::unique_ptr<Connection> conn,
+      std::shared_ptr<const ConnectionKey> key) const override;
+
   bool isInCorrectThread(bool expectMysqlThread) const override {
     auto eb = getEventBase();
     return expectMysqlThread == (eb == nullptr || eb->isInEventBaseThread());

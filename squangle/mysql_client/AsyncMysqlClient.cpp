@@ -20,6 +20,7 @@
 #include "squangle/mysql_client/SemiFutureAdapter.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlConnectOperationImpl.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlFetchOperationImpl.h"
+#include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperation.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperationImpl.h"
 
 namespace facebook::common::mysql_client {
@@ -28,7 +29,7 @@ namespace detail {
 
 struct AsyncMysqlClientSingletonTag {};
 
-folly::Singleton<AsyncMysqlClient, AsyncMysqlClientSingletonTag>
+const folly::Singleton<AsyncMysqlClient, AsyncMysqlClientSingletonTag>
     defaultAsyncMysqlClientSingleton(
         [] { return new AsyncMysqlClient; },
         AsyncMysqlClient::deleter);
@@ -182,6 +183,19 @@ AsyncMysqlClient::createSpecialOperationImpl(
     db::OperationType operation_type) const {
   return std::make_unique<mysql_protocol::MysqlSpecialOperationImpl>(
       std::move(conn), operation_type);
+}
+
+// Return unified MySQL special operation classes
+std::shared_ptr<SpecialOperation> AsyncMysqlClient::createResetOperation(
+    std::unique_ptr<Connection> conn) const {
+  return mysql_protocol::MysqlResetOperation::create(std::move(conn));
+}
+
+std::shared_ptr<SpecialOperation> AsyncMysqlClient::createChangeUserOperation(
+    std::unique_ptr<Connection> conn,
+    std::shared_ptr<const ConnectionKey> key) const {
+  return mysql_protocol::MysqlChangeUserOperation::create(
+      std::move(conn), std::move(key));
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {

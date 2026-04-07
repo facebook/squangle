@@ -13,6 +13,7 @@
 #include "squangle/mysql_client/SyncMysqlClient.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlConnectOperationImpl.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlFetchOperationImpl.h"
+#include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperation.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperationImpl.h"
 
 namespace facebook::common::mysql_client {
@@ -21,7 +22,7 @@ namespace detail {
 
 struct SyncMysqlClientSingletonTag {};
 
-folly::Singleton<SyncMysqlClient, SyncMysqlClientSingletonTag>
+const folly::Singleton<SyncMysqlClient, SyncMysqlClientSingletonTag>
     defaultSyncMysqlClientSingleton;
 
 } // namespace detail
@@ -57,6 +58,19 @@ SyncMysqlClient::createSpecialOperationImpl(
 std::unique_ptr<Connection> SyncMysqlClient::createConnection(
     std::shared_ptr<const ConnectionKey> conn_key) {
   return std::make_unique<SyncConnection>(*this, std::move(conn_key));
+}
+
+// Return unified MySQL special operation classes
+std::shared_ptr<SpecialOperation> SyncMysqlClient::createResetOperation(
+    std::unique_ptr<Connection> conn) const {
+  return mysql_protocol::MysqlResetOperation::create(std::move(conn));
+}
+
+std::shared_ptr<SpecialOperation> SyncMysqlClient::createChangeUserOperation(
+    std::unique_ptr<Connection> conn,
+    std::shared_ptr<const ConnectionKey> key) const {
+  return mysql_protocol::MysqlChangeUserOperation::create(
+      std::move(conn), std::move(key));
 }
 
 SyncConnection::~SyncConnection() {

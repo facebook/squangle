@@ -22,7 +22,11 @@ class ConnectOperation;
 class ConnectOperationImpl;
 template <typename Client>
 class ConnectPoolOperationImpl;
+class FetchOperation;
 class FetchOperationImpl;
+class QueryOperation;
+class MultiQueryOperation;
+class MultiQueryStreamOperation;
 class SpecialOperation;
 class SpecialOperationImpl;
 

@@ -35,6 +35,11 @@ class SpecialOperationImpl : virtual public OperationBase {
 
   InternalConnection::Status runSpecialOperation();
 
+  // Expose the internal connection for derived Operation classes
+  InternalConnection& internalConnection() {
+    return getInternalConnection();
+  }
+
  protected:
   [[nodiscard]] SpecialOperation& getOp() const;
 
@@ -64,6 +69,11 @@ class SpecialOperation : public Operation {
 
   virtual InternalConnection::Status runSpecialOperation() = 0;
   friend SpecialOperationImpl;
+
+  // Protected accessor for derived classes to access the impl
+  SpecialOperationImpl* specialOperationImpl() {
+    return impl_.get();
+  }
 
  private:
   virtual const char* getErrorMsg() const = 0;

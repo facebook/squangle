@@ -56,7 +56,6 @@ class MultiQueryStreamOperation : public FetchOperation {
   friend Connection;
   friend SyncConnection;
 
- private:
   MultiQueryStreamOperation(
       std::unique_ptr<FetchOperationImpl> opImpl,
       MultiQuery&& multi_query);
@@ -64,6 +63,7 @@ class MultiQueryStreamOperation : public FetchOperation {
       std::unique_ptr<FetchOperationImpl> opImpl,
       std::vector<Query>&& queries);
 
+ private:
   // wrapper to invoke the stream callback
   void invokeCallback(StreamState state);
 
