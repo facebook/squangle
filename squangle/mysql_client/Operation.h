@@ -540,11 +540,30 @@ class OperationBase {
 };
 
 //  Public facing Operation API
-class Operation : public std::enable_shared_from_this<Operation> {
+//
+//  Operation virtually inherits from OperationBase to enable future unification
+//  of the Operation and OperationImpl class hierarchies. This virtual
+//  inheritance allows concrete protocol classes (e.g., MysqlQueryOperation)
+//  to inherit from both Operation and OperationImpl without duplicating
+//  OperationBase members.
+//
+//  Current structure (with delegation via impl_):
+//    Operation --virtual--> OperationBase
+//    *OperationImpl --virtual--> OperationBase
+//    ConnectOperation has impl_ -> ConnectOperationImpl
+//
+//  Future structure (unified, no delegation):
+//    MysqlConnectOperation : ConnectOperation, MysqlProtocolMixin
+//    ConnectOperation --virtual--> OperationBase
+//    MysqlProtocolMixin --virtual--> OperationBase
+//
+class Operation : public std::enable_shared_from_this<Operation>,
+                  virtual public OperationBase {
  public:
-  virtual ~Operation() = default;
+  virtual ~Operation() override = default;
 
-  virtual db::OperationType getOperationType() const = 0;
+  // Note: getOperationType() is inherited from OperationBase and must be
+  // implemented by concrete Operation subclasses.
 
   // Did the operation succeed?
   bool ok() const;
@@ -557,7 +576,7 @@ class Operation : public std::enable_shared_from_this<Operation> {
   OperationState state() const;
 
   Operation& run();
-  void cancel() {
+  void cancel() override {
     impl()->cancel();
   }
 
@@ -713,7 +732,14 @@ class Operation : public std::enable_shared_from_this<Operation> {
     return impl()->callPostQueryCallback(std::move(result));
   }
 
-  void timeoutTriggered() {
+  // OperationBase pure virtual methods - delegate to impl
+  void specializedRun() override {
+    impl()->specializedRun();
+  }
+  void protocolCompleteOperation(OperationResult result) override {
+    impl()->protocolCompleteOperation(result);
+  }
+  void timeoutTriggered() override {
     impl()->timeoutTriggered();
   }
 
