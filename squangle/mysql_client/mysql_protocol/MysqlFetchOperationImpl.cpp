@@ -126,7 +126,6 @@ void MysqlFetchOperationImpl::actionable() {
       auto status = PENDING;
 
       if (query_executed_) {
-        ++num_current_query_;
         status = mysql_conn->nextResult();
       } else {
         status = mysql_conn->runQuery(*rendered_query_);
@@ -281,6 +280,9 @@ void MysqlFetchOperationImpl::actionable() {
           // This usually means a multi-query was passed to the single query API
           setActiveFetchAction(FetchAction::CompleteOperation);
           return;
+        }
+        if (more_results) {
+          ++num_current_query_;
         }
       }
       current_row_stream_.reset();
