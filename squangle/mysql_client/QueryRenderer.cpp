@@ -178,7 +178,7 @@ void QueryRenderer<StringType>::escapeAndAppend(
       if (!conn) {
         VLOG(3) << "connectionless escape performed; this should only occur in "
                 << "testing.";
-        dest->append(value.data(), value.size());
+        escapeAndAppend(dest, value, EscapeMode::Simple, conn);
         return;
       }
       auto old_size = dest->size();
