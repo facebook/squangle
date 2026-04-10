@@ -18,7 +18,9 @@
 #include "squangle/mysql_client/ConnectOperation.h"
 #include "squangle/mysql_client/ResetOperation.h" // IWYU pragma: keep
 #include "squangle/mysql_client/SemiFutureAdapter.h"
+#include "squangle/mysql_client/mysql_protocol/MysqlConnectOperation.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlConnectOperationImpl.h"
+#include "squangle/mysql_client/mysql_protocol/MysqlFetchOperation.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlFetchOperationImpl.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperation.h"
 #include "squangle/mysql_client/mysql_protocol/MysqlSpecialOperationImpl.h"
@@ -196,6 +198,31 @@ std::shared_ptr<SpecialOperation> AsyncMysqlClient::createChangeUserOperation(
     std::shared_ptr<const ConnectionKey> key) const {
   return mysql_protocol::MysqlChangeUserOperation::create(
       std::move(conn), std::move(key));
+}
+
+std::shared_ptr<QueryOperation> AsyncMysqlClient::createQueryOperation(
+    std::unique_ptr<Connection> conn,
+    Query&& query) const {
+  return mysql_protocol::MysqlQueryOperation::create(
+      std::move(conn), std::move(query));
+}
+
+std::shared_ptr<MultiQueryOperation>
+AsyncMysqlClient::createMultiQueryOperation(
+    std::unique_ptr<Connection> conn,
+    std::vector<Query>&& queries) const {
+  return mysql_protocol::MysqlMultiQueryOperation::create(
+      std::move(conn), std::move(queries));
+}
+
+std::shared_ptr<ConnectOperation> AsyncMysqlClient::createConnectOperation(
+    std::shared_ptr<const ConnectionKey> conn_key) {
+  auto ret =
+      mysql_protocol::MysqlConnectOperation::create(this, std::move(conn_key));
+  if (connection_cb_) {
+    ret->setObserverCallback(connection_cb_);
+  }
+  return ret;
 }
 
 void AsyncMysqlClient::cleanupCompletedOperations() {

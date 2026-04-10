@@ -92,6 +92,18 @@ class SyncMysqlClient : public MysqlClientBase {
   std::shared_ptr<SpecialOperation> createChangeUserOperation(
       std::unique_ptr<Connection> conn,
       std::shared_ptr<const ConnectionKey> key) const override;
+
+  // Unified factory methods using MysqlQueryOperation/MysqlMultiQueryOperation
+  std::shared_ptr<QueryOperation> createQueryOperation(
+      std::unique_ptr<Connection> conn,
+      Query&& query) const override;
+  std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
+      std::unique_ptr<Connection> conn,
+      std::vector<Query>&& queries) const override;
+
+  // Unified factory method using MysqlConnectOperation
+  std::shared_ptr<ConnectOperation> createConnectOperation(
+      std::shared_ptr<const ConnectionKey> conn_key) override;
 };
 
 // SyncConnection is a specialization of Connection to handle inline loops.

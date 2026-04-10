@@ -10,6 +10,8 @@
 #include "squangle/mysql_client/ChangeUserOperation.h"
 #include "squangle/mysql_client/ConnectOperation.h"
 #include "squangle/mysql_client/Connection.h"
+#include "squangle/mysql_client/MultiQueryOperation.h"
+#include "squangle/mysql_client/QueryOperation.h"
 #include "squangle/mysql_client/ResetOperation.h"
 #include "squangle/mysql_client/SpecialOperation.h"
 
@@ -175,6 +177,40 @@ std::shared_ptr<SpecialOperation> MysqlClientBase::createChangeUserOperation(
           std::move(conn), db::OperationType::ChangeUser),
       std::move(key));
   return changeUserOp;
+}
+
+std::shared_ptr<QueryOperation> MysqlClientBase::createQueryOperation(
+    std::unique_ptr<Connection> conn,
+    Query&& query) const {
+  // Default implementation uses legacy pattern
+  // Subclasses can override to return unified classes
+  return std::shared_ptr<QueryOperation>(new QueryOperation(
+      createFetchOperationImpl(
+          std::move(conn), db::OperationType::Query, nullptr),
+      std::move(query)));
+}
+
+std::shared_ptr<MultiQueryOperation> MysqlClientBase::createMultiQueryOperation(
+    std::unique_ptr<Connection> conn,
+    std::vector<Query>&& queries) const {
+  // Default implementation uses legacy pattern
+  // Subclasses can override to return unified classes
+  return std::shared_ptr<MultiQueryOperation>(new MultiQueryOperation(
+      createFetchOperationImpl(
+          std::move(conn), db::OperationType::MultiQuery, nullptr),
+      std::move(queries)));
+}
+
+std::shared_ptr<ConnectOperation> MysqlClientBase::createConnectOperation(
+    std::shared_ptr<const ConnectionKey> conn_key) {
+  // Default implementation uses legacy pattern
+  // Subclasses can override to return unified classes
+  auto impl = createConnectOperationImpl(this, std::move(conn_key));
+  auto ret = ConnectOperation::create(std::move(impl));
+  if (connection_cb_) {
+    ret->setObserverCallback(connection_cb_);
+  }
+  return ret;
 }
 
 } // namespace facebook::common::mysql_client

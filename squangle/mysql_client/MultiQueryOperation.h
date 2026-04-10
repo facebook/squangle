@@ -116,6 +116,7 @@ class MultiQueryOperation : public FetchOperation {
   int num_current_query_ = 0;
 
   friend class Connection;
+  friend class MysqlClientBase;
 };
 
 } // namespace facebook::common::mysql_client

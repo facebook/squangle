@@ -14,6 +14,7 @@
 #include "squangle/logger/DBEventLogger.h"
 #include "squangle/mysql_client/MysqlExceptionBuilder.h"
 #include "squangle/mysql_client/Operation.h"
+#include "squangle/mysql_client/Query.h"
 
 namespace facebook::common::mysql_client {
 
@@ -158,6 +159,18 @@ class MysqlClientBase {
   virtual std::shared_ptr<SpecialOperation> createChangeUserOperation(
       std::unique_ptr<Connection> conn,
       std::shared_ptr<const ConnectionKey> key) const;
+
+  // Unified factory methods for FetchOperation subclasses
+  virtual std::shared_ptr<QueryOperation> createQueryOperation(
+      std::unique_ptr<Connection> conn,
+      Query&& query) const;
+  virtual std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
+      std::unique_ptr<Connection> conn,
+      std::vector<Query>&& queries) const;
+
+  // Unified factory method for ConnectOperation
+  virtual std::shared_ptr<ConnectOperation> createConnectOperation(
+      std::shared_ptr<const ConnectionKey> conn_key);
 
   // Helper versions of the above that take a Connection instead of a
   // ConnectionProxy
