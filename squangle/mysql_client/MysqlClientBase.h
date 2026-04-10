@@ -164,9 +164,17 @@ class MysqlClientBase {
   virtual std::shared_ptr<QueryOperation> createQueryOperation(
       std::unique_ptr<Connection> conn,
       Query&& query) const;
+  virtual std::shared_ptr<QueryOperation> createQueryOperation(
+      std::unique_ptr<Connection> conn,
+      Query&& query,
+      LoggingFuncsPtr logging_funcs) const;
   virtual std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
       std::unique_ptr<Connection> conn,
       std::vector<Query>&& queries) const;
+  virtual std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
+      std::unique_ptr<Connection> conn,
+      std::vector<Query>&& queries,
+      LoggingFuncsPtr logging_funcs) const;
 
   // Unified factory method for ConnectOperation
   virtual std::shared_ptr<ConnectOperation> createConnectOperation(

@@ -290,6 +290,9 @@ class AsyncMysqlClient : public MysqlClientBase {
       std::shared_ptr<const ConnectionKey> key) const override;
 
   // Unified factory methods using MysqlQueryOperation/MysqlMultiQueryOperation
+  // Bring base class overloads with logging_funcs into scope
+  using MysqlClientBase::createMultiQueryOperation;
+  using MysqlClientBase::createQueryOperation;
   std::shared_ptr<QueryOperation> createQueryOperation(
       std::unique_ptr<Connection> conn,
       Query&& query) const override;

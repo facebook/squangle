@@ -453,6 +453,10 @@ class Connection {
   // Called when a new operation is being started.
   virtual void resetActionable() {}
 
+  // Helper to set up pre/post operation callbacks on a FetchOperation
+  template <typename OpType>
+  void setupOperationCallbacks(OpType& op, Connection& conn);
+
   void setConnectionHolder(std::unique_ptr<ConnectionHolder> conn) {
     CHECK_THROW(mysql_connection_ == nullptr, db::InvalidConnectionException);
     CHECK_THROW(*getKey() == *conn->getKey(), db::InvalidConnectionException);
