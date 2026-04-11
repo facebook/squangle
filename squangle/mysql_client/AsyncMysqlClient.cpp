@@ -202,17 +202,48 @@ std::shared_ptr<SpecialOperation> AsyncMysqlClient::createChangeUserOperation(
 
 std::shared_ptr<QueryOperation> AsyncMysqlClient::createQueryOperation(
     std::unique_ptr<Connection> conn,
-    Query&& query) const {
+    Query&& query,
+    LoggingFuncsPtr logging_funcs) const {
   return mysql_protocol::MysqlQueryOperation::create(
-      std::move(conn), std::move(query));
+      std::move(conn), std::move(query), std::move(logging_funcs));
 }
 
 std::shared_ptr<MultiQueryOperation>
 AsyncMysqlClient::createMultiQueryOperation(
     std::unique_ptr<Connection> conn,
-    std::vector<Query>&& queries) const {
+    std::vector<Query>&& queries,
+    LoggingFuncsPtr logging_funcs) const {
   return mysql_protocol::MysqlMultiQueryOperation::create(
-      std::move(conn), std::move(queries));
+      std::move(conn), std::move(queries), std::move(logging_funcs));
+}
+
+// ConnectionProxy overloads for sync operations (non-owning reference)
+std::shared_ptr<QueryOperation> AsyncMysqlClient::createQueryOperation(
+    std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+    Query&& query,
+    LoggingFuncsPtr logging_funcs) const {
+  // For sync operations with ReferencedConnection, use the legacy pattern
+  // since MysqlQueryOperation::create() requires ownership
+  return std::shared_ptr<QueryOperation>(new QueryOperation(
+      createFetchOperationImpl(
+          std::move(conn_proxy),
+          db::OperationType::Query,
+          std::move(logging_funcs)),
+      std::move(query)));
+}
+
+std::shared_ptr<MultiQueryOperation>
+AsyncMysqlClient::createMultiQueryOperation(
+    std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+    std::vector<Query>&& queries,
+    LoggingFuncsPtr logging_funcs) const {
+  // For sync operations with ReferencedConnection, use the legacy pattern
+  return std::shared_ptr<MultiQueryOperation>(new MultiQueryOperation(
+      createFetchOperationImpl(
+          std::move(conn_proxy),
+          db::OperationType::MultiQuery,
+          std::move(logging_funcs)),
+      std::move(queries)));
 }
 
 std::shared_ptr<ConnectOperation> AsyncMysqlClient::createConnectOperation(

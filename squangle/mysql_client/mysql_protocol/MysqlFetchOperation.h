@@ -26,7 +26,8 @@ class MysqlQueryOperation : public QueryOperation {
   // Factory method that takes a Connection and handles wrapping internally
   static std::shared_ptr<MysqlQueryOperation> create(
       std::unique_ptr<Connection> conn,
-      Query&& query);
+      Query&& query,
+      LoggingFuncsPtr logging_funcs = nullptr);
 
  private:
   MysqlQueryOperation(std::unique_ptr<FetchOperationImpl> impl, Query&& query);
@@ -40,7 +41,8 @@ class MysqlMultiQueryOperation : public MultiQueryOperation {
   // Factory method that takes a Connection and handles wrapping internally
   static std::shared_ptr<MysqlMultiQueryOperation> create(
       std::unique_ptr<Connection> conn,
-      std::vector<Query>&& queries);
+      std::vector<Query>&& queries,
+      LoggingFuncsPtr logging_funcs = nullptr);
 
  private:
   MysqlMultiQueryOperation(

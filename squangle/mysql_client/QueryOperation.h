@@ -121,6 +121,8 @@ class QueryOperation : public FetchOperation {
   std::unique_ptr<QueryResult> query_result_;
   friend class Connection;
   friend class MysqlClientBase;
+  friend class SyncMysqlClient;
+  friend class AsyncMysqlClient;
 };
 
 } // namespace facebook::common::mysql_client

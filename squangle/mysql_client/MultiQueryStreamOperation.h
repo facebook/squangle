@@ -55,6 +55,7 @@ class MultiQueryStreamOperation : public FetchOperation {
 
   friend Connection;
   friend SyncConnection;
+  friend class MysqlClientBase;
 
   MultiQueryStreamOperation(
       std::unique_ptr<FetchOperationImpl> opImpl,

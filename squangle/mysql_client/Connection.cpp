@@ -364,16 +364,27 @@ DbQueryResult Connection::internalQuery(
     Query&& query,
     QueryCallback&& cb,
     QueryOptions&& options) {
-  auto op = beginAnyQuery<QueryOperation>(
+  // Use the new unified factory method with ConnectionProxy
+  auto op = mysql_client_.createQueryOperation(
       std::make_unique<OperationBase::ReferencedConnection>(*this),
-      options.stealLoggingFuncs(),
-      std::move(query));
+      std::move(query),
+      options.stealLoggingFuncs());
+
+  // Apply connection-level query timeout
+  Duration timeout = conn_options_.getQueryTimeout();
+  if (timeout.count() > 0) {
+    op->setTimeout(timeout);
+  }
+
   mergePersistentQueryAttributes(options.getAttributes());
   op->setAttributes(std::move(options.getAttributes()));
   checkForQueryTimeoutOverride(*op, options.getQueryTimeout());
   if (cb) {
     op->setCallback(std::move(cb));
   }
+
+  // Set up callbacks from the connection
+  setupOperationCallbacks(*op, *this);
 
   auto guard = folly::makeGuard([&] { operation_in_progress_ = false; });
   operation_in_progress_ = true;
@@ -514,16 +525,27 @@ DbMultiQueryResult Connection::internalMultiQuery(
     std::vector<Query>&& queries,
     MultiQueryCallback&& cb,
     QueryOptions&& options) {
-  auto op = beginAnyQuery<MultiQueryOperation>(
+  // Use the new unified factory method with ConnectionProxy
+  auto op = mysql_client_.createMultiQueryOperation(
       std::make_unique<OperationBase::ReferencedConnection>(*this),
-      options.stealLoggingFuncs(),
-      std::move(queries));
+      std::move(queries),
+      options.stealLoggingFuncs());
+
+  // Apply connection-level query timeout
+  Duration timeout = conn_options_.getQueryTimeout();
+  if (timeout.count() > 0) {
+    op->setTimeout(timeout);
+  }
+
   mergePersistentQueryAttributes(options.getAttributes());
   op->setAttributes(std::move(options.getAttributes()));
   checkForQueryTimeoutOverride(*op, options.getQueryTimeout());
   if (cb) {
     op->setCallback(std::move(cb));
   }
+
+  // Set up callbacks from the connection
+  setupOperationCallbacks(*op, *this);
 
   auto guard = folly::makeGuard([&] { operation_in_progress_ = false; });
   operation_in_progress_ = true;

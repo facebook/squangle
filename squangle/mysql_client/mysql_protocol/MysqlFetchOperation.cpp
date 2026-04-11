@@ -16,12 +16,13 @@ namespace facebook::common::mysql_client::mysql_protocol {
 
 std::shared_ptr<MysqlQueryOperation> MysqlQueryOperation::create(
     std::unique_ptr<Connection> conn,
-    Query&& query) {
+    Query&& query,
+    LoggingFuncsPtr logging_funcs) {
   // Create OwnedConnection wrapper and MysqlFetchOperationImpl internally
   auto connProxy =
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn));
   auto impl = std::make_unique<MysqlFetchOperationImpl>(
-      std::move(connProxy), db::OperationType::Query, nullptr);
+      std::move(connProxy), db::OperationType::Query, std::move(logging_funcs));
   return std::shared_ptr<MysqlQueryOperation>(
       new MysqlQueryOperation(std::move(impl), std::move(query)));
 }
@@ -35,11 +36,14 @@ MysqlQueryOperation::MysqlQueryOperation(
 
 std::shared_ptr<MysqlMultiQueryOperation> MysqlMultiQueryOperation::create(
     std::unique_ptr<Connection> conn,
-    std::vector<Query>&& queries) {
+    std::vector<Query>&& queries,
+    LoggingFuncsPtr logging_funcs) {
   auto connProxy =
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn));
   auto impl = std::make_unique<MysqlFetchOperationImpl>(
-      std::move(connProxy), db::OperationType::MultiQuery, nullptr);
+      std::move(connProxy),
+      db::OperationType::MultiQuery,
+      std::move(logging_funcs));
   return std::shared_ptr<MysqlMultiQueryOperation>(
       new MysqlMultiQueryOperation(std::move(impl), std::move(queries)));
 }

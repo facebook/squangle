@@ -181,38 +181,49 @@ std::shared_ptr<SpecialOperation> MysqlClientBase::createChangeUserOperation(
 
 std::shared_ptr<QueryOperation> MysqlClientBase::createQueryOperation(
     std::unique_ptr<Connection> conn,
-    Query&& query) const {
-  return createQueryOperation(std::move(conn), std::move(query), nullptr);
-}
-
-std::shared_ptr<QueryOperation> MysqlClientBase::createQueryOperation(
-    std::unique_ptr<Connection> conn,
     Query&& query,
     LoggingFuncsPtr logging_funcs) const {
-  // Default implementation uses legacy pattern
-  // Subclasses can override to return unified classes
-  return std::shared_ptr<QueryOperation>(new QueryOperation(
-      createFetchOperationImpl(
-          std::move(conn), db::OperationType::Query, std::move(logging_funcs)),
-      std::move(query)));
-}
-
-std::shared_ptr<MultiQueryOperation> MysqlClientBase::createMultiQueryOperation(
-    std::unique_ptr<Connection> conn,
-    std::vector<Query>&& queries) const {
-  return createMultiQueryOperation(
-      std::move(conn), std::move(queries), nullptr);
+  // Wrap in OwnedConnection and call the ConnectionProxy overload
+  return createQueryOperation(
+      std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
+      std::move(query),
+      std::move(logging_funcs));
 }
 
 std::shared_ptr<MultiQueryOperation> MysqlClientBase::createMultiQueryOperation(
     std::unique_ptr<Connection> conn,
     std::vector<Query>&& queries,
     LoggingFuncsPtr logging_funcs) const {
+  // Wrap in OwnedConnection and call the ConnectionProxy overload
+  return createMultiQueryOperation(
+      std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
+      std::move(queries),
+      std::move(logging_funcs));
+}
+
+std::shared_ptr<QueryOperation> MysqlClientBase::createQueryOperation(
+    std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+    Query&& query,
+    LoggingFuncsPtr logging_funcs) const {
+  // Default implementation uses legacy pattern
+  // Subclasses can override to return unified classes
+  return std::shared_ptr<QueryOperation>(new QueryOperation(
+      createFetchOperationImpl(
+          std::move(conn_proxy),
+          db::OperationType::Query,
+          std::move(logging_funcs)),
+      std::move(query)));
+}
+
+std::shared_ptr<MultiQueryOperation> MysqlClientBase::createMultiQueryOperation(
+    std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+    std::vector<Query>&& queries,
+    LoggingFuncsPtr logging_funcs) const {
   // Default implementation uses legacy pattern
   // Subclasses can override to return unified classes
   return std::shared_ptr<MultiQueryOperation>(new MultiQueryOperation(
       createFetchOperationImpl(
-          std::move(conn),
+          std::move(conn_proxy),
           db::OperationType::MultiQuery,
           std::move(logging_funcs)),
       std::move(queries)));

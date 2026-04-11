@@ -29,6 +29,11 @@ class ChangeUserOperation;
 class ResetOperation;
 class MultiQueryStreamHandler;
 
+namespace mysql_protocol {
+class MysqlResetOperation;
+class MysqlChangeUserOperation;
+} // namespace mysql_protocol
+
 using ConnectionDyingCallback =
     std::function<void(std::unique_ptr<ConnectionHolder>)>;
 
@@ -505,6 +510,11 @@ class Connection {
   friend class ResetOperation;
   friend class ChangeUserOperation;
   friend class ConnectionHolder;
+
+  // PR3: Unified protocol-specific operation classes need access to
+  // getInternalConnection()
+  friend class mysql_protocol::MysqlResetOperation;
+  friend class mysql_protocol::MysqlChangeUserOperation;
 
   virtual std::unique_ptr<InternalConnection> createInternalConnection() = 0;
 

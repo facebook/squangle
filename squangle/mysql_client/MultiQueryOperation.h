@@ -117,6 +117,8 @@ class MultiQueryOperation : public FetchOperation {
 
   friend class Connection;
   friend class MysqlClientBase;
+  friend class SyncMysqlClient;
+  friend class AsyncMysqlClient;
 };
 
 } // namespace facebook::common::mysql_client

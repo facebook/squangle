@@ -99,10 +99,22 @@ class SyncMysqlClient : public MysqlClientBase {
   using MysqlClientBase::createQueryOperation;
   std::shared_ptr<QueryOperation> createQueryOperation(
       std::unique_ptr<Connection> conn,
-      Query&& query) const override;
+      Query&& query,
+      LoggingFuncsPtr logging_funcs = nullptr) const override;
   std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
       std::unique_ptr<Connection> conn,
-      std::vector<Query>&& queries) const override;
+      std::vector<Query>&& queries,
+      LoggingFuncsPtr logging_funcs = nullptr) const override;
+
+  // Overloads for sync operations (with ConnectionProxy)
+  std::shared_ptr<QueryOperation> createQueryOperation(
+      std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+      Query&& query,
+      LoggingFuncsPtr logging_funcs = nullptr) const override;
+  std::shared_ptr<MultiQueryOperation> createMultiQueryOperation(
+      std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
+      std::vector<Query>&& queries,
+      LoggingFuncsPtr logging_funcs = nullptr) const override;
 
   // Unified factory method using MysqlConnectOperation
   std::shared_ptr<ConnectOperation> createConnectOperation(
