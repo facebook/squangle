@@ -96,27 +96,18 @@ std::shared_ptr<QueryOperation> SyncMysqlClient::createQueryOperation(
     std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
     Query&& query,
     LoggingFuncsPtr logging_funcs) const {
-  // For sync operations with ReferencedConnection, use the legacy pattern
-  // since MysqlQueryOperation::create() requires ownership
-  return std::shared_ptr<QueryOperation>(new QueryOperation(
-      createFetchOperationImpl(
-          std::move(conn_proxy),
-          db::OperationType::Query,
-          std::move(logging_funcs)),
-      std::move(query)));
+  // Use the unified class with createWithProxy()
+  return mysql_protocol::MysqlQueryOperation::createWithProxy(
+      std::move(conn_proxy), std::move(query), std::move(logging_funcs));
 }
 
 std::shared_ptr<MultiQueryOperation> SyncMysqlClient::createMultiQueryOperation(
     std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
     std::vector<Query>&& queries,
     LoggingFuncsPtr logging_funcs) const {
-  // For sync operations with ReferencedConnection, use the legacy pattern
-  return std::shared_ptr<MultiQueryOperation>(new MultiQueryOperation(
-      createFetchOperationImpl(
-          std::move(conn_proxy),
-          db::OperationType::MultiQuery,
-          std::move(logging_funcs)),
-      std::move(queries)));
+  // Use the unified class with createWithProxy()
+  return mysql_protocol::MysqlMultiQueryOperation::createWithProxy(
+      std::move(conn_proxy), std::move(queries), std::move(logging_funcs));
 }
 
 std::shared_ptr<ConnectOperation> SyncMysqlClient::createConnectOperation(
