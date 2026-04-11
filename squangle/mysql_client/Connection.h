@@ -541,15 +541,6 @@ class Connection {
     return mysql_connection_.get();
   }
 
-  // Helper function that will begin multiqueries or single queries depending
-  // on the specified in the templates. Being used to avoid duplicated code
-  // that both need to do.
-  template <typename QueryType, typename QueryArg>
-  [[nodiscard]] static std::shared_ptr<QueryType> beginAnyQuery(
-      std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
-      LoggingFuncsPtr logging_funcs,
-      QueryArg&& query);
-
   void checkOperationInProgress() {
     if (operation_in_progress_) {
       throw db::InvalidConnectionException(

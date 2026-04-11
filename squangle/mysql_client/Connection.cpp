@@ -222,63 +222,6 @@ std::shared_ptr<MultiQueryStreamOperation> Connection::beginMultiQueryStreaming(
   return operation;
 }
 
-template <typename QueryType, typename QueryArg>
-std::shared_ptr<QueryType> Connection::beginAnyQuery(
-    std::unique_ptr<OperationBase::ConnectionProxy> conn_proxy,
-    LoggingFuncsPtr logging_funcs,
-    QueryArg&& query) {
-  CHECK_THROW(conn_proxy.get(), db::InvalidConnectionException);
-  CHECK_THROW(conn_proxy->get()->ok(), db::InvalidConnectionException);
-  conn_proxy->get()->checkOperationInProgress();
-  const auto& client = conn_proxy->get()->mysql_client_;
-  auto ret = std::shared_ptr<QueryType>(new QueryType(
-      client.createFetchOperationImpl(
-          std::move(conn_proxy),
-          QueryType::kOperationType,
-          std::move(logging_funcs)),
-      std::forward<QueryArg>(query)));
-  auto& conn = ret->conn();
-  Duration timeout = conn.conn_options_.getQueryTimeout();
-  if (timeout.count() > 0) {
-    ret->setTimeout(timeout);
-  }
-
-  ret->setPreOperationCallback([&](Operation& op) {
-    if (conn.callbacks_.pre_operation_callback_) {
-      conn.callbacks_.pre_operation_callback_(op);
-    }
-  });
-  ret->setPostOperationCallback([&](Operation& op) {
-    if (conn.callbacks_.post_operation_callback_) {
-      conn.callbacks_.post_operation_callback_(op);
-    }
-  });
-  auto opType = ret->getOperationType();
-  if (opType == db::OperationType::Query ||
-      opType == db::OperationType::MultiQuery) {
-    ret->setPreQueryCallback([&](FetchOperation& op) {
-      return conn.callbacks_.pre_query_callback_
-          ? conn.callbacks_.pre_query_callback_(op)
-          : folly::makeSemiFuture(folly::unit);
-    });
-    ret->setPostQueryCallback([&](AsyncPostQueryResult&& result) {
-      return conn.callbacks_.post_query_callback_
-          ? conn.callbacks_.post_query_callback_(std::move(result))
-          : folly::makeSemiFuture(std::move(result));
-    });
-  }
-
-  if ((opType == db::OperationType::Query ||
-       opType == db::OperationType::MultiQuery ||
-       opType == db::OperationType::MultiQueryStream) &&
-      conn.callbacks_.render_prefix_callback_) {
-    ret->setRenderPrefixCallback(
-        [&]() { return conn.callbacks_.render_prefix_callback_(); });
-  }
-
-  return ret;
-}
-
 // A query might already be semicolon-separated, so we allow this to
 // be a MultiQuery.  Or it might just be one query; that's okay, too.
 template <>
@@ -692,11 +635,27 @@ std::unique_ptr<MultiQueryStreamHandler> Connection::streamMultiQuery(
     std::unique_ptr<Connection> conn,
     std::vector<Query> queries,
     const AttributeMap& attributes) {
+  CHECK_THROW(conn.get(), db::InvalidConnectionException);
+  CHECK_THROW(conn->ok(), db::InvalidConnectionException);
+  conn->checkOperationInProgress();
+
+  // MultiQueryStreamHandler needs to be alive while the operation is running.
+  // To accomplish that, ~MultiQueryStreamHandler waits until
+  // `postOperationEnded` is called.
   auto& client = conn->client();
-  auto op = beginAnyQuery<MultiQueryStreamOperation>(
+  auto* connPtr = conn.get();
+  Duration timeout = conn->conn_options_.getQueryTimeout();
+
+  auto op = connPtr->createOperation(
       std::make_unique<OperationBase::OwnedConnection>(std::move(conn)),
-      nullptr,
-      std::move(queries));
+      MultiQuery{std::move(queries)});
+
+  if (timeout.count() > 0) {
+    op->setTimeout(timeout);
+  }
+
+  connPtr->setupOperationCallbacks(*op, *connPtr);
+
   if (attributes.size() > 0) {
     op->setAttributes(attributes);
   }
