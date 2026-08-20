@@ -84,7 +84,12 @@ class PoolStorageData {
       return locked_op && locked_op.get() == &pool_op;
     });
 
-    return it != list.end();
+    if (it == list.end()) {
+      return false;
+    }
+
+    list.erase(it);
+    return true;
   }
 
   // Calls failureCallback with the error description and removed all
