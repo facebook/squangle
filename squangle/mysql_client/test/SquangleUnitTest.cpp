@@ -1148,6 +1148,59 @@ TEST_F(QueryTest, CheckedQueryUnsignedHighBitRoundTrip) {
   EXPECT_EQ(Query::checked("SELECT %d", kMax).renderInsecure(), "SELECT -1");
 }
 
+TEST_F(QueryTest, DynamicBoolRendersAsInt) {
+  // MySQL has no boolean type, and QueryArgument has no bool alternative: a
+  // folly::dynamic bool is stored as int64_t, so it renders 0/1 and is accepted
+  // wherever an int is (e.g. %d), not just %m. (folly::dynamic goes through the
+  // legacy Query() ctor; checked() does not accept a bare dynamic.)
+  folly::dynamic dynTrue = true;
+  folly::dynamic dynFalse = false;
+  EXPECT_EQ(Query("SELECT %d", dynTrue).renderInsecure(), "SELECT 1");
+  EXPECT_EQ(Query("SELECT %m", dynFalse).renderInsecure(), "SELECT 0");
+}
+
+TEST_F(QueryTest, OptionalBoolRendersAsInt) {
+  // There is no dedicated optional<bool> ctor: bool is integral, so the generic
+  // optional ctor delegates to the integral scalar ctor and stores int64_t.
+  // These pin that an engaged optional<bool> still renders 0/1 (not "true"/
+  // "false", and not a string) and that nullopt is still NULL.
+  EXPECT_EQ(
+      Query::checked("SELECT %d", std::optional<bool>{true}).renderInsecure(),
+      "SELECT 1");
+  EXPECT_EQ(
+      Query::checked("SELECT %d", std::optional<bool>{false}).renderInsecure(),
+      "SELECT 0");
+  EXPECT_EQ(
+      Query::checked("SELECT %m", std::optional<bool>{true}).renderInsecure(),
+      "SELECT 1");
+  EXPECT_EQ(
+      Query::checked("SELECT %d", std::optional<bool>{}).renderInsecure(),
+      "SELECT NULL");
+
+  EXPECT_EQ(
+      Query::checked("SELECT %d", folly::Optional<bool>{true}).renderInsecure(),
+      "SELECT 1");
+  EXPECT_EQ(
+      Query::checked("SELECT %d", folly::Optional<bool>{false})
+          .renderInsecure(),
+      "SELECT 0");
+  EXPECT_EQ(
+      Query::checked("SELECT %m", folly::Optional<bool>{false})
+          .renderInsecure(),
+      "SELECT 0");
+  EXPECT_EQ(
+      Query::checked("SELECT %d", folly::Optional<bool>{}).renderInsecure(),
+      "SELECT NULL");
+
+  // The legacy ctor takes the same path.
+  EXPECT_EQ(
+      Query("SELECT %d", std::optional<bool>{true}).renderInsecure(),
+      "SELECT 1");
+  EXPECT_EQ(
+      Query("SELECT %d", folly::Optional<bool>{false}).renderInsecure(),
+      "SELECT 0");
+}
+
 TEST_F(QueryTest, CheckedQueryAcceptsConstexprStringPiece) {
   // A compile-time-constant folly::StringPiece works as the format string,
   // validated at compile time like a literal / constexpr std::string_view.

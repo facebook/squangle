@@ -39,11 +39,13 @@
 // Codes:
 //
 // %s, %d, %u, %f - strings, integers, unsigned integers or floats;
-//                  NULL if a nullptr is passed in.
-// %m - folly::dynamic, gets converted to string/integer/float/boolean.
-//      nullptr becomes "NULL", throws otherwise
+//      NULL if a nullptr is passed in. Boolean is supported for %d and %u and
+//      renders as 0/1: MySQL has no boolean type (BOOL is an alias for
+//      tinyint(1)), so QueryArgument has no bool alternative.
+// %m - any single value: string, integer (including bool), float, or sub-query.
+//      nullptr becomes "NULL", throws otherwise.
 // %=s, %=d, %=u, %=f, %=m - like the previous except suitable for comparison,
-//                 so "%s" becomes " = VALUE".  nullptr becomes "IS NULL"
+//      so "%s" becomes " = VALUE".  nullptr becomes "IS NULL"
 // %T - a table name.  enclosed with ``.
 // %C - like %T, except for column names. Optionally supply two-/three-tuple
 //      to define qualified column name or qualified column name with
@@ -59,11 +61,11 @@
 //       a list of two-/three-tuples to define qualified column names or
 //       qualified column names with aliases. Similar to %C.
 // %LO, %LA - key/value pair rendered as key1=val1 OR/AND key2=val2 (similar
-//            to %W)
+//       to %W)
 // %U, %W - keys and values suitable for UPDATE and WHERE clauses,
-//          respectively.  %U becomes "`col1` = val1, `col2` = val2"
-//          and %W becomes "`col1` = val1 AND `col2` = val2". Does not currently
-//          support unsigned integers.
+//       respectively.  %U becomes "`col1` = val1, `col2` = val2" and %W becomes
+//       "`col1` = val1 AND `col2` = val2". Does not currently support unsigned
+//       integers.
 // %Q - literal string, evil evil.  don't use.
 // %K - an SQL comment.  Will put the /* and */ for you.
 // %% - literal % character.
@@ -1321,17 +1323,16 @@ class QueryArgument {
   // NEVER raw-assign a caller value to value_ (e.g. `value_ = someArg`). Route
   // through the scalar ctors below instead (directly, or by delegating like the
   // std::optional ctor). A raw variant converting-assignment silently
-  // mishandles several types: it rejects string_view/StringPiece (fbstring's
-  // ctor from them is explicit) and, because `bool` is an alternative,
-  // mis-selects bool for types with a standard conversion to bool (e.g. const
-  // char* -> bool beats the user-defined -> fbstring). The scalar ctors exist
-  // precisely to avoid this.
+  // mishandles several types -- e.g. it rejects string_view/StringPiece
+  // (fbstring's ctor from them is explicit). The scalar ctors exist precisely
+  // to avoid this. (There is deliberately no bool alternative: bool args are
+  // stored as int64_t so they render 0/1, matching MySQL, which has no boolean
+  // type.)
   std::variant<
       // monostate (implying NULL) needs to be the first entry
       std::monostate,
       int64_t,
       double,
-      bool,
       folly::fbstring,
       Query,
       std::vector<QueryArgument>,
@@ -1427,19 +1428,14 @@ class QueryArgument {
       : value_(std::move(tup)) {}
   /* implicit */ QueryArgument(std::nullptr_t /*n*/) : value_() {}
 
-  /* implicit */ QueryArgument(const std::optional<bool>& opt) {
-    if (opt) {
-      value_ = static_cast<int64_t>(opt.value());
-    }
-  }
-
   template <typename T>
   /* implicit */ QueryArgument(const std::optional<T>& opt) {
     // Delegate to the scalar ctors so an engaged optional accepts exactly what
     // a bare value does (integral/enum -> int64_t, floats, and the dedicated
     // string_view/StringPiece/char* ctors). A raw `value_ = opt.value()` would
-    // reject string_view/StringPiece and mis-store char* as bool. nullopt stays
-    // NULL (default monostate).
+    // reject string_view/StringPiece. nullopt stays NULL (default monostate).
+    // bool is integral, so it collapses to int64_t here too -- a dedicated
+    // optional<bool> overload would only duplicate it.
     if (opt) {
       *this = QueryArgument(opt.value());
     }
@@ -1448,12 +1444,6 @@ class QueryArgument {
   // Special handling for nullopt optionals to enable
   // callers to directly pass them in as a query argument
   /* implicit */ QueryArgument(std::nullopt_t /*opt*/) {}
-
-  /* implicit */ QueryArgument(const folly::Optional<bool>& opt) {
-    if (opt) {
-      value_ = static_cast<int64_t>(opt.value());
-    }
-  }
 
   template <typename T>
   /* implicit */ QueryArgument(const folly::Optional<T>& opt) {
@@ -1491,7 +1481,6 @@ class QueryArgument {
 
   double getDouble() const;
   int64_t getInt() const;
-  bool getBool() const;
   const Query& getQuery() const;
   const folly::fbstring& getString() const;
   const std::vector<std::pair<folly::fbstring, QueryArgument>>& getPairs()
@@ -1505,7 +1494,6 @@ class QueryArgument {
   bool isString() const;
   bool isQuery() const;
   bool isPairList() const;
-  bool isBool() const;
   bool isNull() const;
   bool isList() const;
   bool isDouble() const;
