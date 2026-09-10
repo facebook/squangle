@@ -93,11 +93,11 @@ class PoolOptions {
   PoolOptions& operator=(const PoolOptions& other) = default;
   PoolOptions& operator=(PoolOptions&& other) = default;
 
-  PoolOptions& setPerKeyLimit(int conn_limit) {
+  PoolOptions& setPerKeyLimit(uint64_t conn_limit) {
     per_key_limit_ = conn_limit;
     return *this;
   }
-  PoolOptions& setPoolLimit(int total_limit) {
+  PoolOptions& setPoolLimit(uint64_t total_limit) {
     pool_limit_ = total_limit;
     return *this;
   }
