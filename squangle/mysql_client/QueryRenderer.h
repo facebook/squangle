@@ -25,6 +25,18 @@ class Query;
 // type, supporting both folly::fbstring and std::string without requiring
 // callers to do post-hoc conversion.
 //
+// render() takes a `validate` flag that gates one thing: the scan for
+// dangerous characters in the format string. Legacy queries pass true; queries
+// built by Query::checked pass false, because the consteval parser already
+// rejected those characters at compile time, and re-scanning is O(query
+// length) on every render.
+//
+// Every other check runs unconditionally, including the per-argument
+// value-type checks (e.g. a string passed to %d). Compile-time checking cannot
+// see through a type-erased argument (a QueryArgument or folly::dynamic, which
+// Query::checked accepts for any specifier), so render time is the only place
+// such a mismatch can be caught.
+//
 // Template instantiations are provided for folly::fbstring and std::string in
 // QueryRenderer.cpp. The extern template declarations below prevent implicit
 // instantiation in other translation units.
@@ -41,6 +53,7 @@ class QueryRenderer {
   static StringType render(
       std::string_view queryText,
       bool unsafeQuery,
+      bool validate,
       const std::vector<QueryArgument>& params,
       EscapeMode escapeMode,
       const InternalConnection* conn = nullptr,
@@ -48,6 +61,16 @@ class QueryRenderer {
       std::string_view truncationIndicator = "...");
 
  private:
+  // Render an embedded sub-query, using the SUB-query's own checked-ness rather
+  // than the enclosing query's. A non-checked sub-query embedded in a checked
+  // query must still be validated: checked() proved nothing about the inner
+  // query's format.
+  static void renderSubQuery(
+      StringType& output,
+      const Query& subQuery,
+      EscapeMode escapeMode,
+      const InternalConnection* conn);
+
   static void escapeAndAppend(
       StringType* dest,
       const folly::fbstring& value,
@@ -76,6 +99,7 @@ class QueryRenderer {
       StringType& output,
       std::string_view queryText,
       bool unsafeQuery,
+      bool validate,
       const std::vector<QueryArgument>& params,
       EscapeMode escapeMode,
       const InternalConnection* conn);
